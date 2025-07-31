@@ -34,7 +34,7 @@ def hwp_to_pdf(hwp_path, pdf_path):
             hwp.Quit()
 
 if __name__ == "__main__":
-    base_dir = r"C:\Users\jhwoo\Desktop\SKN_ws\project\SKN13-FINAL-1TEAM\한국방송광고진흥공사\내부문서"
+    base_dir = r"C:\Users\Playdata\SKN13-FINAL-1TEAM\한국방송광고진흥공사\내부문서"
     for root, _, files in os.walk(base_dir):
         for file in files:
             if file.lower().endswith(".hwp"):
@@ -44,3 +44,4 @@ if __name__ == "__main__":
                     hwp_to_pdf(hwp_file, pdf_file)
                 except Exception as e:
                     print(f"[ERROR] 처리 중 오류 발생 '{hwp_file}': {e}")
+
