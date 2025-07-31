@@ -1,0 +1,180 @@
+# 사용자별 LLM 에이전트 도구 다르게 지정하기 (Django 기반)
+
+이 문서는 Django 백엔드 환경에서 사용자 역할에 따라 LLM 에이전트가 사용할 수 있는 도구를 동적으로 제어하는 방법을 설명합니다. 이 접근 방식은 보안, 기능 맞춤화, 비용 관리 측면에서 매우 중요합니다.
+
+## 핵심 아이디어: 역할 기반 접근 제어 (RBAC)
+
+핵심 원리는 각 사용자에게 역할을 부여하고, 해당 역할에 따라 허용된 도구 목록을 결정하여 에이전트를 생성하는 것입니다.
+
+1.  **역할 정의**: `Admin`, `Editor`, `Viewer` 등 사용자 역할을 시스템에 정의합니다.
+2.  **도구 관리**: 시스템에서 사용 가능한 모든 도구를 한 곳(레지스트리)에서 관리합니다.
+3.  **권한 설정**: 각 역할이 어떤 도구를 사용할 수 있는지 규칙을 명확하게 매핑합니다.
+4.  **동적 에이전트 생성**: 사용자의 요청이 들어오면, 해당 사용자의 역할을 확인하고 그에 맞는 도구만 장착된 에이전트 인스턴스를 실시간으로 생성하여 사용합니다.
+
+---
+
+## 단계별 구현 방법
+
+### 1단계: 사용자 역할 정의
+
+Django의 기본 `User` 모델을 확장하여 역할을 저장할 수 있는 필드를 추가합니다.
+
+1.  **`models.py`에 커스텀 User 모델 정의:**
+    (예: `users/models.py` 또는 `backend/models.py`)
+
+    ```python
+    from django.contrib.auth.models import AbstractUser
+    from django.db import models
+
+    class User(AbstractUser):
+        class Role(models.TextChoices):
+            ADMIN = "ADMIN", "Admin"
+            EDITOR = "EDITOR", "Editor"
+            VIEWER = "VIEWER", "Viewer"
+
+        # 사용자의 역할을 저장하는 필드
+        role = models.CharField(max_length=50, choices=Role.choices, default=Role.VIEWER)
+    ```
+
+2.  **`settings.py`에 커스텀 User 모델 지정:**
+
+    ```python
+    # settings.py
+    AUTH_USER_MODEL = 'your_app_name.User'  # 'your_app_name'을 실제 앱 이름으로 변경
+    ```
+
+### 2단계: 도구 정의 및 레지스트리 생성
+
+에이전트가 사용할 모든 도구를 함수 또는 클래스로 정의하고, 이를 관리하는 레지스트리를 만듭니다.
+
+**`tools.py` (새 파일 생성):**
+
+```python
+# 사용 가능한 모든 도구 함수들
+def read_file(path: str) -> str:
+    """파일 내용을 읽습니다."""
+    # ... 실제 파일 읽기 로직 ...
+    print(f"Reading file: {path}")
+    return "file content"
+
+def write_file(path: str, content: str) -> str:
+    """파일에 내용을 씁니다."""
+    # ... 실제 파일 쓰기 로직 ...
+    print(f"Writing to file: {path}")
+    return "success"
+
+def run_shell_command(command: str) -> str:
+    """셸 명령어를 실행합니다. (민감한 권한)"""
+    # ... 실제 명령어 실행 로직 ...
+    print(f"Running command: {command}")
+    return "command output"
+
+# 도구 레지스트리: 모든 도구를 이름과 함수 객체로 매핑
+AVAILABLE_TOOLS = {
+    "read_file": read_file,
+    "write_file": write_file,
+    "run_shell_command": run_shell_command,
+}
+```
+
+### 3단계: 역할별 도구 권한 매핑
+
+어떤 역할이 어떤 도구를 사용할 수 있는지 규칙을 정의합니다.
+
+**`permissions.py` (새 파일 생성):**
+
+```python
+from .tools import AVAILABLE_TOOLS
+
+# 역할별로 허용된 도구의 "이름" 목록
+ROLE_PERMISSIONS = {
+    "ADMIN": ["read_file", "write_file", "run_shell_command"],
+    "EDITOR": ["read_file", "write_file"],
+    "VIEWER": ["read_file"],
+}
+
+def get_tools_for_role(role: str) -> list:
+    """
+    주어진 역할(role)에 해당하는 실제 도구 함수 리스트를 반환합니다.
+    """
+    # 역할에 허용된 도구 이름 목록을 가져옵니다. 존재하지 않는 역할이면 빈 리스트를 반환합니다.
+    allowed_tool_names = ROLE_PERMISSIONS.get(role, [])
+    
+    # 이름에 해당하는 실제 도구 함수(또는 객체)를 AVAILABLE_TOOLS에서 찾아 리스트로 만듭니다.
+    # 만약 LangChain과 같은 프레임워크를 사용한다면, 여기서 Tool 객체로 변환하는 과정이 필요합니다.
+    return [AVAILABLE_TOOLS[name] for name in allowed_tool_names if name in AVAILABLE_TOOLS]
+```
+
+### 4단계: 에이전트 팩토리(Factory) 구현
+
+사용자 정보를 받아, 해당 사용자에게 맞는 도구를 갖춘 에이전트를 생성하는 함수를 만듭니다.
+
+**`agents.py` (새 파일 생성):**
+
+```python
+from .permissions import get_tools_for_role
+from .models import User  # 1단계에서 만든 커스텀 User 모델
+
+# 이 클래스는 사용하는 LLM 프레임워크(예: LangChain)에 따라 달라집니다.
+# 여기서는 개념 설명을 위한 가상의 Agent 클래스를 사용합니다.
+class LLMAgent:
+    def __init__(self, tools: list):
+        self.tools = tools
+        tool_names = [t.__name__ for t in tools]
+        print(f"Agent initialized with {len(self.tools)} tools: {tool_names}")
+
+    def run(self, query: str):
+        # ... LLM 호출 및 도구 사용 로직 ...
+        print(f"Running query: '{query}' with available tools.")
+        return f"Agent response for '{query}'"
+
+def create_agent_for_user(user: User) -> LLMAgent:
+    """
+    User 객체를 받아, 해당 사용자의 역할에 맞는 도구를 갖춘 에이전트를 생성하여 반환합니다.
+    """
+    # 1. 사용자의 역할(role)에 맞는 허용된 도구 목록을 가져옵니다.
+    allowed_tools = get_tools_for_role(user.role)
+    
+    # 2. 해당 도구 목록을 사용하여 에이전트를 초기화합니다.
+    agent = LLMAgent(tools=allowed_tools)
+    
+    return agent
+```
+
+### 5단계: Django 뷰(View)에서 사용하기
+
+실제 API 엔드포인트에서 요청을 보낸 사용자를 확인하고, `create_agent_for_user` 함수를 호출하여 개인화된 에이전트를 사용합니다.
+
+**`views.py` (예시):**
+
+```python
+from django.http import JsonResponse
+from django.views import View
+from django.contrib.auth.mixins import LoginRequiredMixin
+from .agents import create_agent_for_user
+
+class AgentChatView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        # 현재 로그인된 사용자 객체를 가져옵니다.
+        user = request.user
+        query = request.POST.get("query")
+
+        if not query:
+            return JsonResponse({"error": "Query not provided"}, status=400)
+
+        # 팩토리 함수를 호출하여 현재 사용자를 위한 맞춤형 에이전트를 생성합니다.
+        agent = create_agent_for_user(user)
+        
+        # 생성된 에이전트를 사용하여 사용자의 쿼리를 처리합니다.
+        response = agent.run(query)
+        
+        return JsonResponse({"response": response})
+```
+
+---
+
+## 기대 효과
+
+-   **보안 강화**: `run_shell_command`와 같이 위험도가 높은 도구는 신뢰할 수 있는 `ADMIN` 역할에게만 부여하여 시스템을 안전하게 보호할 수 있습니다.
+-   **유연한 권한 관리**: 새로운 사용자 역할이 추가되거나 기존 역할의 권한을 변경해야 할 때, `permissions.py`의 `ROLE_PERMISSIONS` 딕셔너리만 수정하면 되므로 유지보수가 간편합니다.
+-   **높은 확장성**: 새로운 도구를 추가할 때 `tools.py`에 함수를 정의하고 `AVAILABLE_TOOLS`에 등록한 뒤, `permissions.py`에서 필요한 역할에 도구 이름을 추가하기만 하면 되므로 시스템 확장이 용이합니다.
