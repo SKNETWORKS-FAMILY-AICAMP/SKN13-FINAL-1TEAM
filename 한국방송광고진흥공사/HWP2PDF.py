@@ -5,6 +5,7 @@ def hwp_to_pdf(hwp_path, pdf_path):
     hwp = None
     try:
         hwp = Hwp()
+        hwp.XHwpWindows.Item(0).Visible = False
         hwp.Open(hwp_path, "")
         hwp.SaveAs(pdf_path, "PDF", "")
         print(f"[SUCCESS] PDF 변환 완료: {pdf_path}")
