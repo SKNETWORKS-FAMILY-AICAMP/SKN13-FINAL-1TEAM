@@ -4,7 +4,7 @@ import re
 import uuid
 import logging
 from typing import List, Optional, Tuple, Dict, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 
 try:
@@ -22,33 +22,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Config:
-    """설정 클래스"""
-    # 더 유연한 정규식 패턴들
-    CHAPTER_PATTERNS: List[str] = None
-    ARTICLE_PATTERNS: List[str] = None
+    CHAPTER_PATTERNS: List[str] = field(default_factory=lambda: [
+        r'^제\s*\d+\s*장.*',
+        r'^\[\s*제\s*\d+\s*장.*\]',
+        r'^Chapter\s+\d+.*',
+        r'^\d+\.\s*장.*',
+    ])
+    ARTICLE_PATTERNS: List[str] = field(default_factory=lambda: [
+        r'^(제\s*\d+조(?:의\d+)?(?:\([^)]*\))?(?:\s*\[[^\]]*\])?)',
+        r'^\[\s*(제\s*\d+조(?:의\d+)?)\s*\]',
+        r'^(제\s*\d+\s*조(?:의\d+)?)',
+        r'^(Article\s+\d+)',
+        r'^(\d+\.\s*조)',
+    ])
     DATE_PATTERN: str = r'(\d{4})년도?\s*(\d{1,2})월'
     OUTPUT_FILENAME: str = '사내규정.csv'
     ENCODING: str = 'utf-8-sig'
     MIN_CONTENT_LENGTH: int = 10
     PRESERVE_PARAGRAPH_BREAKS: bool = True
-    
-    def __post_init__(self):
-        if self.CHAPTER_PATTERNS is None:
-            self.CHAPTER_PATTERNS = [
-                r'^제\s*\d+\s*장.*',           # 제1장, 제 1 장
-                r'^\[\s*제\s*\d+\s*장.*\]',   # [제1장]
-                r'^Chapter\s+\d+.*',          # Chapter 1 (영문)
-                r'^\d+\.\s*장.*',             # 1. 장
-            ]
-        
-        if self.ARTICLE_PATTERNS is None:
-            self.ARTICLE_PATTERNS = [
-                r'^(제\s*\d+조(?:의\d+)?(?:\([^)]*\))?(?:\s*\[[^\]]*\])?)',  # 기본
-                r'^\[\s*(제\s*\d+조(?:의\d+)?)\s*\]',                        # [제1조]
-                r'^(제\s*\d+\s*조(?:의\d+)?)',                              # 띄어쓰기 허용
-                r'^(Article\s+\d+)',                                         # Article 1
-                r'^(\d+\.\s*조)',                                           # 1. 조
-            ]
+
+
 
 @dataclass
 class DocumentChunk:
@@ -244,15 +237,17 @@ class TextProcessor:
         return chunks
 
     def _create_chunk(self, filename: str, last_updated_date: Optional[str],
-                     chapter: str, article_title: str, content_lines: List[str]) -> Optional[DocumentChunk]:
-        """DocumentChunk 객체 생성"""
-        # 빈 라인 정리하면서 콘텐츠 구성
+                      chapter: str, article_title: str, content_lines: List[str]) -> Optional[DocumentChunk]:
+
+        # 🔧 줄바꿈 및 항 병합 리팩토링 적용
+        content_lines = self._normalize_paragraph_lines(content_lines)
+
         content_str = self._join_content_lines(content_lines)
         if not content_str:
             return None
-        
+
         paragraph_count = self.count_paragraphs(content_lines)
-        
+
         return DocumentChunk(
             id=str(uuid.uuid4()),
             filename=filename,
@@ -262,6 +257,7 @@ class TextProcessor:
             content=content_str,
             paragraph_count=paragraph_count
         )
+
     
     def _join_content_lines(self, lines: List[str]) -> str:
         """콘텐츠 라인들을 적절히 조인"""
@@ -286,6 +282,31 @@ class TextProcessor:
         else:
             # 빈 줄 제거하고 조인
             return '\n'.join(line for line in lines if line).strip()
+        
+    def _normalize_paragraph_lines(self, lines: List[str]) -> List[str]:
+        """
+        줄바꿈 보정 및 항목 구분 (예: ①, ②, ③) 인식 및 병합
+        """
+        result = []
+        buffer = ""
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if re.match(r'^①|②|③|④|⑤|⑥|⑦|⑧|⑨|⑩', line):
+                # 이전 buffer 저장
+                if buffer:
+                    result.append(buffer.strip())
+                buffer = line  # 새 항 시작
+            else:
+                buffer += " " + line  # 같은 항목 내 이어붙임
+
+        if buffer:
+            result.append(buffer.strip())
+
+        return result
+
 
 class DocumentSaver(ABC):
     """문서 저장 인터페이스"""
