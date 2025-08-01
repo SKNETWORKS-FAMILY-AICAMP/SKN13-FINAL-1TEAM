@@ -17,7 +17,7 @@ def hwp_to_pdf(hwp_path, pdf_path):
             hwp.Quit()
 
 if __name__ == "__main__":
-    base_dir = r"C:\Users\Playdata\SKN13-FINAL-1TEAM\한국방송광고진흥공사\내부문서"
+    base_dir = r"C:\Users\jhwoo\Desktop\SKN_ws\project\SKN13-FINAL-1TEAM\한국방송광고진흥공사\내부문서"
 
     # 1. 변환 대상 .hwp 파일 목록 수집
     hwp_files = []
