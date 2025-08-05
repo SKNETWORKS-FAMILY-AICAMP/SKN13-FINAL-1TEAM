@@ -38,14 +38,46 @@ def crop_table_from_page_image(page_image: Image.Image, table_bbox: list, page_w
     
     return page_image.crop((left, top, right, bottom))
 
+def is_valid_table(df: pd.DataFrame) -> bool:
+    """실제 표인지 검증"""
+    # 최소 2행 2열 이상
+    if df.shape[0] < 2 or df.shape[1] < 2:
+        return False
+    
+    # 너무 많은 빈 셀이 있으면 표가 아닐 가능성
+    empty_cells = df.isnull().sum().sum() + (df == '').sum().sum()
+    total_cells = df.shape[0] * df.shape[1]
+    if empty_cells / total_cells > 0.7:  # 70% 이상이 빈 셀
+        return False
+    
+    # 모든 셀이 한 줄짜리 텍스트만 있으면 표가 아닐 가능성
+    long_text_cells = 0
+    for col in df.columns:
+        for val in df[col].astype(str):
+            if len(val) > 50:  # 긴 텍스트가 있으면
+                long_text_cells += 1
+    
+    if long_text_cells == 0 and df.shape[1] == 1:  # 1열이고 모두 짧은 텍스트
+        return False
+        
+    return True
+
 def extract_tables_from_page(pdf_path: Path, page, page_num: int, tables_dir: Path, page_image: Image.Image):
     """페이지에서 표 추출 및 별도 저장"""
     md_chunks = []
     
     try:
-        tables = camelot.read_pdf(str(pdf_path), pages=str(page_num + 1), flavor='lattice')
+        # 먼저 lattice 방식 시도 (격자선이 있는 표)
+        tables = camelot.read_pdf(str(pdf_path), pages=str(page_num + 1), flavor='lattice')      
+        # 두 결과 합치기 (lattice 우선, 중복 제거)
+        all_tables = []
         
-        if tables.n == 0:
+        # lattice 결과 추가 (더 정확함)
+        for table in tables:
+            if is_valid_table(table.df):
+                all_tables.append(table)
+        
+        if not all_tables:
             return md_chunks
             
         md_chunks.append("### 표")
