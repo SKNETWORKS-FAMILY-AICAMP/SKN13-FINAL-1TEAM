@@ -26,7 +26,8 @@ def setup_opensearch_client():
         use_ssl=False,
         verify_certs=False,
         ssl_assert_hostname=False,
-        ssl_show_warn=False
+        ssl_show_warn=False,
+        timeout=30
     )
 
 def create_index(client):
@@ -176,8 +177,13 @@ def main():
     embed_and_index_data(client, embedding_model)
     
     # 테스트 검색
-    search_documents(client, embedding_model, query="휴가 규정이 어떻게 돼?")
-    search_documents(client, embedding_model, query="계약직 연봉은 어떻게 결정돼?")
+    while True:
+        user_query = input(">>> 쿼리를 입력하세요: ")
+        if user_query=="!quit":
+            break
+        search_documents(client,embedding_model,query=user_query)
+        # search_documents(client, embedding_model, query="휴가 규정이 어떻게 돼?")
+        # search_documents(client, embedding_model, query="계약직 연봉은 어떻게 결정돼?")
 
 
 if __name__ == "__main__":
