@@ -47,12 +47,16 @@ async def chat(request: ChatRequest):
     
     input_message = {"messages": [("user", request.prompt)]}
     
-    response_generator = chat_agent.astream(input_message, config=config)
+    # 최종 응답을 한번에 생성
+    final_state = await chat_agent.ainvoke(input_message, config=config)
     
+    # 최종 상태에서 마지막 메시지(AI 응답) 추출
     full_response = ""
-    async for response_chunk in response_generator:
-        if "messages" in response_chunk:
-            full_response += response_chunk["messages"][-1].content
+    if final_state and "messages" in final_state and final_state["messages"]:
+        ai_message = final_state["messages"][-1]
+        # 마지막 메시지가 AI의 응답인지 확인
+        if ai_message.type == "ai":
+            full_response = ai_message.content
 
     # 새 메시지를 세션에 추가 (사용자 메시지)
     if session_id not in chat_sessions:

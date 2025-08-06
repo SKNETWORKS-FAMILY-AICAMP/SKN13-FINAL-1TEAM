@@ -44,7 +44,8 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
           </div>
         ) : (
           messages.map((msg, idx) => (
-            <ChatBubble key={idx} sender={msg.role} text={msg.content} />
+            // <ChatBubble key={idx} sender={msg.role} text={msg.content} />
+            <ChatBubble key={idx} message={msg} />
           ))
         )}
       </div>

@@ -1,4 +1,4 @@
-// ✅ App.jsx (구글 연동 확인 제거 버전)
+// ✅ App.jsx
 import React, { useState, useEffect } from 'react';
 import ChatWindow from './components/ChatWindow/ChatWindow.jsx';
 import Sidebar from './components/Sidebar/Sidebar.jsx';
@@ -43,7 +43,16 @@ export default function App() {
     window.electron.onWindowResize(checkMax);
   }, []);
 
-  // 로그인된 유저 여부만 확인
+  // ✅ Electron에서 logout 신호 수신 시 localStorage 초기화
+  useEffect(() => {
+    if (window.electron?.ipcRenderer) {
+      window.electron.ipcRenderer.on('logout', () => {
+        localStorage.removeItem('user');
+      });
+    }
+  }, []);
+
+  // 로그인 여부 감지
   useEffect(() => {
     const userRaw = localStorage.getItem('user');
     if (userRaw) {
@@ -53,18 +62,16 @@ export default function App() {
     }
   }, []);
 
-  // 로그인 성공 시 → 바로 chat으로
+  // 로그인 성공 처리
   const handleLoginSuccess = (userData) => {
     localStorage.setItem('user', JSON.stringify(userData));
     setCurrentPage('chat');
   };
 
-  // 로그인 페이지
   if (currentPage === 'login') {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // 챗봇 UI
   return (
     <div className="h-screen flex flex-col bg-white">
       <HeaderBar

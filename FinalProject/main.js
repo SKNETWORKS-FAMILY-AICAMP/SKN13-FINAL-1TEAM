@@ -1,9 +1,9 @@
+// ✅ main.js
 const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 
 let mainWindow = null;
 
-// ✅ 먼저 handler를 전역에서 등록한다
 ipcMain.handle('check-maximized', () => {
   return mainWindow?.isMaximized() || false;
 });
@@ -25,9 +25,16 @@ function createMainWindow() {
   mainWindow.loadURL('http://localhost:5173/');
   Menu.setApplicationMenu(null);
 
-  // ✅ resize 이벤트는 여기에 남겨도 OK
+  // ✅ 리사이즈 이벤트
   mainWindow.on('resize', () => {
     mainWindow.webContents.send('window-resized');
+  });
+
+  // ✅ 창 닫기 전에 로그아웃 신호 전송
+  mainWindow.on('close', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('logout');
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -35,7 +42,6 @@ function createMainWindow() {
   });
 }
 
-// 앱 준비되면 창 생성
 app.whenReady().then(() => {
   createMainWindow();
 
@@ -52,7 +58,6 @@ app.on('window-all-closed', () => {
   }
 });
 
-// 창 제어용 이벤트
 ipcMain.on('minimize', () => {
   if (mainWindow) mainWindow.minimize();
 });
