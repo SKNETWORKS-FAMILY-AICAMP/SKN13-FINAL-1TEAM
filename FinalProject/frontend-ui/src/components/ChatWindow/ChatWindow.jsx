@@ -55,7 +55,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         onSend={handleSend}
         file={file}
         setFile={setFile}
-        isMaximized={isMaximized}  // ✅ 전달
+        isMaximized={isMaximized}
       />
     </div>
   );

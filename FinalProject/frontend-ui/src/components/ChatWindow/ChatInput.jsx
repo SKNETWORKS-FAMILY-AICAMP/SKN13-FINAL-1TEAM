@@ -1,3 +1,4 @@
+// ✅ ChatInput.jsx
 import React from 'react';
 import { PlusIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
 
@@ -25,7 +26,6 @@ export default function ChatInput({ input, setInput, onSend, file, setFile, isMa
             onChange={(e) => setFile(e.target.files[0])}
           />
         </label>
-
 
         {/* 입력창 */}
         <textarea
