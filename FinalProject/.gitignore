@@ -1,0 +1,8 @@
+# Node.js modules
+node_modules
+backend/node_modules
+frontend_ui/node_modules
+
+# Python virtual environment
+venv/
+__pycache__/
