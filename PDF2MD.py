@@ -5,6 +5,14 @@ from tqdm import tqdm
 from PIL import Image
 import pandas as pd
 import logging
+from langchain_openai import ChatOpenAI
+from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
+import base64
+
+
+load_dotenv()
+llm = ChatOpenAI(model_name="gpt-4o")
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -44,85 +52,135 @@ def extract_tables_from_page(pdf_path: Path, page, page_num: int, tables_dir: Pa
     
     try:
         tables = camelot.read_pdf(str(pdf_path), pages=str(page_num + 1), flavor='lattice')
-        
         if tables.n == 0:
             return md_chunks
             
-        md_chunks.append("### 표")
-        
+        md_chunks.append("### 📊 표")
+
+        # 토크나이저 세팅 (GPT-4 기준)
+        # enc = tiktoken.encoding_for_model("gpt-4-vision-preview")
+
         for i, table in enumerate(tables):
             table_name = f"{pdf_path.stem}_p{page_num + 1}_table{i + 1}"
-            
-            # 1. CSV로 저장 (인코딩 문제 해결)
             csv_path = tables_dir / f"{table_name}.csv"
+            img_path = None
+
+            # 1. CSV 저장
             try:
-                table.df.to_csv(csv_path, index=False, encoding='utf-8-sig')  # BOM 추가
+                table.df.to_csv(csv_path, index=False, encoding='utf-8-sig')
             except UnicodeEncodeError:
-                table.df.to_csv(csv_path, index=False, encoding='cp949')  # 한글 윈도우 기본
-            
-            # 2. 표 영역을 이미지로 크롭 저장 (전체 페이지 저장 방지)
+                table.df.to_csv(csv_path, index=False, encoding='cp949')
+
+            # 2. 표 이미지 저장
             try:
                 if hasattr(table, '_bbox') and table._bbox:
                     table_bbox = table._bbox
                     page_width = page.rect.width
                     page_height = page.rect.height
-                    
-                    # 함수 호출 시 매개변수 순서 확인
+
                     cropped_table = crop_table_from_page_image(
-                        page_image=page_image, 
-                        table_bbox=table_bbox, 
-                        page_width=page_width, 
-                        page_height=page_height, 
+                        page_image=page_image,
+                        table_bbox=table_bbox,
+                        page_width=page_width,
+                        page_height=page_height,
                         padding=15
                     )
                     img_path = tables_dir / f"{table_name}.png"
                     cropped_table.save(img_path, 'PNG')
-                    
-                    # 마크다운에 참조 추가
-                    md_chunks.append(f"[표 {i + 1}]({img_path.as_posix()} - 페이지 {page_num + 1}에서 추출한 표)")
-                    md_chunks.append(f"- CSV 파일: {csv_path.as_posix()}")
-                else:
-                    # bbox 정보가 없으면 CSV만 저장
-                    md_chunks.append(f"[표 {i + 1}]({csv_path.as_posix()} - 페이지 {page_num + 1}에서 추출한 표, CSV만 가능)")
-                    
             except Exception as e:
                 logger.error(f"표 이미지 크롭 실패 {pdf_path.name} p{page_num + 1} table{i + 1}: {e}")
-                md_chunks.append(f"[표 {i + 1}]({csv_path.as_posix()} - 페이지 {page_num + 1}에서 추출한 표, 이미지 저장 실패)")
-                
+
+            # 3. CSV 텍스트 전처리 + 토큰 수 제한 처리
+            csv_text = table.df.to_csv(index=False)
+            # token_count = len(enc.encode(csv_text))
+            # if token_count > max_csv_tokens:
+            #     # 토큰 제한 초과 시 자르기 (간단하게 문자 기준)
+            #     approx_limit = int(len(csv_text) * max_csv_tokens / token_count)
+            #     csv_text = csv_text[:approx_limit] + "\n... (이하 생략)"
+
+            # 4. 멀티모달 메시지 생성
+            content_blocks = [
+                {"type": "text", "text": "이 표를 설명해줘. 어떤 내용을 담고 있는지 구체적으로 알려줘."},
+                {"type": "text", "text": f"표의 데이터 내용은 다음과 같다:\n{csv_text}"}
+            ]
+
+            if img_path and img_path.exists():
+                with open(img_path, "rb") as f:
+                    img_bytes = f.read()
+                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+                content_blocks.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{img_b64}"}
+                })
+
+            messages = [HumanMessage(content=content_blocks)]
+
+            # 5. 캡션 요청 및 마크다운 작성
+            try:
+                caption = llm.invoke(messages).content.strip()
+            except Exception as e:
+                logger.error(f"LLM 캡션 생성 실패 {table_name}: {e}")
+                caption = "⚠️ 캡션 생성 실패"
+
+            if img_path and img_path.exists():
+                md_chunks.append(f"![표 {i + 1}]({img_path.as_posix()})")
+            md_chunks.append(f"- CSV 파일: [{csv_path.name}]({csv_path.as_posix()})")
+            md_chunks.append(f"**캡션:** {caption}\n")
+
     except Exception as e:
         logger.error(f"표 추출 실패 {pdf_path.name} p{page_num + 1}: {e}")
         
     return md_chunks
 
 def extract_images_from_page(doc, page, page_num: int, pdf_stem: str, images_dir: Path):
-    """페이지에서 이미지 추출 및 별도 저장"""
+    """페이지에서 이미지 추출 + Vision API로 캡션 생성"""
     md_chunks = []
     images = page.get_images(full=True)
-    
+
     if not images:
         return md_chunks
-        
-    md_chunks.append("### 이미지")
-    
+
+    md_chunks.append("### 📸 이미지")
+
     for idx, img in enumerate(images):
         try:
             xref = img[0]
             base = doc.extract_image(xref)
             ext = base["ext"]
             img_bytes = base["image"]
-            
+
             filename = f"{pdf_stem}_p{page_num + 1}_img{idx + 1}.{ext}"
             img_path = images_dir / filename
-            
+
             with open(img_path, "wb") as f:
                 f.write(img_bytes)
-            
-            # 마크다운에 참조 추가
-            md_chunks.append(f"[이미지 {idx + 1}]({img_path.as_posix()} - 페이지 {page_num + 1}에서 추출한 이미지)")
-            
+
+            # MIME 타입 결정
+            mime = f"image/{'jpeg' if ext == 'jpg' else ext}"
+            b64_img = base64.b64encode(img_bytes).decode("utf-8")
+
+            # LangChain 메시지 구성
+            messages = [
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "이 이미지를 설명해줘. 명확하고 구체적인 캡션으로."},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64_img}"}}
+                    ]
+                )
+            ]
+
+            # Vision API 호출
+            caption = llm.invoke(messages).content.strip()
+
+            # 마크다운 구성
+            md_chunks.append(f"![이미지 {idx + 1}]({img_path.as_posix()})")
+            md_chunks.append(f"_페이지 {page_num + 1}에서 추출된 이미지_")
+            md_chunks.append(f"**캡션:** {caption}\n")
+
         except Exception as e:
             logger.error(f"이미지 저장 실패 {pdf_stem} p{page_num + 1} img{idx + 1}: {e}")
-            
+            md_chunks.append(f"⚠️ 이미지 {idx + 1} 처리 중 오류 발생")
+
     return md_chunks
 
 def save_markdown_file(markdown_chunks, pdf_path: Path, output_dir: Path):
@@ -191,7 +249,7 @@ def main():
     
     # 배치 처리
     success_count = 0
-    for pdf_file in tqdm(pdf_files, desc="PDF 변환 중"):
+    for pdf_file in tqdm(pdf_files[:3], desc="PDF 변환 중"): # 테스트용으로 3개만
         try:
             process_pdf_to_markdown(pdf_file, output_dir, images_dir, tables_dir)
             success_count += 1
