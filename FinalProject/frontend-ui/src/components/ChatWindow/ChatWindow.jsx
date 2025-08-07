@@ -1,53 +1,124 @@
-// ✅ ChatWindow.jsx
-import React, { useEffect, useState } from 'react';
-import ChatBubble from './MessageBubble.jsx';
+// ✅ GigaChad Refactored ChatWindow.jsx
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
 import { getMessages, saveMessage } from '../services/chatApi.js';
-import { getLLMResponse } from '../services/llmApi.js';
+import { API_BASE } from '../services/env.js';
 
 export default function ChatWindow({ currentSession, onSessionUpdated, isMaximized }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [file, setFile] = useState(null);
+  const [isStreaming, setIsStreaming] = useState(false);
 
+  const messagesEndRef = useRef(null);
+  const eventSourceRef = useRef(null);
+
+  // 기존 EventSource 안전 종료
+  const closeEventSource = useCallback(() => {
+    eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+  }, []);
+
+  // 세션 변경 시 메시지 불러오기
   useEffect(() => {
-    if (currentSession?.id) {
-      getMessages(currentSession.id).then(setMessages);
+    if (!currentSession?.id) {
+      setMessages([]);
+      return;
     }
+
+    const loadMessages = async () => {
+      try {
+        const loaded = await getMessages(currentSession.id);
+        setMessages(loaded);
+      } catch (err) {
+        console.error('Failed to load messages:', err);
+      }
+    };
+
+    loadMessages();
   }, [currentSession]);
 
-  const handleSend = async () => {
-    if (!input.trim() || !currentSession?.id) return;
+  // 스크롤 항상 아래로
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-    const sessionId = currentSession.id;
+  // 언마운트 시 cleanup
+  useEffect(() => {
+    return () => closeEventSource();
+  }, [closeEventSource]);
 
-    const userMsg = { role: 'user', content: input };
-    setMessages((prev) => [...prev, userMsg]);
-    await saveMessage({ sessionId, ...userMsg });
+  const appendMessage = useCallback((msg) => {
+    setMessages((prev) => [...prev, msg]);
+  }, []);
 
-    const aiContent = await getLLMResponse(input);
-    const aiMsg = { role: 'ai', content: aiContent };
-    setMessages((prev) => [...prev, aiMsg]);
-    await saveMessage({ sessionId, ...aiMsg });
+  const updateLastMessage = useCallback((delta) => {
+    setMessages((prev) => {
+      const updated = [...prev];
+      const last = updated[updated.length - 1];
+      if (last?.role === 'ai') {
+        updated[updated.length - 1] = { ...last, content: last.content + delta };
+      }
+      return updated;
+    });
+  }, []);
 
+  const handleSend = useCallback(async () => {
+    const prompt = input.trim();
+    const sessionId = currentSession?.id;
+    if (!prompt || !sessionId || isStreaming) return;
+
+    setIsStreaming(true);
     setInput('');
     setFile(null);
-    onSessionUpdated();
-  };
+
+    const userMsg = { role: 'user', content: prompt };
+    appendMessage(userMsg);
+    await saveMessage({ sessionId, ...userMsg });
+
+    closeEventSource();
+
+    const url = new URL(`${API_BASE}/llm/stream`);
+    url.searchParams.append('session_id', sessionId);
+    url.searchParams.append('prompt', prompt);
+
+    const eventSource = new EventSource(url);
+    eventSourceRef.current = eventSource;
+
+    // 빈 AI 메시지 추가
+    appendMessage({ role: 'ai', content: '' });
+
+    eventSource.onmessage = (event) => {
+      try {
+        const { content } = JSON.parse(event.data);
+        if (content) updateLastMessage(content);
+      } catch (err) {
+        console.error('Invalid event data:', event.data);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('EventSource failed:', err);
+      closeEventSource();
+      setIsStreaming(false);
+      onSessionUpdated?.();
+    };
+  }, [input, currentSession, isStreaming, appendMessage, updateLastMessage, onSessionUpdated, closeEventSource]);
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {messages.length === 0 ? (
           <div className="text-center text-gray-400 mt-10 text-sm">
-            퇴근하고 싶으시죠? 일하세요.
+            무엇이든 물어보세요.
           </div>
         ) : (
           messages.map((msg, idx) => (
-            // <ChatBubble key={idx} sender={msg.role} text={msg.content} />
-            <ChatBubble key={idx} message={msg} />
+            <MessageBubble key={idx} message={msg} />
           ))
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       <ChatInput

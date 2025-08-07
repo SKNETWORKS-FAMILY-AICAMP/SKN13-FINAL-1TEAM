@@ -1,3 +1,4 @@
+// ✅ components/Login/LoginPage.jsx
 import React, { useState } from "react";
 import HeaderBar from "../shared/HeaderBar"; 
 
@@ -14,6 +15,13 @@ export default function LoginPage({ onLoginSuccess }) {
       onLoginSuccess();
     } else {
       setError("아이디 또는 비밀번호가 올바르지 않습니다.");
+    }
+  };
+
+// ✅ Enter 키 누르면 로그인 실행
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleLogin();
     }
   };
 
@@ -45,6 +53,7 @@ export default function LoginPage({ onLoginSuccess }) {
             placeholder="아이디를 입력하세요"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="w-full bg-gray-100 placeholder-gray-400 px-4 py-3 mb-3 rounded-lg focus:outline-none"
           />
 
@@ -53,6 +62,7 @@ export default function LoginPage({ onLoginSuccess }) {
             placeholder="비밀번호를 입력하세요"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="w-full bg-gray-100 placeholder-gray-400 px-4 py-3 mb-3 rounded-lg focus:outline-none"
           />
 
