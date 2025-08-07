@@ -24,7 +24,7 @@ jobs:
       - name: Send Discord Embed Notification
         run: |
           JSON=$(jq -n \
-            --arg title "해커톤 Push 알림 🚀" \
+            --arg title "최종프로젝트 Push 알림 🚀" \
             --arg desc "[$BRANCH_NAME] 브랜치에 새로운 push가 발생했습니다!" \
             --arg commit_msg "$COMMIT_MESSAGE" \
             --arg author "$COMMIT_AUTHOR" \
