@@ -1,0 +1,60 @@
+name: Notify Discord on Push
+
+on:
+  push:
+    branches:
+      - main  # 원하는 브랜치명
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get commit info
+        id: vars
+        run: |
+          echo "COMMIT_MESSAGE=$(git log -1 --pretty=format:'%s')" >> $GITHUB_ENV
+          echo "COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')" >> $GITHUB_ENV
+          echo "COMMIT_URL=${{ github.event.head_commit.url }}" >> $GITHUB_ENV
+          echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+
+      - name: Send Discord Embed Notification
+        run: |
+          JSON=$(jq -n \
+            --arg title "최종프로젝트 Push 알림 🚀" \
+            --arg desc "[$BRANCH_NAME] 브랜치에 새로운 push가 발생했습니다!" \
+            --arg commit_msg "$COMMIT_MESSAGE" \
+            --arg author "$COMMIT_AUTHOR" \
+            --arg url "$COMMIT_URL" \
+            --argjson color 5814783 \
+            '{
+              "embeds": [
+                {
+                  "title": $title,
+                  "description": $desc,
+                  "color": $color,
+                  "fields": [
+                    {
+                      "name": "커밋 메시지",
+                      "value": $commit_msg
+                    },
+                    {
+                      "name": "작성자",
+                      "value": $author
+                    },
+                    {
+                      "name": "커밋 링크",
+                      "value": $url
+                    }
+                  ]
+                }
+              ]
+            }')
+
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "$JSON" \
+               ${{ secrets.DISCORD_WEBHOOK_URL }}
