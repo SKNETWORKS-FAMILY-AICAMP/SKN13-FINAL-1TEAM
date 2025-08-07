@@ -18,6 +18,13 @@ export default function App() {
     setSessionList(sessions);
   };
 
+  // 사이드바가 열릴 때마다 세션 목록을 로드
+  useEffect(() => {
+    if (sidebarOpen) {
+      loadSessions();
+    }
+  }, [sidebarOpen]);
+
   const handleNewChat = () => {
     const newSession = {
       id: `session-${Date.now()}`,

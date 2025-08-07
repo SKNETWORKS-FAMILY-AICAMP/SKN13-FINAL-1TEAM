@@ -39,7 +39,7 @@ export default function Sidebar({
             <ChatSummaryItem
               key={chat.session_id}
               title={chat.title}
-              onClick={() => onSelectChat(chat.session_id)}
+              onClick={() => onSelectChat(chat.id)}
             />
           ))
         )}

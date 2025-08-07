@@ -100,9 +100,9 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         if (data.content) {
           updateLastMessage(data.content);
         } else if (data.thinking_message) {
-          appendMessage({ role: 'ai', content: data.thinking_message, type: 'thinking' });
+          appendMessage({ role: 'thinking', content: data.thinking_message });
         } else if (data.tool_message) {
-          appendMessage({ role: 'ai', content: data.tool_message, type: 'tool' });
+          appendMessage({ role: 'tool', content: data.tool_message });
         }
       } catch (err) {
         console.error('Invalid event data:', event.data);
