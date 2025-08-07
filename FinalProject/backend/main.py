@@ -69,6 +69,12 @@ async def llm_stream(session_id: str, prompt: str):
     config = generate_config(session_id)
     chat_agent = agent()
 
+    return StreamingResponse(_stream_llm_response(session_id, prompt, chat_agent, config, chat_sessions), media_type="text/event-stream")
+
+async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config, chat_sessions: Dict[str, List[Dict[str, str]]]) -> Generator:
+    """AI 응답을 조각내어 실시간으로 생성하는 제너레이터"""
+    full_response_content = ""
+    
     # 세션 ID로 전체 대화 기록을 가져옴
     history = chat_sessions.get(session_id, [])
     
@@ -84,31 +90,34 @@ async def llm_stream(session_id: str, prompt: str):
 
     input_data = {"messages": messages}
 
-    async def stream_generator():
-        """AI 응답을 조각내어 실시간으로 생성하는 제너레이터"""
-        full_response_content = ""
-        # astream_events를 사용하여 각 단계를 스트리밍
-        async for event in chat_agent.astream_events(input_data, config=config, version="v1"):
-            kind = event["event"]
-            if kind == "on_chat_model_stream":
-                content = event["data"]["chunk"].content
-                if content:
-                    # 생성된 콘텐츠 조각을 클라이언트로 바로 전송   
-                    yield f"data: {json.dumps({'content': content})}\n\n"
-                    full_response_content += content
-            elif kind == "on_tool_end":
-                # 도구 사용 결과를 클라이언트로 전송 (선택 사항)
-                tool_output = event["data"].get("output", "")
-                yield f"data: {json.dumps({'tool_output': tool_output})}\n\n"
+    # astream_events를 사용하여 각 단계를 스트리밍
+    async for event in chat_agent.astream_events(input_data, config=config, version="v1"):
+        kind = event["event"]
+        if kind == "on_chat_model_stream":
+            content = event["data"]["chunk"].content
+            if content:
+                # 생성된 콘텐츠 조각을 클라이언트로 바로 전송   
+                yield f"data: {json.dumps({'content': content})}\n\n"
+                full_response_content += content
+                
+        elif kind == "on_tool_start":
+            tool_name = event.get("name", "Unknown Tool")
+            tool_input = event["data"].get("input", {})
+            print(f"DEBUG: on_tool_start event data: {event}") # 디버깅을 위한 print 문 추가
+            thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input: {tool_input}"
+            yield f"data: {json.dumps({'thinking_message': thinking_message})}\n\n"
+            full_response_content += thinking_message + "\n"
 
-        # 스트리밍이 끝나면, 완성된 AI 응답 전체를 저장
-        if full_response_content:
-            if session_id not in chat_sessions:
-                chat_sessions[session_id] = []
-            chat_sessions[session_id].append({"role": "ai", "content": full_response_content})
+        elif kind == "on_tool_end":
+            tool_output = event["data"].get("output", "")
+            if tool_output:
+                # 도구 사용 결과를 클라이언트로 전송하고, 전체 응답에 추가
+                formatted_output = f"[Tool Output]: {tool_output}"
+                yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
+                full_response_content += formatted_output + "\n"
 
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
-@app.get("/")
-def read_root():
-    return {"Hello": "GigaChad"}
+    # 스트리밍이 끝나면, 완성된 AI 응답 전체를 저장
+    if full_response_content:
+        if session_id not in chat_sessions:
+            chat_sessions[session_id] = []
+        chat_sessions[session_id].append({"role": "ai", "content": full_response_content})

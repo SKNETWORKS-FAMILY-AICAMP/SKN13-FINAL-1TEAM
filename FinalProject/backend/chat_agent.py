@@ -43,10 +43,9 @@ async def chatbot(state: State) -> dict:
     tools = [RAG_tool, naver_tool, get_data_seoul, read_hwpx, edit_hwpx]
     llm_with_tools = llm.bind_tools(tools)
 
-    final_response = None
-    async for chunk in llm_with_tools.astream(state["messages"]):
-        final_response = chunk
-    return {"messages": [final_response]}
+    # Invoke the LLM to get the full AI message, which might contain tool calls
+    ai_message = await llm_with_tools.ainvoke(state["messages"])
+    return {"messages": [ai_message]}
 
 # --- Graph Definition ---
 

@@ -57,8 +57,13 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     setMessages((prev) => {
       const updated = [...prev];
       const last = updated[updated.length - 1];
-      if (last?.role === 'ai') {
+
+      // If the last message is a regular AI message (no 'type' or type is 'regular'), append to it
+      if (last?.role === 'ai' && (!last.type || last.type === 'regular')) {
         updated[updated.length - 1] = { ...last, content: last.content + delta };
+      } else {
+        // Otherwise, append a new regular AI message
+        updated.push({ role: 'ai', content: delta, type: 'regular' }); // Explicitly set type to 'regular'
       }
       return updated;
     });
@@ -91,8 +96,14 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
     eventSource.onmessage = (event) => {
       try {
-        const { content } = JSON.parse(event.data);
-        if (content) updateLastMessage(content);
+        const data = JSON.parse(event.data);
+        if (data.content) {
+          updateLastMessage(data.content);
+        } else if (data.thinking_message) {
+          appendMessage({ role: 'ai', content: data.thinking_message, type: 'thinking' });
+        } else if (data.tool_message) {
+          appendMessage({ role: 'ai', content: data.tool_message, type: 'tool' });
+        }
       } catch (err) {
         console.error('Invalid event data:', event.data);
       }
