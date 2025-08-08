@@ -7,152 +7,172 @@ import { API_BASE } from '../services/env.js';
 export default function ChatWindow({ currentSession, onSessionUpdated, isMaximized }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
 
-  // ✅ EventSource 안전 종료
   const closeEventSource = useCallback(() => {
-    console.log('[DEBUG] Closing EventSource');
-    eventSourceRef.current?.close();
+    eventSourceRef.current?.close?.();
     eventSourceRef.current = null;
   }, []);
 
-  // ✅ 세션 변경 시 메시지 불러오기
+  const normalizeAttachments = useCallback((arr) => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((a) => ({
+      name: a.name || a.filename || 'attachment',
+      type: a.type || a.mimetype || '',
+      url: a.url || a.previewUrl || a.href || null,
+    }));
+  }, []);
+
   useEffect(() => {
-    console.log('[DEBUG] currentSession 변경됨:', currentSession);
-
-    if (!currentSession?.id) {
-      console.log('[DEBUG] 세션 ID 없음 → 메시지 초기화');
-      setMessages([]);
-      return;
-    }
-
-    const loadMessages = async () => {
+    if (!currentSession?.id) { setMessages([]); return; }
+    (async () => {
       try {
-        console.log(`[DEBUG] 세션(${currentSession.id}) 메시지 불러오기 시도`);
         const loaded = await getMessages(currentSession.id);
-        console.log('[DEBUG] 불러온 메시지:', loaded);
-        setMessages(loaded);
+        setMessages(loaded || []);
       } catch (err) {
         console.error('[ERROR] 메시지 불러오기 실패:', err);
       }
-    };
-
-    loadMessages();
+    })();
   }, [currentSession]);
 
-  // ✅ 스크롤 항상 아래로
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ✅ 언마운트 시 cleanup
-  useEffect(() => {
-    return () => closeEventSource();
-  }, [closeEventSource]);
+  useEffect(() => () => closeEventSource(), [closeEventSource]);
 
   const appendMessage = useCallback((msg) => {
-    console.log('[DEBUG] 메시지 추가:', msg);
-    setMessages((prev) => [...prev, msg]);
+    setMessages(prev => [...prev, msg]);
   }, []);
 
   const updateLastMessage = useCallback((delta) => {
-    console.log('[DEBUG] 마지막 메시지 업데이트:', delta);
-    setMessages((prev) => {
-      const updated = [...prev];
-      const last = updated[updated.length - 1];
-
+    setMessages(prev => {
+      const arr = [...prev];
+      const last = arr[arr.length - 1];
       if (last?.role === 'ai' && (!last.type || last.type === 'regular')) {
-        updated[updated.length - 1] = { ...last, content: last.content + delta };
+        arr[arr.length - 1] = { ...last, content: (last.content || '') + delta };
       } else {
-        updated.push({ role: 'ai', content: delta, type: 'regular' });
+        arr.push({ role: 'ai', content: delta, type: 'regular' });
       }
-      return updated;
+      return arr;
     });
   }, []);
+
+  const attachToLastAI = useCallback((atts) => {
+    setMessages(prev => {
+      const arr = [...prev];
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (arr[i].role === 'ai' || arr[i].role === 'assistant') {
+          const prevAtt = Array.isArray(arr[i].attachments) ? arr[i].attachments : [];
+          arr[i] = { ...arr[i], attachments: [...prevAtt, ...atts] };
+          return arr;
+        }
+      }
+      arr.push({ role: 'ai', content: '', attachments: atts });
+      return arr;
+    });
+  }, []);
+
+  const endStream = useCallback(() => {
+    closeEventSource();
+    setIsStreaming(false);
+    onSessionUpdated?.();
+  }, [closeEventSource, onSessionUpdated]);
 
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
     const sessionId = currentSession?.id;
-    console.log('[DEBUG] handleSend 호출됨:', { prompt, sessionId, isStreaming });
+    const hasFiles = (files?.length || 0) > 0;
 
-    if (!prompt) {
-      console.warn('[WARN] 입력값 없음 → 전송 취소');
-      return;
-    }
-    if (!sessionId) {
-      console.warn('[WARN] 세션 ID 없음 → 전송 취소');
-      return;
-    }
-    if (isStreaming) {
-      console.warn('[WARN] 현재 스트리밍 중 → 전송 취소');
-      return;
-    }
+    if (!prompt && !hasFiles) return;
+    if (!sessionId) return;
+    if (isStreaming) return;
+
+    // 🔐 이전 SSE 정리 후 시작
+    closeEventSource();
 
     setIsStreaming(true);
-    setInput('');
-    setFile(null);
 
-    const userMsg = { role: 'user', content: prompt };
-    appendMessage(userMsg);
+    // 첨부 -> objectURL(이미지만)로 미리보기
+    const attachments = (files || []).map(f => ({
+      name: f.name,
+      type: f.type || 'application/octet-stream',
+      url: f.type?.startsWith('image/') ? URL.createObjectURL(f) : null,
+    }));
+
+    appendMessage(attachments.length > 0
+      ? { role: 'user', content: prompt, attachments }
+      : { role: 'user', content: prompt });
+
+    // 입력/첨부 초기화
+    setInput('');
+    setFiles([]);
 
     try {
-      console.log('[DEBUG] saveMessage 호출');
-      await saveMessage({ sessionId, ...userMsg });
+      await saveMessage({ sessionId, role: 'user', content: prompt });
     } catch (err) {
       console.error('[ERROR] 메시지 저장 실패:', err);
     }
 
-    closeEventSource();
-
+    // SSE 시작
     const url = new URL(`${API_BASE}/llm/stream`);
     url.searchParams.append('session_id', sessionId);
     url.searchParams.append('prompt', prompt);
-    console.log('[DEBUG] EventSource URL:', url.toString());
 
-    const eventSource = new EventSource(url);
-    eventSourceRef.current = eventSource;
+    const es = new EventSource(url);
+    eventSourceRef.current = es;
 
     appendMessage({ role: 'ai', content: '' });
 
-    eventSource.onmessage = (event) => {
-      console.log('[DEBUG] SSE 수신:', event.data);
+    es.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.content) {
-          updateLastMessage(data.content);
-        } else if (data.thinking_message) {
-          appendMessage({ role: 'thinking', content: data.thinking_message });
-        } else if (data.tool_message) {
-          appendMessage({ role: 'tool', content: data.tool_message });
+        // ✅ 스트림 종료 신호 처리
+        if (event.data === '[DONE]') {
+          endStream();
+          return;
         }
-      } catch (err) {
-        console.error('[ERROR] SSE 데이터 파싱 실패:', event.data, err);
+
+        const data = JSON.parse(event.data);
+
+        if (Array.isArray(data.attachments) && data.attachments.length > 0) {
+          attachToLastAI(normalizeAttachments(data.attachments));
+        }
+
+        if (data.done) { // 서버가 done 플래그로 보낼 수도 있음
+          endStream();
+          return;
+        }
+
+        if (data.content) updateLastMessage(data.content);
+        else if (data.thinking_message) appendMessage({ role: 'thinking', content: data.thinking_message });
+        else if (data.tool_message) appendMessage({ role: 'tool', content: data.tool_message });
+      } catch (e) {
+        // JSON이 아니면 토큰일 수도 있으니 그냥 무시하거나 로그만
+        // console.log('raw event', event.data);
       }
     };
 
-    eventSource.onerror = (err) => {
-      console.error('[ERROR] EventSource 실패:', err);
-      closeEventSource();
-      setIsStreaming(false);
-      onSessionUpdated?.();
+    es.onerror = () => {
+      // 에러로 끝난 경우도 깔끔히 풀어줌
+      endStream();
     };
-  }, [input, currentSession, isStreaming, appendMessage, updateLastMessage, onSessionUpdated, closeEventSource]);
+  }, [
+    input, files, currentSession, isStreaming,
+    appendMessage, updateLastMessage, attachToLastAI,
+    normalizeAttachments, closeEventSource, endStream
+  ]);
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {messages.length === 0 ? (
-          <div className="text-center text-gray-400 mt-10 text-sm">
-            무엇이든 물어보세요.
-          </div>
+          <div className="text-center text-gray-400 mt-10 text-sm">무엇이든 물어보세요.</div>
         ) : (
-          messages.map((msg, idx) => (
-            <MessageBubble key={idx} message={msg} />
-          ))
+          messages.map((msg, idx) => <MessageBubble key={idx} message={msg} />)
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -161,8 +181,8 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         input={input}
         setInput={setInput}
         onSend={handleSend}
-        file={file}
-        setFile={setFile}
+        files={files}
+        setFiles={setFiles}
         isMaximized={isMaximized}
       />
     </div>
