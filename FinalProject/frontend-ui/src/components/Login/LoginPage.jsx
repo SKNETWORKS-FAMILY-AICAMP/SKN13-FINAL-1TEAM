@@ -1,11 +1,12 @@
-// ✅ LoginPage.jsx (기존 UI/로직 유지 + 체크 해제 시 저장된 ID 제거)
+// ✅ src/components/Login/LoginPage.jsx
+// 기존 기능 유지 + '아이디 찾기/비밀번호 찾기' 네비게이션 props만 추가
 import React, { useState, useEffect } from "react";
 import HeaderBar from "../shared/HeaderBar";
 
 const EMP_ID_KEY = "employee_saved_id";
 const ADM_ID_KEY = "admin_saved_id";
 
-export default function LoginPage({ onLoginSuccess }) {
+export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -26,11 +27,10 @@ export default function LoginPage({ onLoginSuccess }) {
     }
   }, [role]);
 
-  // ✅ 로그인 처리
+  // ✅ 로그인 처리 (기존 데모 인증 로직 그대로)
   const handleLogin = async () => {
     const isEmployee = role === "employee";
 
-    // 데모 인증 로직(기존 그대로)
     if (
       (isEmployee && userId === "test" && password === "1234") ||
       (!isEmployee && userId === "admin" && password === "admin123")
@@ -40,7 +40,7 @@ export default function LoginPage({ onLoginSuccess }) {
       if (saveId) {
         localStorage.setItem(key, userId);
       } else {
-        localStorage.removeItem(key); // ← 체크 해제 시 기존 저장 ID 제거
+        localStorage.removeItem(key);
       }
 
       // ✅ 로그인 정보 저장 및 이동(기존 그대로)
@@ -137,9 +137,9 @@ export default function LoginPage({ onLoginSuccess }) {
           </button>
 
           <div className="text-sm text-center text-gray-500 mt-4 space-x-2">
-            <button className="underline">아이디 찾기</button>
+            <button className="underline" onClick={onFindId}>아이디 찾기</button>
             <span>/</span>
-            <button className="underline">비밀번호 찾기</button>
+            <button className="underline" onClick={onFindPw}>비밀번호 찾기</button>
           </div>
         </div>
       </div>
