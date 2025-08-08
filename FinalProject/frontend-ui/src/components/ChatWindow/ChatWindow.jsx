@@ -1,4 +1,3 @@
-// ✅ GigaChad Refactored ChatWindow.jsx
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
@@ -14,56 +13,62 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
 
-  // 기존 EventSource 안전 종료
+  // ✅ EventSource 안전 종료
   const closeEventSource = useCallback(() => {
+    console.log('[DEBUG] Closing EventSource');
     eventSourceRef.current?.close();
     eventSourceRef.current = null;
   }, []);
 
-  // 세션 변경 시 메시지 불러오기
+  // ✅ 세션 변경 시 메시지 불러오기
   useEffect(() => {
+    console.log('[DEBUG] currentSession 변경됨:', currentSession);
+
     if (!currentSession?.id) {
+      console.log('[DEBUG] 세션 ID 없음 → 메시지 초기화');
       setMessages([]);
       return;
     }
 
     const loadMessages = async () => {
       try {
+        console.log(`[DEBUG] 세션(${currentSession.id}) 메시지 불러오기 시도`);
         const loaded = await getMessages(currentSession.id);
+        console.log('[DEBUG] 불러온 메시지:', loaded);
         setMessages(loaded);
       } catch (err) {
-        console.error('Failed to load messages:', err);
+        console.error('[ERROR] 메시지 불러오기 실패:', err);
       }
     };
 
     loadMessages();
   }, [currentSession]);
 
-  // 스크롤 항상 아래로
+  // ✅ 스크롤 항상 아래로
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 언마운트 시 cleanup
+  // ✅ 언마운트 시 cleanup
   useEffect(() => {
     return () => closeEventSource();
   }, [closeEventSource]);
 
   const appendMessage = useCallback((msg) => {
+    console.log('[DEBUG] 메시지 추가:', msg);
     setMessages((prev) => [...prev, msg]);
   }, []);
 
   const updateLastMessage = useCallback((delta) => {
+    console.log('[DEBUG] 마지막 메시지 업데이트:', delta);
     setMessages((prev) => {
       const updated = [...prev];
       const last = updated[updated.length - 1];
 
-      // If the last message is a regular AI message (no 'type' or type is 'regular'), append to it
       if (last?.role === 'ai' && (!last.type || last.type === 'regular')) {
         updated[updated.length - 1] = { ...last, content: last.content + delta };
       } else {
-        // Otherwise, append a new regular AI message
-        updated.push({ role: 'ai', content: delta, type: 'regular' }); // Explicitly set type to 'regular'
+        updated.push({ role: 'ai', content: delta, type: 'regular' });
       }
       return updated;
     });
@@ -72,7 +77,20 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
     const sessionId = currentSession?.id;
-    if (!prompt || !sessionId || isStreaming) return;
+    console.log('[DEBUG] handleSend 호출됨:', { prompt, sessionId, isStreaming });
+
+    if (!prompt) {
+      console.warn('[WARN] 입력값 없음 → 전송 취소');
+      return;
+    }
+    if (!sessionId) {
+      console.warn('[WARN] 세션 ID 없음 → 전송 취소');
+      return;
+    }
+    if (isStreaming) {
+      console.warn('[WARN] 현재 스트리밍 중 → 전송 취소');
+      return;
+    }
 
     setIsStreaming(true);
     setInput('');
@@ -80,21 +98,28 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
     const userMsg = { role: 'user', content: prompt };
     appendMessage(userMsg);
-    await saveMessage({ sessionId, ...userMsg });
+
+    try {
+      console.log('[DEBUG] saveMessage 호출');
+      await saveMessage({ sessionId, ...userMsg });
+    } catch (err) {
+      console.error('[ERROR] 메시지 저장 실패:', err);
+    }
 
     closeEventSource();
 
     const url = new URL(`${API_BASE}/llm/stream`);
     url.searchParams.append('session_id', sessionId);
     url.searchParams.append('prompt', prompt);
+    console.log('[DEBUG] EventSource URL:', url.toString());
 
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
 
-    // 빈 AI 메시지 추가
     appendMessage({ role: 'ai', content: '' });
 
     eventSource.onmessage = (event) => {
+      console.log('[DEBUG] SSE 수신:', event.data);
       try {
         const data = JSON.parse(event.data);
         if (data.content) {
@@ -105,12 +130,12 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
           appendMessage({ role: 'tool', content: data.tool_message });
         }
       } catch (err) {
-        console.error('Invalid event data:', event.data);
+        console.error('[ERROR] SSE 데이터 파싱 실패:', event.data, err);
       }
     };
 
     eventSource.onerror = (err) => {
-      console.error('EventSource failed:', err);
+      console.error('[ERROR] EventSource 실패:', err);
       closeEventSource();
       setIsStreaming(false);
       onSessionUpdated?.();
