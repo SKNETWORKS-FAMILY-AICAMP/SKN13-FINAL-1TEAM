@@ -76,6 +76,7 @@ export default function App() {
   // 로그인 성공
   const handleLoginSuccess = (userData) => {
     localStorage.setItem(USER_KEY, JSON.stringify(userData));
+    setSidebarOpen(false);
     setCurrentPage('chat');
   };
 
