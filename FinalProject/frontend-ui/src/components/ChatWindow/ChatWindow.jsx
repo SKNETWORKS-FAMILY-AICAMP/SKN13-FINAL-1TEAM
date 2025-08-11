@@ -1,8 +1,9 @@
+// ✅ src/components/ChatWindow/ChatWindow.jsx
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
 import { getMessages, saveMessage } from '../services/chatApi.js';
-import { API_BASE } from '../services/env.js';
+import { BASE_URL } from '../services/env.js'; // ← env.js는 BASE_URL / FILE_UPLOAD_URL을 항상 export
 
 export default function ChatWindow({ currentSession, onSessionUpdated, isMaximized }) {
   const [messages, setMessages] = useState([]);
@@ -83,6 +84,12 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     onSessionUpdated?.();
   }, [closeEventSource, onSessionUpdated]);
 
+  // ⛔ 중지(Abort): 진행 중 스트림 종료 + 즉시 새 질문 가능
+  const handleAbort = useCallback(() => {
+    closeEventSource();
+    setIsStreaming(false);
+  }, [closeEventSource]);
+
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
     const sessionId = currentSession?.id;
@@ -92,12 +99,11 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     if (!sessionId) return;
     if (isStreaming) return;
 
-    // 🔐 이전 SSE 정리 후 시작
+    // 이전 SSE 정리 후 시작
     closeEventSource();
-
     setIsStreaming(true);
 
-    // 첨부 -> objectURL(이미지만)로 미리보기
+    // 첨부 미리보기(이미지에 한해 objectURL)
     const attachments = (files || []).map(f => ({
       name: f.name,
       type: f.type || 'application/octet-stream',
@@ -119,7 +125,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     }
 
     // SSE 시작
-    const url = new URL(`${API_BASE}/llm/stream`);
+    const url = new URL(`${BASE_URL}/llm/stream`);
     url.searchParams.append('session_id', sessionId);
     url.searchParams.append('prompt', prompt);
 
@@ -130,7 +136,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
     es.onmessage = (event) => {
       try {
-        // ✅ 스트림 종료 신호 처리
+        // 종료 신호
         if (event.data === '[DONE]') {
           endStream();
           return;
@@ -142,7 +148,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
           attachToLastAI(normalizeAttachments(data.attachments));
         }
 
-        if (data.done) { // 서버가 done 플래그로 보낼 수도 있음
+        if (data.done) {
           endStream();
           return;
         }
@@ -150,14 +156,13 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         if (data.content) updateLastMessage(data.content);
         else if (data.thinking_message) appendMessage({ role: 'thinking', content: data.thinking_message });
         else if (data.tool_message) appendMessage({ role: 'tool', content: data.tool_message });
-      } catch (e) {
-        // JSON이 아니면 토큰일 수도 있으니 그냥 무시하거나 로그만
-        // console.log('raw event', event.data);
+      } catch {
+        // JSON 파싱 안 되면 토큰으로 간주 — 무시 가능
       }
     };
 
     es.onerror = () => {
-      // 에러로 끝난 경우도 깔끔히 풀어줌
+      // 에러로 끝난 경우도 상태 복구
       endStream();
     };
   }, [
@@ -184,6 +189,9 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         files={files}
         setFiles={setFiles}
         isMaximized={isMaximized}
+        // ⬇ 전송/중지 토글 제어
+        isStreaming={isStreaming}
+        onAbort={handleAbort}
       />
     </div>
   );

@@ -1,28 +1,29 @@
-// ChatInput.jsx — 다중 업로드 안정화 + 전송 가능 조건 수정 + 삭제 시 URL revoke
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PlusIcon, PaperAirplaneIcon, XMarkIcon, PaperClipIcon } from '@heroicons/react/24/solid';
+// ✅ src/components/ChatWindow/ChatInput.jsx
+import React, { useEffect, useMemo, useRef } from 'react';
+import { PlusIcon, PaperAirplaneIcon, XMarkIcon, PaperClipIcon, StopIcon } from '@heroicons/react/24/solid';
 
 export default function ChatInput({
   input, setInput, onSend,
-  files, setFiles,          // ✅ 배열이 단일 소스
-  file, setFile,            // (레거시) 단일이 오면 배열로 병합해줌
+  files, setFiles,          // 배열 상태
+  file, setFile,            // (레거시) 단일 파일 — 배열로 흡수
   isMaximized,
+  isStreaming = false,      // 전송 중 여부
+  onAbort,                  // 중지 핸들러
 }) {
-  // 0) 레거시 단일 파일을 배열 상태에 흡수
+  // 레거시 단일 파일 → 배열 병합
   useEffect(() => {
     if (file && setFiles) {
       setFiles(prev => (prev?.some(f => f === file) ? prev : [...(prev || []), file]));
       setFile && setFile(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
   const filesArr = Array.isArray(files) ? files : [];
 
-  // 1) 이미지 프리뷰 URL 관리 (파일 삭제/변경 시 정확히 revoke)
+  // 이미지 미리보기 URL 관리
   const urlMapRef = useRef(new Map()); // key: index, val: url
   const imagePreviewItems = useMemo(() => {
-    // 인덱스 기준으로 URL 생성/유지
     const map = urlMapRef.current;
     const items = [];
     filesArr.forEach((f, idx) => {
@@ -35,7 +36,7 @@ export default function ChatInput({
         items.push({ index: idx, name: f.name, url });
       }
     });
-    // 불필요한 URL 정리(삭제된 파일 인덱스)
+    // 제거된 항목들의 URL revoke
     for (const key of Array.from(map.keys())) {
       if (!filesArr[key] || !filesArr[key].type?.startsWith('image/')) {
         const u = map.get(key);
@@ -47,44 +48,43 @@ export default function ChatInput({
   }, [filesArr]);
 
   useEffect(() => {
-    // 언마운트 시 전부 정리
     return () => {
       for (const [, u] of urlMapRef.current) URL.revokeObjectURL(u);
       urlMapRef.current.clear();
     };
   }, []);
 
-  // 2) 전송 가능: 텍스트 있거나 파일 하나라도 있으면 OK
+  // 전송 가능 조건: 텍스트 있거나 파일이 1개 이상
   const canSend = (input?.trim()?.length || 0) > 0 || filesArr.length > 0;
 
-  // 3) 파일 추가/삭제
+  // 파일 추가/삭제
   const addFiles = (e) => {
     const selected = Array.from(e.target.files || []);
     if (selected.length) {
-      setFiles(prev => ([...(prev || []), ...selected])); // ✅ 누적
+      setFiles(prev => ([...(prev || []), ...selected]));
     }
     e.target.value = '';
   };
 
   const removeAt = (idx) => {
-    // 해당 인덱스의 이미지 URL 먼저 revoke
     const url = urlMapRef.current.get(idx);
     if (url) {
       URL.revokeObjectURL(url);
       urlMapRef.current.delete(idx);
     }
-    // 배열에서 제거
     setFiles(prev => (prev || []).filter((_, i) => i !== idx));
   };
 
   const extraCount = Math.max(0, imagePreviewItems.length - 4);
 
-  const handleSendClick = () => { if (canSend) onSend(); };
+  const handleSendClick = () => { if (canSend && !isStreaming) onSend(); };
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) onSend(); }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (canSend && !isStreaming) onSend();
+    }
   };
 
-  // 파일칩(비이미지)
   const nonImageFiles = filesArr
     .map((f, idx) => ({ f, idx }))
     .filter(({ f }) => !f?.type?.startsWith('image/'));
@@ -153,15 +153,26 @@ export default function ChatInput({
             className="flex-1 text-sm resize-none outline-none bg-transparent placeholder:text-gray-400"
           />
 
-          <button
-            onClick={handleSendClick}
-            disabled={!canSend}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="전송"
-            aria-disabled={!canSend}
-          >
-            <PaperAirplaneIcon className="w-5 h-5 text-blue-500" />
-          </button>
+          {/* ▶ 전송 / ■ 중지 토글 */}
+          {isStreaming ? (
+            <button
+              onClick={onAbort}
+              className="p-1 rounded hover:bg-gray-100"
+              title="중지"
+            >
+              <StopIcon className="w-5 h-5 text-red-500" />
+            </button>
+          ) : (
+            <button
+              onClick={handleSendClick}
+              disabled={!canSend}
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="전송"
+              aria-disabled={!canSend}
+            >
+              <PaperAirplaneIcon className="w-5 h-5 text-blue-500" />
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -47,7 +47,7 @@ export default function MessageBubble({ message }) {
   }, [viewerOpen, closeViewer, prevImg, nextImg]);
 
   return (
-    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}>
       {/* 세로 스택: [첨부] -> [텍스트] */}
       <div className={`flex flex-col gap-2 max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
         {/* ⬆ 첨부: 말풍선과 같은 라인으로 끝 정렬 */}
