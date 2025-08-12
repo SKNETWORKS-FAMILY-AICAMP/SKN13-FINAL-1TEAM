@@ -1,5 +1,4 @@
 // ✅ src/App.jsx
-// 기존 흐름 유지 + 'find-id' / 'find-pw' 페이지 라우팅만 추가
 import React, { useEffect, useMemo, useState } from 'react';
 import ChatWindow from './components/ChatWindow/ChatWindow.jsx';
 import Sidebar from './components/Sidebar/Sidebar.jsx';
@@ -8,6 +7,7 @@ import { getChatSessions } from './components/services/chatApi';
 import LoginPage from './components/Login/LoginPage.jsx';
 import FindId from './components/Login/FindId.jsx';
 import ResetPassword from './components/Login/ResetPassword.jsx';
+import FeatureMain from './components/FeatureWindow/FeatureApp.jsx';
 
 const USER_KEY  = 'user';
 const TOKEN_KEY = 'userToken';
@@ -18,6 +18,20 @@ export default function App() {
   const [currentSession, setCurrentSession] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
   const [currentPage, setCurrentPage] = useState('login'); // 'login' | 'chat' | 'find-id' | 'find-pw'
+
+  // ✅ 기능부 전용 창 여부 (Electron이 ?feature=1로 띄움)
+  const isFeatureWindow = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('feature') === '1';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // 🔀 기능부 전용 창이면, 로그인/챗봇 분기 없이 기능부 UI만 렌더
+  if (isFeatureWindow) {
+    return <FeatureMain />;
+  }
 
   // ─────────── 세션 로드 & 선택 ───────────
   const loadSessions = async () => {
