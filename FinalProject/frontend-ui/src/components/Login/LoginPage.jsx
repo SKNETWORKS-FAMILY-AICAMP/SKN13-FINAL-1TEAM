@@ -1,20 +1,21 @@
-// ✅ src/components/Login/LoginPage.jsx
-// 기존 기능 유지 + '아이디 찾기/비밀번호 찾기' 네비게이션 props만 추가
+// ✅ components/Login/LoginPage.jsx
 import React, { useState, useEffect } from "react";
 import HeaderBar from "../shared/HeaderBar";
 
 const EMP_ID_KEY = "employee_saved_id";
 const ADM_ID_KEY = "admin_saved_id";
+const USER_KEY = "currentUserId";
+const TOKEN_KEY = "userToken";
 
 export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [role, setRole] = useState("employee"); // 기본값: 사원
-  const [saveId, setSaveId] = useState(false);  // ✅ 아이디 저장 체크박스
+  const [role, setRole] = useState("employee");
+  const [saveId, setSaveId] = useState(false);
   const [logoError, setLogoError] = useState(false);
 
-  // ✅ 역할 변경 시 저장된 ID 불러오기 (있으면 체크 on)
+  // 역할 변경 시 저장된 ID 불러오기
   useEffect(() => {
     const key = role === "employee" ? EMP_ID_KEY : ADM_ID_KEY;
     const saved = localStorage.getItem(key);
@@ -27,36 +28,45 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
     }
   }, [role]);
 
-  // ✅ 로그인 처리 (기존 데모 인증 로직 그대로)
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleLogin();
+  };
+
   const handleLogin = async () => {
     const isEmployee = role === "employee";
 
-    if (
+    const ok =
       (isEmployee && userId === "test" && password === "1234") ||
-      (!isEmployee && userId === "admin" && password === "admin123")
-    ) {
-      // ✅ 아이디 저장/삭제
-      const key = isEmployee ? EMP_ID_KEY : ADM_ID_KEY;
-      if (saveId) {
-        localStorage.setItem(key, userId);
-      } else {
-        localStorage.removeItem(key);
-      }
+      (!isEmployee && userId === "admin" && password === "admin123");
 
-      // ✅ 로그인 정보 저장 및 이동(기존 그대로)
-      localStorage.setItem("userToken", isEmployee ? "employee-token" : "admin-token");
-      localStorage.setItem("currentUserId", userId);
-      onLoginSuccess({
-        id: userId,
-        is_superuser: !isEmployee,
-      });
-    } else {
+    if (!ok) {
       setError("아이디, 비밀번호 또는 역할이 올바르지 않습니다.");
+      return;
     }
-  };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleLogin();
+    // 아이디 저장/삭제
+    const idKey = isEmployee ? EMP_ID_KEY : ADM_ID_KEY;
+    if (saveId) localStorage.setItem(idKey, userId);
+    else localStorage.removeItem(idKey);
+
+    // 세션 저장
+    localStorage.setItem(TOKEN_KEY, isEmployee ? "employee-token" : "admin-token");
+    localStorage.setItem(USER_KEY, userId);
+
+    // 🔔 메인 프로세스에 로그인 성공 알림
+    try {
+      window?.electron?.ipcRenderer?.send("auth:success", {
+        role: isEmployee ? "employee" : "admin",
+        userId,
+      });
+    } catch (_) {}
+
+    // ✅ 사이드바 자동 오픈 방지 → 상태 false 전달
+    onLoginSuccess({
+      id: userId,
+      is_superuser: !isEmployee,
+      sidebarOpen: false, // 추가
+    });
   };
 
   return (
@@ -79,7 +89,7 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
 
           <h2 className="text-md font-semibold text-left mb-4">Sign-in</h2>
 
-          {/* 사원/관리자 선택 탭 (그대로) */}
+          {/* 사원/관리자 선택 */}
           <div className="flex mb-4 rounded-full overflow-hidden border border-gray-200">
             <button
               onClick={() => setRole("employee")}
@@ -113,7 +123,6 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
             className="w-full bg-gray-100 placeholder-gray-400 px-4 py-3 mb-2 rounded-lg focus:outline-none"
           />
 
-          {/* 아이디 저장 체크박스 (그대로) */}
           <div className="flex items-center mb-3">
             <input
               type="checkbox"
@@ -137,9 +146,13 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
           </button>
 
           <div className="text-sm text-center text-gray-500 mt-4 space-x-2">
-            <button className="underline" onClick={onFindId}>아이디 찾기</button>
+            <button className="underline" onClick={onFindId}>
+              아이디 찾기
+            </button>
             <span>/</span>
-            <button className="underline" onClick={onFindPw}>비밀번호 찾기</button>
+            <button className="underline" onClick={onFindPw}>
+              비밀번호 찾기
+            </button>
           </div>
         </div>
       </div>
