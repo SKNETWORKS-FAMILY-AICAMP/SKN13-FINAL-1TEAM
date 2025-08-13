@@ -26,7 +26,7 @@ def RAG_tool(query: str, filter: Optional[Dict[str, Any]] = None) -> str:
     """
     vector_store = Chroma(
         embedding_function=OpenAIEmbeddings(model="text-embedding-3-large"), 
-        persist_directory="../../chroma/kobaco_markdown"
+        persist_directory="GraphRag/chroma/kobaco_markdown"
     )
 
     retriever = vector_store.as_retriever(search_kwargs={"k":20})
