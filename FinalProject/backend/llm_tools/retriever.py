@@ -26,24 +26,13 @@ def RAG_tool(query: str, filter: Optional[Dict[str, Any]] = None) -> str:
     """
     vector_store = Chroma(
         embedding_function=OpenAIEmbeddings(model="text-embedding-3-large"), 
-        persist_directory=DB_PATH
-    ) 
+        persist_directory="../../chroma/kobaco_markdown"
+    )
 
     retriever = vector_store.as_retriever(search_kwargs={"k":20})
-    
-    print(f"DB Document Count: {vector_store._collection.count()}")
-    
     docs = retriever.invoke(query)
     
     print(f"Retrieved docs: {docs}")
 
     result = "\n\n".join([doc.page_content for doc in docs])[:3000]
-    return result  # 너무 길어지는 것 방지
-
-# This ensures the test code only runs when you execute the script directly
-if __name__ == '__main__':
-    print("--- Running retriever test ---")
-    test = RAG_tool.invoke("2023")
-    print("--- Result ---")
-    print(test)
-    print("--- End of test ---")
+    return result

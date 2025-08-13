@@ -41,10 +41,13 @@ async def chatbot(state: State) -> dict:
     
     naver_tool = NaverSearchTool()
     tools = [RAG_tool, naver_tool, get_data_seoul, read_hwpx, edit_hwpx]
+
     llm_with_tools = llm.bind_tools(tools)
+    # tool_choice 포함된 RunnableConfig 생성
+    config = RunnableConfig(configurable={"tool_choice": "auto"})
 
     # Invoke the LLM to get the full AI message, which might contain tool calls
-    ai_message = await llm_with_tools.ainvoke(state["messages"])
+    ai_message = await llm_with_tools.ainvoke(state["messages"], config=config)
     return {"messages": [ai_message]}
 
 # --- Graph Definition ---
