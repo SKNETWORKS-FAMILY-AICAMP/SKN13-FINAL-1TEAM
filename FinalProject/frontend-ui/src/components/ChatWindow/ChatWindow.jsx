@@ -3,6 +3,7 @@ import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
 import { getMessages, saveMessage } from '../services/chatApi.js';
 import { API_BASE } from '../services/env.js';
+import { uploadChatbotFilePresigned } from '../services/uploadPresigned.js';
 
 export default function ChatWindow({ currentSession, onSessionUpdated, isMaximized }) {
   const [messages, setMessages] = useState([]);
@@ -97,28 +98,45 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
     setIsStreaming(true);
 
-    // 첨부 -> objectURL(이미지만)로 미리보기
-    const attachments = (files || []).map(f => ({
+    // ✅ 기존과 동일: 사용자에게는 즉시 미리보기(이미지면 objectURL)로 보임
+    const attachmentsForPreview = (files || []).map(f => ({
       name: f.name,
       type: f.type || 'application/octet-stream',
       url: f.type?.startsWith('image/') ? URL.createObjectURL(f) : null,
     }));
 
-    appendMessage(attachments.length > 0
-      ? { role: 'user', content: prompt, attachments }
+    appendMessage(attachmentsForPreview.length > 0
+      ? { role: 'user', content: prompt, attachments: attachmentsForPreview }
       : { role: 'user', content: prompt });
 
-    // 입력/첨부 초기화
+    // 입력/첨부 초기화 (기존과 동일 타이밍)
     setInput('');
     setFiles([]);
 
+    // ✅ (신규) 프리사인드 업로드는 "백그라운드"로 진행 → UX 동일
+    if (hasFiles) {
+      (async () => {
+        try {
+          await Promise.all(
+            (files || []).map(f => uploadChatbotFilePresigned(f, { sessionId }))
+          );
+          // 백엔드 DB(attachments 테이블 등)에 메타 저장 완료.
+          // 필요하면 여기서 사용자 메시지의 첨부 URL을 실제 fileUrl로 업데이트하는 로직을 추가할 수 있으나,
+          // "기능/흐름 유지" 요구에 따라 화면상 즉시 미리보기만 유지하고 갱신은 생략합니다.
+        } catch (err) {
+          console.error('[ERROR] 파일 업로드 실패:', err);
+        }
+      })();
+    }
+
+    // 기존과 동일: 사용자 메시지 저장(첨부는 별도 /attachments 로 이미 저장됨)
     try {
       await saveMessage({ sessionId, role: 'user', content: prompt });
     } catch (err) {
       console.error('[ERROR] 메시지 저장 실패:', err);
     }
 
-    // SSE 시작
+    // 기존과 동일: SSE 시작
     const url = new URL(`${API_BASE}/llm/stream`, window.location.origin);
     url.searchParams.append('session_id', sessionId);
     url.searchParams.append('prompt', prompt);
@@ -142,7 +160,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
           attachToLastAI(normalizeAttachments(data.attachments));
         }
 
-        if (data.done) { // 서버가 done 플래그로 보낼 수도 있음
+        if (data.done) {
           endStream();
           return;
         }
@@ -151,13 +169,12 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         else if (data.thinking_message) appendMessage({ role: 'thinking', content: data.thinking_message });
         else if (data.tool_message) appendMessage({ role: 'tool', content: data.tool_message });
       } catch (e) {
-        // JSON이 아니면 토큰일 수도 있으니 그냥 무시하거나 로그만
+        // JSON이 아니면 토큰일 수도 있으니 무시
         // console.log('raw event', event.data);
       }
     };
 
     es.onerror = () => {
-      // 에러로 끝난 경우도 깔끔히 풀어줌
       endStream();
     };
   }, [

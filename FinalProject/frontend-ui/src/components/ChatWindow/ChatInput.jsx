@@ -2,7 +2,7 @@
 import React from 'react';
 import { PlusIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
 
-export default function ChatInput({ input, setInput, onSend, file, setFile, isMaximized }) {
+export default function ChatInput({ input, setInput, onSend, files, setFiles, isMaximized }) {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -22,8 +22,9 @@ export default function ChatInput({ input, setInput, onSend, file, setFile, isMa
           <PlusIcon className="w-5 h-5 text-gray-600" />
           <input
             type="file"
+            multiple
             className="hidden"
-            onChange={(e) => setFile(e.target.files[0])}
+            onChange={(e) => setFiles(Array.from(e.target.files || []))}
           />
         </label>
 
