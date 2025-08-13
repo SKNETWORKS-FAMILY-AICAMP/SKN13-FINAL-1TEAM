@@ -3,10 +3,6 @@ flowchart TB
   %% --- 노드 정의 ---
   subgraph Client["Client App"]
     A["Electron Desktop App"]
-    A1["Login"]
-    A2["Dashboard"]
-    A3["Chatbot"]
-    A4["Doc Editor"]
   end
 
   subgraph API["Backend API - FastAPI"]
@@ -18,20 +14,19 @@ flowchart TB
   end
 
   subgraph AI["AI Layer"]
-    C1["GPT-4o via LangChain LangGraph"]
+    C1["GPT-4o"]
     C2["Whisper STT"]
-    C3["GraphRAG"]
+    C3["Langchain"]
   end
 
   subgraph Data["Data Layer"]
-    D1[("RDB MySQL or PostgreSQL")]
+    D1[("RDB MySQL")]
     D2[("VectorDB Chroma")]
-    D3[("Object Storage S3 or NAS")]
+    D3[("NAS")]
   end
 
   subgraph External["External Services"]
-    E1["Google Workspace Calendar Gmail"]
-    E2["ERP and e-Approval"]
+    E1["Google Calendar"]
   end
 
   %% --- 연결 ---
@@ -48,7 +43,7 @@ flowchart TB
   B --> C2
   C1 --> D2
   B4 --> E1
-  B4 --> E2
+ 
 
   %% --- 스타일 정의 ---
   classDef client fill:#DBEAFE,stroke:#1E3A8A,stroke-width:2px,rx:10px,ry:10px
