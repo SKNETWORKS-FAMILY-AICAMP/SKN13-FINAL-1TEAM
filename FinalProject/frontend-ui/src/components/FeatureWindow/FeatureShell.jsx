@@ -12,7 +12,7 @@ export default function FeatureShell({
   activeKey,
   onSelect,
   collapsed = false,
-  headerNode = <span className="text-sm text-gray-600">기능부</span>,
+  headerNode = <span className="text-sm text-gray-600"></span>,
   children,
 }) {
   return (
