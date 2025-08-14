@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 // ✅ main.js (루트)
 // - dev: Vite 5173 URL 로드 (기존 진입 경로 유지)
 // - prod: frontend-ui/dist/index.html 로드
@@ -5,6 +7,7 @@
 
 const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
+const { getUploadUrl } = require('./backend/s3-handler.js');
 
 let mainWindow = null;     // 로그인/챗봇 창
 let featureWindow = null;  // 기능부 전용 창
@@ -42,7 +45,8 @@ function createMainWindow() {
 
   if (isDev) {
     mainWindow.loadURL(DEV_URL);
-  } else {
+  }
+ else {
     mainWindow.loadFile(PROD_INDEX);
   }
 
@@ -84,7 +88,8 @@ function createFeatureWindow() {
 
   if (isDev) {
     featureWindow.loadURL(`${DEV_URL}?feature=1`);
-  } else {
+  }
+ else {
     featureWindow.loadFile(PROD_INDEX, { query: { feature: '1' } });
   }
 
@@ -139,6 +144,22 @@ ipcMain.on('auth:success', (_evt, payload) => {
     createFeatureWindow();
   }
   // 관리자 전용 분기 필요 시 여기서 추가
+});
+
+/* ─────────────────────────────
+ *  📄 S3 Presigned URL 생성
+ * ───────────────────────────── */
+ipcMain.handle('get-s3-upload-url', async (event, fileName) => {
+  if (!fileName || typeof fileName !== 'string') {
+    return { error: '이봐, 아들. 올바른 파일 이름이 필요하다.' };
+  }
+  try {
+    const uploadUrl = await getUploadUrl(fileName);
+    return { url: uploadUrl };
+  } catch (error) {
+    console.error('S3 업로드 URL을 가져오는데 실패했다:', error);
+    return { error: error.message || '알 수 없는 오류가 발생했다.' };
+  }
 });
 
 app.whenReady().then(() => {

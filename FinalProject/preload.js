@@ -20,4 +20,7 @@ contextBridge.exposeInMainWorld('electron', {
   onWindowResize: (callback) => ipcRenderer.on('window-resized', callback),
   // ✅ 정리 함수 제공 (App.jsx cleanup용)
   offWindowResize: (callback) => ipcRenderer.removeListener('window-resized', callback),
+
+  // 📄 S3 업로드 URL 요청
+  getS3UploadUrl: (fileName) => ipcRenderer.invoke('get-s3-upload-url', fileName),
 });

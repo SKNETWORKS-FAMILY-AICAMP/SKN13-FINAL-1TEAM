@@ -6,11 +6,11 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-HOST = os.getenv("HOST")
-PORT = os.getenv("PORT")
-USER = os.getenv("USER")
-PASS = os.getenv("PASS")
-DB   = os.getenv("DB")
+HOST = os.getenv("HOST","192.168.0.12")
+PORT = os.getenv("PORT","3306")
+USER = os.getenv("USER","root")
+PASS = os.getenv("PASS",r"%clicka1234")
+DB   = os.getenv("DB","final")
 
 # MySQL 연결 (pymysql 드라이버 사용)
 # 예: mysql+pymysql://user:pass@localhost:3306/dbname

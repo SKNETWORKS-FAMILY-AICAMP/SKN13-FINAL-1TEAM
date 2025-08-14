@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
 import { getMessages, saveMessage } from '../services/chatApi.js';
-import { API_BASE } from '../services/env.js';
+import { BASE_URL } from '../services/env.js';
 import { uploadChatbotFilePresigned } from '../services/uploadPresigned.js';
 
 export default function ChatWindow({ currentSession, onSessionUpdated, isMaximized }) {
@@ -84,6 +84,12 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     onSessionUpdated?.();
   }, [closeEventSource, onSessionUpdated]);
 
+  // ⛔ 중지(Abort): 진행 중 스트림 종료 + 즉시 새 질문 가능
+  const handleAbort = useCallback(() => {
+    closeEventSource();
+    setIsStreaming(false);
+  }, [closeEventSource]);
+
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
     const sessionId = currentSession?.id;
@@ -137,7 +143,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     }
 
     // 기존과 동일: SSE 시작
-    const url = new URL(`${API_BASE}/llm/stream`, window.location.origin);
+    const url = new URL(`${BASE_URL}/llm/stream`, window.location.origin);
     url.searchParams.append('session_id', sessionId);
     url.searchParams.append('prompt', prompt);
 
@@ -201,6 +207,9 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         files={files}
         setFiles={setFiles}
         isMaximized={isMaximized}
+        // ⬇ 전송/중지 토글 제어
+        isStreaming={isStreaming}
+        onAbort={handleAbort}
       />
     </div>
   );
