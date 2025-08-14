@@ -60,7 +60,8 @@ if __name__ == '__main__':
     # 테스트를 위한 S3 경로 예시
     # 실행 전, AWS 자격 증명이 설정되어 있어야 함 (예: ~/.aws/credentials 또는 IAM 역할)
     # 또한, 아래 버킷과 파일이 실제로 존재해야 URL이 유효함
-    test_s3_path = "s3://your-real-bucket-name/path/to/your-file.pdf" # 실제 S3 경로로 변경 필요
+    import os
+    test_s3_path = "s3://clickabbbucket/kobaco_data/관계법령/공공기관의 운영에 관한 법률 시행령(대통령령)(제33078호)(20230101).pdf" # 실제 S3 경로로 변경 필요
 
     print(f"테스트 S3 경로: {test_s3_path}")
 

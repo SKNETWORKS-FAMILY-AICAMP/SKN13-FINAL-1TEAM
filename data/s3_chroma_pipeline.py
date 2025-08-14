@@ -62,9 +62,13 @@ def process_s3_pdfs_to_chroma(bucket_name: str, collection):
     paginator = s3_client.get_paginator('list_objects_v2')
     
     try:
-        pages = paginator.paginate(Bucket=bucket_name)
+        # 테스트를 위해 특정 경로(prefix)만 지정
+        s3_prefix = "kobaco_data/내부문서/투자/"
+        logger.info(f"테스트 모드: S3 경로 '{s3_prefix}'에서만 파일을 찾습니다.")
+
+        pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_prefix)
         pdf_files = [obj['Key'] for page in pages for obj in page.get('Contents', []) if obj['Key'].lower().endswith('.pdf')]
-        logger.info(f"S3 버킷 '{bucket_name}'에서 {len(pdf_files)}개의 PDF 파일을 찾았습니다.")
+        logger.info(f"S3 버킷 '{bucket_name}'의 '{s3_prefix}' 경로에서 {len(pdf_files)}개의 PDF 파일을 찾았습니다.")
     except Exception as e:
         logger.error(f"S3 버킷에서 파일 목록을 가져오는 데 실패했습니다: {e}")
         return
