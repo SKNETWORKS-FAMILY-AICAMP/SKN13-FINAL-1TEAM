@@ -42,7 +42,7 @@ def get_document_search_system_prompt() -> str:
     -   **목적:** `route_query_tool`이 질문을 '후속 질문'으로 분류했을 때 호출됩니다. 이 도구는 실제 검색을 수행하지 않고, 기존에 검색된 문서를 사용하여 답변을 생성하도록 흐름을 제어합니다.
     -   **사용 시점:** `route_query_tool`의 결과 `is_follow_up`이 `True`일 때 사용합니다.
     -   **입력:** 현재 에이전트의 상태 (`RagState` 객체).
-    -   **출력:** 빈 딕셔너리 `{}` (상태 변경 없음).
+    -   **출력:** 빈 딕셔너리 `{None}` (상태 변경 없음).
 
 5.  **summarize_tool(query: str, retrieved_docs: List[Dict[str, Any]])**
     -   **목적:** 검색된 문서들을 바탕으로 최종 답변을 생성하고, 답변의 근거가 된 문서 출처를 함께 제공합니다.
