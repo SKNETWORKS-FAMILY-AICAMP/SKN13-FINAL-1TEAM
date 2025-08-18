@@ -1,0 +1,70 @@
+# FinalProject 중심 최적화된 .dockerignore
+# CLIKCA (Click + Assistant) - RAG 기반 업무 보조 AI 비서
+
+# ===== 루트 레벨 제외 =====
+# 프로젝트 산출물 및 외부 자료
+산출물/
+한국방송광고진흥공사/
+_markdown_output_v8_clean/
+
+# 루트 레벨 requirements 파일들
+requirements_for13.txt
+requirements.txt
+
+# Docker 관련 파일들 (빌드 시 불필요)
+docker/
+docker-compose.yml
+.dockerignore
+
+# Git 관련
+.git/
+.gitignore
+README.md
+
+# 환경 설정 파일들
+.env
+.envrc
+
+# 로그 및 임시 파일들
+*.log
+logs/
+temp/
+tmp/
+
+# ===== FinalProject 외부 제외 =====
+# FinalProject가 아닌 다른 디렉토리들
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ===== 개발 도구 관련 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS 관련 =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ===== 테스트 및 문서 =====
+test_ZH/
+vector_db/
+DB1/
+chroma/
+__pycache__/
