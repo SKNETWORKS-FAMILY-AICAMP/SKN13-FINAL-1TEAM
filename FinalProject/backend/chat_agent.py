@@ -62,8 +62,9 @@ def agent():
     # Add nodes
     graph.add_node("prompt", prompt_node)
     graph.add_node("chatbot", chatbot)
-    graph.add_node("tools", ToolNode([RAG_tool, NaverSearchTool(), get_data_seoul, read_hwpx, edit_hwpx]))
-
+    # graph.add_node("tools", ToolNode([RAG_tool, NaverSearchTool(), get_data_seoul, read_hwpx, edit_hwpx]))
+    graph.add_node("tools",ToolNode([]))
+    
     # Add edges
     graph.add_edge(START, "prompt")
     graph.add_edge("prompt", "chatbot")
