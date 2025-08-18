@@ -39,9 +39,9 @@ async def chatbot(state: State) -> dict:
     """Calls the LLM with the current state and returns the AI's response."""
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
     
-    naver_tool = NaverSearchTool()
-    tools = [RAG_tool, naver_tool, get_data_seoul, read_hwpx, edit_hwpx]
-
+    # naver_tool = NaverSearchTool()
+    # tools = [RAG_tool, naver_tool, get_data_seoul, read_hwpx, edit_hwpx]
+    tools = []
     llm_with_tools = llm.bind_tools(tools)
     # tool_choice 포함된 RunnableConfig 생성
     config = RunnableConfig(configurable={"tool_choice": "auto"})
