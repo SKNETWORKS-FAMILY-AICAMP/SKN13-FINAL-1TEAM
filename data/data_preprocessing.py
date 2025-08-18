@@ -51,10 +51,31 @@ PAGE_RE = re.compile(r'^\s*(페이지|page)\s*\d+', re.IGNORECASE)
 BULLET_EMPTY_RE = re.compile(r'^\s*[-*]\s*$')
 
 def _norm_ws(s: str) -> str:
+    """문자열 내부의 연속 공백/개행/탭을 단일 공백으로 정규화한다.
+
+    Parameters:
+        s (str): 정규화할 원본 문자열
+
+    Returns:
+        str: 공백이 정리된 문자열
+    """
     return re.sub(r'\s+', ' ', (s or '')).strip()
 
 # ======================== 단위 탐지 ========================
 def detect_unit_hint(text: str, headers: Optional[List[str]] = None, default_unit: Optional[str] = None) -> Optional[str]:
+    """본문 텍스트 또는 헤더에서 수치 단위(예: 원, %, USD 등)를 추정한다.
+
+    우선 정규식으로 "단위:" 패턴을 탐지하고, 없으면 사전 정의된 단위 토큰을
+    본문/헤더에서 검색한다. 명시적 단서가 없고 기본 단위가 제공되면 기본 단위를 반환한다.
+
+    Parameters:
+        text (str): 페이지의 전체 텍스트 등 단위 단서를 포함할 수 있는 문자열
+        headers (Optional[List[str]]): 표의 헤더 목록 (단위 단서 보조 입력)
+        default_unit (Optional[str]): 단서를 찾지 못했을 때 사용할 기본 단위
+
+    Returns:
+        Optional[str]: 탐지된 단위 문자열 또는 None
+    """
     m = UNIT_HINT_RE.search(text or "")
     if m:
         return m.group(1).strip()
@@ -72,6 +93,18 @@ def detect_unit_hint(text: str, headers: Optional[List[str]] = None, default_uni
 
 # ======================== 표 감지 휴리스틱 ========================
 def is_likely_table(page: fitz.Page, text: str) -> bool:
+    """해당 페이지가 표를 포함할 '가능성'이 높은지 간단한 휴리스틱으로 판단한다.
+
+    - 줄 내 두 칸 이상의 공백이 일정 비율 이상이면 열 정렬 텍스트로 간주
+    - 페이지 도형 중 수평/수직 선분 개수가 임계치 이상이면 표 그리드로 간주
+
+    Parameters:
+        page (fitz.Page): PDF 페이지 객체
+        text (str): 페이지의 추출 텍스트
+
+    Returns:
+        bool: 표 가능성 여부
+    """
     lines = text.strip().split('\n')
     if len(lines) > 3:
         space_separated = sum(1 for line in lines if len(re.findall(r'\s{2,}', line)) >= 2)
@@ -89,8 +122,21 @@ def is_likely_table(page: fitz.Page, text: str) -> bool:
 
 # ======================== 표 추출 도구 ========================
 def extract_tables_with_multiple_tools(pdf_path: Path, page_num: int) -> List[Tuple[pd.DataFrame, str, Tuple]]:
+    """여러 라이브러리(Camelot, Tabula)를 순차 시도하여 표를 추출한다.
+
+    우선 Camelot Lattice, 실패 시 Tabula Lattice(설치 시), 마지막으로
+    Camelot Stream을 시도한다. 성공 시 DataFrame, 사용 도구명, 경계 박스를 반환한다.
+
+    Parameters:
+        pdf_path (Path): 대상 PDF 파일 경로
+        page_num (int): 0 기반 페이지 인덱스
+
+    Returns:
+        List[Tuple[pd.DataFrame, str, Tuple]]: (표 DF, 사용 방법 문자열, bbox) 목록
+    """
     out = []
     try:
+        # 1) Camelot Lattice: 격자형 표에 강함
         tables = camelot.read_pdf(str(pdf_path), pages=str(page_num + 1), flavor='lattice')
         if tables.n > 0:
             logger.info(f"p{page_num+1}: Camelot Lattice {tables.n}개")
@@ -102,6 +148,7 @@ def extract_tables_with_multiple_tools(pdf_path: Path, page_num: int) -> List[Tu
 
     if TABULA_AVAILABLE:
         try:
+            # 2) Tabula Lattice: Java 기반, 환경에 따라 더 안정적인 경우가 있음
             dfs = tabula.read_pdf(str(pdf_path), pages=page_num + 1, lattice=True, multiple_tables=True)
             if dfs:
                 logger.info(f"p{page_num+1}: Tabula Lattice {len(dfs)}개")
@@ -112,6 +159,7 @@ def extract_tables_with_multiple_tools(pdf_path: Path, page_num: int) -> List[Tu
             logger.debug(f"Tabula Lattice 오류: {e}")
 
     try:
+        # 3) Camelot Stream: 선이 없는 자유형 표에 유리
         tables = camelot.read_pdf(str(pdf_path), pages=str(page_num + 1), flavor='stream', edge_tol=500)
         if tables.n > 0:
             logger.info(f"p{page_num+1}: Camelot Stream {tables.n}개")
@@ -125,6 +173,20 @@ def extract_tables_with_multiple_tools(pdf_path: Path, page_num: int) -> List[Tu
 
 # ======================== DF 정리 및 단문화 ========================
 def _basic_clean_df(df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """표 DataFrame을 벡터화 전처리에 적합하도록 기본 정리한다.
+
+    수행 내용:
+        - 셀 내부 공백/개행 정규화
+        - 공백/결측 전열/전행 제거 및 인덱스 리셋
+        - 첫 행이 헤더로 보이는 경우 헤더 승격
+        - 모든 값을 문자열로 통일
+
+    Parameters:
+        df (pd.DataFrame): 원본 표 데이터프레임
+
+    Returns:
+        Optional[pd.DataFrame]: 정리된 DF 또는 유효하지 않으면 None
+    """
     if df is None or df.empty:
         return None
     df = df.copy()
@@ -156,14 +218,40 @@ def _basic_clean_df(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     return df if df.shape[0] >= 1 and df.shape[1] >= 1 else None
 
 def _should_skip_value(v: str) -> bool:
+    """값이 벡터 인덱싱에 불필요한 토큰(빈값, na 등)인지 판별한다.
+
+    Parameters:
+        v (str): 검사할 텍스트 값
+
+    Returns:
+        bool: 스킵 여부
+    """
     s = (v or '').strip().lower()
     return s in SKIP_TOKENS
 
 def _is_total_row(key: str) -> bool:
+    """행의 키가 합계/총계/소계 등 집계 행인지 확인한다.
+
+    Parameters:
+        key (str): 행 첫 열의 식별 문자열
+
+    Returns:
+        bool: 집계 행 여부
+    """
     k = (key or '').strip()
     return any(tok in k for tok in TOTAL_ROW_TOKENS)
 
 def df_to_sentences(df: pd.DataFrame, unit_hint_text: Optional[str] = None, row_header_idx: int = 0) -> List[str]:
+    """표 DataFrame을 "주어(행 헤더), 열 헤더 값 [단위]." 형태의 단문들로 변환한다.
+
+    Parameters:
+        df (pd.DataFrame): 원본 표
+        unit_hint_text (Optional[str]): 단위 힌트로 사용할 텍스트(페이지 본문 등)
+        row_header_idx (int): 행 키로 사용할 열의 인덱스(기본 0)
+
+    Returns:
+        List[str]: 단문 리스트
+    """
     df = _basic_clean_df(df)
     if df is None:
         return []
@@ -190,6 +278,18 @@ def df_to_sentences(df: pd.DataFrame, unit_hint_text: Optional[str] = None, row_
     return out
 
 def md_table_to_sentences(md_block: str, unit_hint_text: Optional[str]) -> List[str]:
+    """마크다운 표 블록을 행 기반 단문 리스트로 변환한다.
+
+    헤더와 데이터 행의 열 길이를 맞춘 뒤, 합계/빈값 등을 제외하고
+    "행키, 열헤더 값 [단위]." 포맷으로 변환한다.
+
+    Parameters:
+        md_block (str): 마크다운 표 텍스트 블록
+        unit_hint_text (Optional[str]): 단위 힌트로 사용할 텍스트
+
+    Returns:
+        List[str]: 단문 리스트
+    """
     lines = [ln for ln in md_block.splitlines() if ln.strip()]
     table_lines = [ln for ln in lines if ln.count('|') >= 2 and not ln.strip().startswith('```')]
     table_lines = [ln for ln in table_lines if not MD_TABLE_SEP_RE.match(ln)]
@@ -241,6 +341,17 @@ IMAGE_PROMPT_KO = """당신은 시각 자료를 객관적인 문장(줄글)으�
 """
 
 def analyze_page_image_caption(page_image: Image.Image, page_num: int) -> Optional[str]:
+    """페이지 전체 이미지를 입력으로 받아 LLM을 통해 캡션(객관 묘사)을 생성한다.
+
+    의미 없는 장식 이미지는 "배경 이미지"로 간주되며, 해당 결과는 None으로 처리한다.
+
+    Parameters:
+        page_image (PIL.Image.Image): 페이지 렌더링 이미지
+        page_num (int): 0 기반 페이지 번호 (로깅용)
+
+    Returns:
+        Optional[str]: 유의미한 이미지 설명 문단 또는 None
+    """
     try:
         buffer = BytesIO()
         page_image.save(buffer, format="PNG")
@@ -259,6 +370,17 @@ def analyze_page_image_caption(page_image: Image.Image, page_num: int) -> Option
 
 # ======================== 텍스트 추출 보조 ========================
 def extract_text_outside_bboxes(page: fitz.Page, bboxes: List[Tuple]) -> str:
+    """지정된 박스 영역을 제외한 페이지 텍스트만 모아서 반환한다.
+
+    표가 검출된 영역(bboxes)을 제외하고 본문 텍스트만 추출할 때 사용한다.
+
+    Parameters:
+        page (fitz.Page): PDF 페이지 객체
+        bboxes (List[Tuple]): 제외할 사각형 영역 리스트 (x1, y1, x2, y2)
+
+    Returns:
+        str: 제외 영역 밖의 텍스트
+    """
     full_text = ""
     blocks = page.get_text("blocks")
     for x1, y1, x2, y2, text, _, _ in blocks:
@@ -269,12 +391,43 @@ def extract_text_outside_bboxes(page: fitz.Page, bboxes: List[Tuple]) -> str:
     return full_text.strip()
 
 def is_cover_page(text: str) -> bool:
+    """해당 텍스트가 표지 페이지로 보이는지 간단한 규칙으로 판정한다.
+
+    - 길이가 매우 짧고 "보고서", "report", "제출" 등의 키워드 포함
+
+    Parameters:
+        text (str): 페이지 텍스트
+
+    Returns:
+        bool: 표지 페이지로 추정되면 True
+    """
     return len(text) < 300 and any(k in text.lower() for k in ['보고서', 'report', '제출'])
 
 def is_toc_page(text: str) -> bool:
+    """해당 텍스트가 목차 페이지인지 간단한 규칙으로 판정한다.
+
+    - "목차" 또는 "contents" 키워드 포함
+    - 점선 + 페이지 번호 패턴이 다수 존재
+
+    Parameters:
+        text (str): 페이지 텍스트
+
+    Returns:
+        bool: 목차 페이지로 추정되면 True
+    """
     return '목차' in text or 'contents' in text.lower() or len(re.findall(r'\.{5,}\s*\d+', text)) > 3
 
 def correct_text_with_llm(text_to_correct: str) -> str:
+    """OCR/줄바꿈 오류가 포함된 텍스트를 LLM으로 자연스럽게 교정한다.
+
+    의미는 바꾸지 않고 띄어쓰기/줄바꿈/경미한 OCR 오류만 수정하도록 프롬프트한다.
+
+    Parameters:
+        text_to_correct (str): 교정 대상 텍스트
+
+    Returns:
+        str: 교정된 텍스트 (실패 시 원문)
+    """
     if not text_to_correct.strip():
         return ""
     prompt = (
@@ -289,6 +442,16 @@ def correct_text_with_llm(text_to_correct: str) -> str:
 
 # ======================== 벡터용 선형화 ========================
 def _keep_text_line_for_vector(line: str) -> bool:
+    """벡터 DB 인덱싱에 포함할 가치가 있는 단일 텍스트 라인인지 판단한다.
+
+    머리글, 캡션, 페이지 번호, 구분선 등 검색 성능을 저해하는 요소는 제외한다.
+
+    Parameters:
+        line (str): 한 줄 텍스트
+
+    Returns:
+        bool: 포함 여부
+    """
     if not line.strip(): return False
     if HEADING_RE.match(line): return False
     if CAPTION_RE.match(line): return False
@@ -299,6 +462,17 @@ def _keep_text_line_for_vector(line: str) -> bool:
     return True
 
 def stitch_markdown_flow_for_vector(md_text: str) -> List[str]:
+    """마크다운 문서를 벡터 인덱싱 친화적인 문장 리스트로 선형화한다.
+
+    - 마크다운 표는 구조를 읽어 단문으로 변환
+    - 제목/캡션/페이지 번호 등 불필요한 줄은 제거
+
+    Parameters:
+        md_text (str): 마크다운 전체 텍스트
+
+    Returns:
+        List[str]: 인덱싱에 적합한 문장 목록
+    """
     lines = md_text.splitlines()
     out_txt: List[str] = []
     i = 0
@@ -324,6 +498,22 @@ def stitch_markdown_flow_for_vector(md_text: str) -> List[str]:
 
 # ======================== PDF → MD (md를 인덱싱용으로 저장) ========================
 def process_pdf_to_markdown(pdf_path: Path, output_dir: Path, default_unit: Optional[str] = None):
+    """PDF 한 파일을 처리하여 인덱싱용 마크다운(.md)을 생성한다.
+
+    처리 파이프라인:
+        1) 페이지 별 표 추출 및 표→단문 변환
+        2) 표 영역 외 본문 텍스트 추출 후 LLM 교정
+        3) 페이지 전체 이미지에 대한 객관 캡션 생성(선택적)
+        4) 페이지 단위로 모은 후, 최종적으로 인덱싱 규칙에 맞게 선형화
+
+    Parameters:
+        pdf_path (Path): 입력 PDF 경로
+        output_dir (Path): 결과 md 저장 디렉터리
+        default_unit (Optional[str]): 단위 힌트 기본값
+
+    Returns:
+        Path: 생성된 md 파일 경로
+    """
     logger.info(f"{pdf_path.name} 처리 시작")
     doc = fitz.open(pdf_path)
     all_md_chunks = [f"# {pdf_path.stem}"]
@@ -344,6 +534,7 @@ def process_pdf_to_markdown(pdf_path: Path, output_dir: Path, default_unit: Opti
 
         if table_data:
             for i, (df, method, bbox) in enumerate(table_data):
+                # 추출 표를 단문으로 변환하고, 추후 본문 추출 시 제외할 bbox를 수집
                 sentences = df_to_sentences(df, unit_hint_text=unit_hint_page, row_header_idx=0)
                 if sentences:
                     table_chunks.append("\n".join(sentences))
@@ -359,6 +550,7 @@ def process_pdf_to_markdown(pdf_path: Path, output_dir: Path, default_unit: Opti
         text_chunks = []
         remaining_text = extract_text_outside_bboxes(page, table_bboxes) if table_bboxes else page_text_full
         if remaining_text:
+             # LLM을 사용해 OCR/줄바꿈 오류를 교정
             corrected_text = correct_text_with_llm(remaining_text)
             text_chunks.append(f"### 텍스트 내용 (페이지 {page_num + 1})\n\n{corrected_text}")
 
@@ -394,6 +586,11 @@ def process_pdf_to_markdown(pdf_path: Path, output_dir: Path, default_unit: Opti
 
 # ======================== 메인 루틴 ========================
 def main():
+    """로컬 설정에 맞춰 PDF 루트를 순회하며 일괄 처리한다.
+
+    환경에 맞게 `pdf_root`를 수정한 뒤 실행하면, 하위 모든 PDF를 처리하여
+    `output_dir`에 인덱싱용 md 파일을 생성한다.
+    """
     pdf_root = Path(r"C:\skn13\final\DB2\내부문서\test")
     output_dir = pdf_root / "_markdown_output_v9_index_md"
     output_dir.mkdir(parents=True, exist_ok=True)

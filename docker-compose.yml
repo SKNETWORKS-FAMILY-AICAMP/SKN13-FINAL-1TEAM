@@ -4,7 +4,10 @@
 version: '3.8'
 
 x-backend-base: &backend-base
-  image: ${ECR_REPOSITORY_URI:-123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/skn13-clikca}:${IMAGE_TAG:-runtime}
+  build:
+    context: ./FinalProject/backend
+    dockerfile: Dockerfile
+    target: runtime
   restart: unless-stopped
   environment:
     - DEBUG=${DEBUG:-false}
@@ -31,6 +34,23 @@ x-backend-base: &backend-base
         memory: 512M
       reservations:
         memory: 256M
+
+x-frontend-base: &frontend-base
+  build:
+    context: ./FinalProject/frontend-ui
+    dockerfile: Dockerfile
+    target: runtime
+  restart: unless-stopped
+  environment:
+    - NODE_ENV=production
+    - VITE_BACKEND_API_URL=${BACKEND_API_URL:-http://localhost:8000}
+    - VITE_FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+  ports:
+    - "3000:3000"
+  depends_on:
+    - backend-prod
+  networks:
+    - skn13_network
 
 services:
   # MySQL Database
@@ -69,12 +89,35 @@ services:
 
   # FastAPI Backend (Development)
   backend-dev:
-    <<: *backend-base
+    build:
+      context: ./FinalProject/backend
+      dockerfile: Dockerfile
+      target: development
     container_name: skn13_backend_dev
+    restart: unless-stopped
+    environment:
+      - DEBUG=true
+      - RELOAD=true
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-clikca_db}
+      - MYSQL_USER=${MYSQL_USER:-clikca_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-clikca1234}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VOYAGE_API_KEY=${VOYAGE_API_KEY}
+    ports:
+      - "8000:8000"
     volumes:
       - ./FinalProject/backend:/app/backend
       - ./data:/app/data
       - ./logs:/app/logs
+    depends_on:
+      - mysql
+      - chromadb
+    networks:
+      - skn13_network
     profiles:
       - development
 
@@ -90,7 +133,10 @@ services:
 
   # React Frontend (Development)
   frontend-dev:
-    image: ${ECR_REPOSITORY_URI:-123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/skn13-clikca}:${IMAGE_TAG:-dev}
+    build:
+      context: ./FinalProject/frontend-ui
+      dockerfile: Dockerfile
+      target: development
     container_name: skn13_frontend_dev
     restart: unless-stopped
     environment:
@@ -100,34 +146,67 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./FinalProject/frontend-ui:/app/frontend
-      - /app/frontend/node_modules
+      - ./FinalProject/frontend-ui:/app
+      - /app/node_modules
     depends_on:
       - backend-dev
     networks:
       - skn13_network
-    command: npm run dev
     profiles:
       - development
 
+  # React Frontend (Production)
+  frontend-prod:
+    <<: *frontend-base
+    container_name: skn13_frontend_prod
+    profiles:
+      - production
+
   # Nginx (Production)
   nginx:
-    image: nginx:alpine
+    build:
+      context: ./FinalProject/frontend-ui
+      dockerfile: Dockerfile
+      target: production
     container_name: skn13_nginx
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
-    volumes:
-      - ./FinalProject/frontend-ui/dist:/usr/share/nginx/html
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       - backend-prod
     networks:
       - skn13_network
     profiles:
       - production
+
+  # Data Processing Service
+  data-processor:
+    build:
+      context: ./data
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: skn13_data_processor
+    restart: unless-stopped
+    environment:
+      - DEBUG=${DEBUG:-false}
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-clikca_db}
+      - MYSQL_USER=${MYSQL_USER:-clikca_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-clikca1234}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+    volumes:
+      - ./data:/app
+      - ./logs:/app/logs
+    depends_on:
+      - mysql
+      - chromadb
+    networks:
+      - skn13_network
+    profiles:
+      - data-processing
 
   # Redis Cache
   redis:
