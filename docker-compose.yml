@@ -3,6 +3,35 @@
 
 version: '3.8'
 
+x-backend-base: &backend-base
+  image: ${ECR_REPOSITORY_URI:-123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/skn13-clikca}:${IMAGE_TAG:-runtime}
+  restart: unless-stopped
+  environment:
+    - DEBUG=${DEBUG:-false}
+    - RELOAD=${RELOAD:-false}
+    - MYSQL_HOST=mysql
+    - MYSQL_PORT=3306
+    - MYSQL_DATABASE=${MYSQL_DATABASE:-clikca_db}
+    - MYSQL_USER=${MYSQL_USER:-clikca_user}
+    - MYSQL_PASSWORD=${MYSQL_PASSWORD:-clikca1234}
+    - CHROMA_HOST=chromadb
+    - CHROMA_PORT=8000
+    - OPENAI_API_KEY=${OPENAI_API_KEY}
+    - VOYAGE_API_KEY=${VOYAGE_API_KEY}
+  ports:
+    - "8000:8000"
+  depends_on:
+    - mysql
+    - chromadb
+  networks:
+    - skn13_network
+  deploy:
+    resources:
+      limits:
+        memory: 512M
+      reservations:
+        memory: 256M
+
 services:
   # MySQL Database
   mysql:
@@ -38,42 +67,28 @@ services:
     networks:
       - skn13_network
 
-  # FastAPI Backend (ECR 이미지 사용)
-  backend:
-    image: ${ECR_REPOSITORY_URI:-123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/skn13-clikca}:${IMAGE_TAG:-runtime}
-    container_name: skn13_backend
-    restart: unless-stopped
-    environment:
-      - DEBUG=${DEBUG:-false}
-      - RELOAD=${RELOAD:-false}
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-clikca_db}
-      - MYSQL_USER=${MYSQL_USER:-clikca_user}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-clikca1234}
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - VOYAGE_API_KEY=${VOYAGE_API_KEY}
-    ports:
-      - "8000:8000"
+  # FastAPI Backend (Development)
+  backend-dev:
+    <<: *backend-base
+    container_name: skn13_backend_dev
     volumes:
       - ./FinalProject/backend:/app/backend
       - ./data:/app/data
       - ./logs:/app/logs
-    depends_on:
-      - mysql
-      - chromadb
-    networks:
-      - skn13_network
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
+    profiles:
+      - development
 
-  # React Frontend (Development) - ECR 이미지 사용
+  # FastAPI Backend (Production)
+  backend-prod:
+    <<: *backend-base
+    container_name: skn13_backend_prod
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    profiles:
+      - production
+
+  # React Frontend (Development)
   frontend-dev:
     image: ${ECR_REPOSITORY_URI:-123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/skn13-clikca}:${IMAGE_TAG:-dev}
     container_name: skn13_frontend_dev
@@ -88,10 +103,12 @@ services:
       - ./FinalProject/frontend-ui:/app/frontend
       - /app/frontend/node_modules
     depends_on:
-      - backend
+      - backend-dev
     networks:
       - skn13_network
     command: npm run dev
+    profiles:
+      - development
 
   # Nginx (Production)
   nginx:
@@ -106,7 +123,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
-      - frontend-dev
+      - backend-prod
     networks:
       - skn13_network
     profiles:
