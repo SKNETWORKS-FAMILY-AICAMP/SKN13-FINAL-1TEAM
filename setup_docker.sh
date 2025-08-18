@@ -223,7 +223,7 @@ else
 fi
 
 # Docker Compose로 개발 환경 실행
-docker-compose up -d mysql chromadb redis backend frontend-dev
+docker-compose --profile development up -d
 
 echo ""
 echo "🎉 개발 환경이 시작되었습니다!"

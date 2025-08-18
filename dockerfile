@@ -80,9 +80,11 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Python 의존성 설치
-COPY --from=backend-deps /app/backend /app/backend
-RUN pip install --no-cache-dir -r ./backend/requirements.txt
+# Python 의존성 복사
+COPY --from=backend-deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+
+# 백엔드 소스 복사
+COPY FinalProject/backend/requirements.txt ./backend/requirements.txt
 
 # 백엔드 소스 복사
 COPY FinalProject/backend/ ./backend/
