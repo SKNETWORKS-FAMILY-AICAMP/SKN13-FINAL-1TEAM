@@ -47,7 +47,14 @@ async def run_rag_agent_node(state: AgentState) -> dict:
     # [수정] 비동기 제너레이터는 `async for`를 사용하여 반복해야 합니다.
     async for event in rag_agent.run(query, rag_session_id):
         if event.get(END):
-            final_rag_message = event[END]["messages"][-1]
+            # [수정] RAG 에이전트가 메시지를 생성한 경우에만 값을 할당합니다.
+            if event[END].get("messages"):
+                final_rag_message = event[END]["messages"][-1]
+
+    # [수정] 만약 RAG 에이전트가 아무런 메시지를 생성하지 않고 종료했다면(예: 문서를 찾지 못함),
+    # NoneType 에러를 방지하기 위해 기본 응답 메시지를 생성합니다.
+    if final_rag_message is None:
+        final_rag_message = AIMessage(content="죄송합니다. 해당 질문에 대한 관련 문서를 찾지 못했습니다.")
 
     return {"messages": [final_rag_message]}
 
