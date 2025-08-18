@@ -44,6 +44,23 @@ async def run_rag_agent_node(state: AgentState) -> dict:
     rag_agent = RAG_Agent()
     final_rag_message = None
     
+    async for event in rag_agent.run(query, rag_session_id):
+        if event.get(END):
+            if event[END].get("messages"):
+                final_rag_message = event[END]["messages"][-1]
+
+    if final_rag_message is None:
+        final_rag_message = AIMessage(content="죄송합니다. 해당 질문에 대한 관련 문서를 찾지 못했습니다.")
+
+    return {"messages": [final_rag_message]}
+    query = state["messages"][-1].content
+    rag_session_id = state["rag_session_id"]
+    
+    print(f"[Main Graph] RAG 에이전트 호출 (세션 ID: {rag_session_id})")
+
+    rag_agent = RAG_Agent()
+    final_rag_message = None
+    
     # [수정] 비동기 제너레이터는 `async for`를 사용하여 반복해야 합니다.
     async for event in rag_agent.run(query, rag_session_id):
         if event.get(END):
