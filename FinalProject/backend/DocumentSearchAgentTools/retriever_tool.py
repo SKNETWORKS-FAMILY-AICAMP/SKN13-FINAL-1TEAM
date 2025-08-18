@@ -1,10 +1,10 @@
 import os
 from typing import Dict, Any, List
 from langchain_chroma import Chroma
+from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_core.tools import tool
 from dotenv import load_dotenv
-from langchain_openai import OpenAIEmbeddings
 
 load_dotenv()
 
@@ -12,13 +12,15 @@ class DocumentRetriever:
     """
     A class to retrieve documents from a ChromaDB vector store.
     """
-    def __init__(self, db_path: str = None, collection_name: str = None, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, db_path: str = None, collection_name: str = None, model_name: str = "text-embedding-3-large"): # Changed default model_name
         """
         Initializes the DocumentRetriever.
         """
-        self.db_path = db_path or "./chroma_db"
+        # Corrected DB path to point to project root
+        self.db_path = db_path or "../../chroma_db"
         self.collection_name = collection_name or os.getenv("CHROMA_COLLECTION_NAME", "kobaco_pdf_collection")
-        self.embedding_function=OpenAIEmbeddings(model="text-embedding-3-large"), 
+        # Changed embedding function class and model
+        self.embedding_function = OpenAIEmbeddings(model=model_name)
         
         self.vector_store = Chroma(
             persist_directory=self.db_path,
@@ -48,7 +50,8 @@ class DocumentRetriever:
         return {"retrieved_docs": all_docs}
 
 # Create a single instance of the retriever for the tool
-retriever_instance = DocumentRetriever()
+# Pass the model name explicitly to ensure consistency
+retriever_instance = DocumentRetriever(model_name="text-embedding-3-large")
 
 @tool
 def RAG_search_tool(keywords: List[str]) -> Dict[str, Any]:
@@ -80,8 +83,8 @@ if __name__ == '__main__':
         print(f"--- Testing query: {query} ---")
         results = RAG_search_tool.invoke({"keywords": [query]})
         retrieved_docs = results.get('retrieved_docs', [])
-        print(f"검색 결과 ({len(retrieved_docs)}개):")
+        print(f"검색 결과 ({len(retrieved_docs)}개):\n")
         for doc in retrieved_docs:
             print(f"- 출처: {doc['metadata']['source']}")
-            print(f"  내용: {doc['page_content'][:100]}...")
+            print(f"  내용: {doc['page_content'][:100]}...\n")
         print("-" * 20)
