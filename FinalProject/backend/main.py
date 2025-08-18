@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from .RoutingAgent import RoutingAgent, generate_config
-from database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event
+from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event
 
 # FastAPI 인스턴스 생성
 app = FastAPI()
