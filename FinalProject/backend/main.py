@@ -7,7 +7,7 @@ import json
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from multi_agent_main import create_multi_agent_graph, generate_config
+from RoutingAgent import RoutingAgent, generate_config
 from database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event
 
 # FastAPI 인스턴스 생성
@@ -274,7 +274,7 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
 async def llm_stream(session_id: str, prompt: str, db: Session = Depends(get_db)):
     """LLM의 응답을 실시간 스트리밍으로 반환합니다."""
     config = generate_config(session_id)
-    chat_agent = create_multi_agent_graph()
+    chat_agent = RoutingAgent()
 
     return StreamingResponse(_stream_llm_response(session_id, prompt, chat_agent, config, db), media_type="text/event-stream")
 
@@ -319,6 +319,11 @@ async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config,
         db.refresh(new_message)
         
     yield "data: [DONE]\n\n"
+
+@api_router.get("/open")
+async def open_document(url):
+    pass
+
 
 # API 라우터를 앱에 포함
 app.include_router(api_router, prefix="/api/v1")
