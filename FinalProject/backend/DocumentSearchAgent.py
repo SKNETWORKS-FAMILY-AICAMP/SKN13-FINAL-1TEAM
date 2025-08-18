@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import SystemMessage 
 
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -12,8 +13,8 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from .DocumentSearchAgentTools.RagState import RagState
 from .DocumentSearchAgentTools.retriever_tool import RAG_search_tool
-# Import the new class instead of the individual functions
 from .DocumentSearchAgentTools.agent_logic import AgentTools
+from .document_search_system_prompt import get_document_search_system_prompt 
 
 load_dotenv()
 
@@ -21,7 +22,12 @@ load_dotenv()
 
 def agent_node(state: RagState, llm_with_tools: Any) -> dict:
     """Calls the LLM with the current state and returns the AI's response."""
-    response = llm_with_tools.invoke(state["messages"])
+    messages = state["messages"]
+    if not any(isinstance(msg, SystemMessage) for msg in messages):
+        system_prompt_content = get_document_search_system_prompt()
+        messages = [SystemMessage(content=system_prompt_content)] + messages
+
+    response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 
 # --- Graph Factory ---
@@ -31,10 +37,8 @@ def DocumentSearchAgent() -> Any:
     
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
     
-    # Instantiate the class that holds our logical tools
     tool_executor = AgentTools(llm=llm)
 
-    # Create the list of tools from the class methods and other tools
     tools = [
         RAG_search_tool,
         tool_executor.expand_query_tool,
@@ -45,11 +49,9 @@ def DocumentSearchAgent() -> Any:
     
     llm_with_tools = llm.bind_tools(tools)
     
-    # Define the agent node that will be run
     def runnable_agent_node(state: RagState):
         return agent_node(state, llm_with_tools)
 
-    # Build the graph
     graph = StateGraph(RagState)
     graph.add_node("agent", runnable_agent_node)
     graph.add_node("tools", ToolNode(tools))
