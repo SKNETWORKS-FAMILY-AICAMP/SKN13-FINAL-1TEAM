@@ -19,26 +19,30 @@ load_dotenv()
 
 def route_question(state: RagState) -> Literal["document_search", "general_chat"]:
     """
-    Classifies the user's question to decide which agent should handle it.
+    Classifies the user's question to decide which agent should handle it, considering conversation history.
     """
     print("---ROUTING QUESTION---")
-    last_message = state["messages"][-1].content
+    
+    # Pass the entire message history to the LLM for better context
+    messages = state["messages"]
     
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
     
+    # Modified system_prompt to include history and better routing instructions
     system_prompt = f"""You are an expert at routing a user's question to the correct specialized agent.
+You must consider the entire conversation history to make an accurate routing decision.
 
 There are two available agents:
-1.  **DocumentSearchAgent**: Use this agent for questions that require searching through specific internal documents, such as financial reports, audit results, internal regulations, or other official company materials.
+1.  **DocumentSearchAgent**: Use this agent for questions that require searching through specific internal documents, such as financial reports, audit results, internal regulations, or other official company materials. This includes follow-up questions related to previous document searches (e.g., asking for a download link after a document was found).
 2.  **GeneralChatAgent**: Use this for all other questions, including general conversation, greetings, or questions about topics not contained in the internal documents.
 
-Based on the user's question, which agent should be used?
+Based on the conversation history and the user's latest question, which agent should be used?
 
-User Question: "{last_message}"
+Respond with ONLY 'DocumentSearchAgent' or 'GeneralChatAgent'.
+"""
 
-Respond with ONLY 'DocumentSearchAgent' or 'GeneralChatAgent'."""
-
-    response = llm.invoke([SystemMessage(content=system_prompt)])
+    # Invoke LLM with the system prompt and the entire message history
+    response = llm.invoke([SystemMessage(content=system_prompt)] + messages)
     decision = response.content.strip()
     
     print(f"Routing decision: {decision}")
@@ -82,7 +86,9 @@ def RoutingAgent():
     return workflow.compile()
 
 def generate_config(session_id: str) -> RunnableConfig:
-    """Generates a config for the agent run."""
+    """
+    Generates a config for the agent run.
+    """
     return RunnableConfig(
         recursion_limit=20,
         configurable={"thread_id": session_id},

@@ -1,23 +1,18 @@
-
 import os
 import boto3
-import chromadb
-from chromadb.utils import embedding_functions
+from langchain_chroma import Chroma
+from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from datetime import datetime
 from pathlib import Path
 import logging
 import tempfile
-import uuid
 import sys
 
 # --- 경로 문제 해결 ---
-# 스크립트가 실행되는 폴더를 sys.path에 추가하여,
-# 'data_preprocessing' 모듈을 찾을 수 있도록 한다.
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # --- 경로 문제 해결 ---
 
-# 기존 스크립트에서 필요한 함수를 가져온다.
 from data_preprocessing import process_pdf_to_markdown
 
 # ======================== 로깅 설정 ========================
@@ -25,29 +20,26 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # ======================== 환경 변수 및 상수 설정 ========================
-AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "your-s3-bucket-name") # 실제 버킷 이름으로 변경 필요
+AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "your-s3-bucket-name")
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")
-CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "./chroma_db")
+# Corrected DB Path to point to the project root
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "../chroma_db") 
 CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "kobaco_pdf_collection")
 
-# SentenceTransformer 모델을 사용한 임베딩 함수
-# all-MiniLM-L6-v2는 가볍고 효율적인 모델
-embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
-)
+embedding_function = OpenAIEmbeddings(model="text-embedding-3-large")
 
 # ======================== ChromaDB 클라이언트 초기화 ========================
 def get_chroma_collection():
     """ChromaDB 클라이언트를 초기화하고 컬렉션을 가져옵니다."""
     try:
-        chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-        collection = chroma_client.get_or_create_collection(
-            name=CHROMA_COLLECTION_NAME,
+        # Using LangChain's Chroma wrapper directly
+        vector_store = Chroma(
             embedding_function=embedding_function,
-            metadata={"hnsw:space": "cosine"}
+            collection_name=CHROMA_COLLECTION_NAME,
+            persist_directory=CHROMA_DB_PATH, # Use the consistent path
         )
         logger.info(f"ChromaDB 컬렉션 '{CHROMA_COLLECTION_NAME}'에 연결되었습니다.")
-        return collection
+        return vector_store
     except Exception as e:
         logger.error(f"ChromaDB 초기화 실패: {e}", exc_info=True)
         raise
@@ -62,9 +54,8 @@ def process_s3_pdfs_to_chroma(bucket_name: str, collection):
     paginator = s3_client.get_paginator('list_objects_v2')
     
     try:
-        # 테스트를 위해 특정 경로(prefix)만 지정
         s3_prefix = "kobaco_data/내부문서/투자/"
-        logger.info(f"테스트 모드: S3 경로 '{s3_prefix}'에서만 파일을 찾습니다.")
+        logger.info(f"S3 경로 '{s3_prefix}'에서 파일을 찾습니다.")
 
         pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_prefix)
         pdf_files = [obj['Key'] for page in pages for obj in page.get('Contents', []) if obj['Key'].lower().endswith('.pdf')]
@@ -89,8 +80,6 @@ def process_s3_pdfs_to_chroma(bucket_name: str, collection):
                 logger.info(f"'{s3_key}' 다운로드 중...")
                 s3_client.download_file(bucket_name, s3_key, str(local_pdf_path))
 
-                # 기존 스크립트를 사용하여 PDF를 텍스트가 포함된 MD 파일로 처리
-                # 이 함수는 처리된 MD 파일의 경로를 반환
                 logger.info(f"'{local_pdf_path}' 처리 중...")
                 processed_md_path = process_pdf_to_markdown(local_pdf_path, temp_dir_path)
                 
@@ -106,29 +95,15 @@ def process_s3_pdfs_to_chroma(bucket_name: str, collection):
                 chunks = text_splitter.split_text(full_text)
                 logger.info(f"'{s3_key}'를 {len(chunks)}개의 chunk로 분할했습니다.")
 
-                # 메타데이터 준비
-                doc_subject = Path(s3_key).stem
-                content_len = len(full_text)
-                reg_timestamp = datetime.now().timestamp()
-
                 metadatas = []
                 for i, chunk in enumerate(chunks):
                     metadatas.append({
-                        "activated": True,
-                        "content_length": content_len,
-                        "doc_category": "Uncategorized", # 필요 시 카테고리 분류 로직 추가
-                        "file_type": "pdf",
-                        "page": -1, # process_pdf_to_markdown에서 페이지 정보를 얻기 어려우므로 -1로 설정
-                        "reg_date": reg_timestamp,
-                        "source": f"s3://{bucket_name}/{s3_key}", # S3 경로
-                        "subject": doc_subject,
-                        "version": "1.0" # 필요 시 버전 관리 로직 추가
+                        "source": f"s3://{bucket_name}/{s3_key}",
                     })
 
-                # ChromaDB에 데이터 추가
                 if chunks:
-                    collection.add(
-                        documents=chunks,
+                    collection.add_texts(
+                        texts=chunks,
                         metadatas=metadatas,
                         ids=[f"{s3_key}_chunk_{i}" for i in range(len(chunks))]
                     )
@@ -136,14 +111,11 @@ def process_s3_pdfs_to_chroma(bucket_name: str, collection):
 
             except Exception as e:
                 logger.error(f"'{s3_key}' 처리 중 오류 발생: {e}", exc_info=True)
-            finally:
-                # 임시 파일은 with 구문 종료 시 자동으로 삭제됨
-                pass
 
 # ======================== 메인 실행 ========================
 if __name__ == "__main__":
     if AWS_S3_BUCKET == "your-s3-bucket-name":
-        logger.error("S3_BUCKET_NAME 환경변수를 설정하거나 스크립트 내에서 직접 버킷 이름을 지정해야 합니다.")
+        logger.error("AWS_S3_BUCKET 환경변수를 설정하거나 스크립트 내에서 직접 버킷 이름을 지정해야 합니다.")
     else:
         try:
             chroma_collection = get_chroma_collection()
