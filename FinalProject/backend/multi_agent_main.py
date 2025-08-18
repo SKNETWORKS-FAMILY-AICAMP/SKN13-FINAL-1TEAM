@@ -5,7 +5,7 @@ import uuid
 from typing import TypedDict, Annotated, Optional
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.tools import tool
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
