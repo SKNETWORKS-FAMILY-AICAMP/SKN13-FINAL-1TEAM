@@ -1,7 +1,6 @@
 # DocumentSearchAgent.py
 
 from typing import Any
-from functools import partial
 from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
@@ -11,15 +10,10 @@ from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-# Corrected import for RagState and tools
 from .DocumentSearchAgentTools.RagState import RagState
 from .DocumentSearchAgentTools.retriever_tool import RAG_search_tool
-from .DocumentSearchAgentTools.agent_logic import (
-    expand_query_tool,
-    route_query_tool,
-    handle_follow_up_tool,
-    summarize_tool
-)
+# Import the new class instead of the individual functions
+from .DocumentSearchAgentTools.agent_logic import AgentTools
 
 load_dotenv()
 
@@ -37,30 +31,27 @@ def DocumentSearchAgent() -> Any:
     
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
     
-    # Create partials for tools that need the LLM
-    expand_tool_with_llm = partial(expand_query_tool, llm=llm)
-    route_tool_with_llm = partial(route_query_tool, llm=llm)
-    summarize_tool_with_llm = partial(summarize_tool, llm=llm)
+    # Instantiate the class that holds our logical tools
+    tool_executor = AgentTools(llm=llm)
 
-    # Assign custom names to avoid issues with functools.partial
-    expand_tool_with_llm.__name__ = "expand_query_tool"
-    route_tool_with_llm.__name__ = "route_query_tool"
-    summarize_tool_with_llm.__name__ = "summarize_tool"
-
+    # Create the list of tools from the class methods and other tools
     tools = [
         RAG_search_tool,
-        expand_tool_with_llm,
-        route_tool_with_llm,
-        handle_follow_up_tool,
-        summarize_tool_with_llm
+        tool_executor.expand_query_tool,
+        tool_executor.route_query_tool,
+        tool_executor.handle_follow_up_tool,
+        tool_executor.summarize_tool
     ]
     
     llm_with_tools = llm.bind_tools(tools)
     
-    agent_node_with_llm = partial(agent_node, llm_with_tools=llm_with_tools)
+    # Define the agent node that will be run
+    def runnable_agent_node(state: RagState):
+        return agent_node(state, llm_with_tools)
 
+    # Build the graph
     graph = StateGraph(RagState)
-    graph.add_node("agent", agent_node_with_llm)
+    graph.add_node("agent", runnable_agent_node)
     graph.add_node("tools", ToolNode(tools))
     
     graph.set_entry_point("agent")
