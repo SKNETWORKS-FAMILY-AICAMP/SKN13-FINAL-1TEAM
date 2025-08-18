@@ -14,9 +14,7 @@ export default function Toolbar({ title, query, onQueryChange, view, onViewChang
           className="w-72 rounded-xl border px-3 py-2 text-sm outline-none focus:ring"
         />
         <ViewToggle value={view} onChange={onViewChange} />
-        <button className="rounded-xl border px-3 py-2 text-sm" onClick={onUpload}>
-          + 업로드 또는 새로 작성
-        </button>
+
       </div>
     </div>
   );

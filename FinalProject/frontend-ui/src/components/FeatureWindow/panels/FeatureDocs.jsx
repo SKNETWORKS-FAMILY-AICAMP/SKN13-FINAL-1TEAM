@@ -12,7 +12,6 @@ import Toast from "./Docs/Toast.jsx";
 
 // 서비스
 import { listDocuments, createDocumentMeta, removeDocument, restoreDocument } from "../../services/documentsApi.js";
-import { uploadChatbotFilePresigned } from "../../services/uploadPresigned.js";
 
 export default function FeatureDocs() {
   const [view, setView] = useState("grid"); // 'grid' | 'list'
