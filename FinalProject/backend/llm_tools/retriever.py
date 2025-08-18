@@ -1,25 +1,11 @@
 from typing import Optional, Dict, Any, List
 from langchain_chroma import Chroma
-from chromadb.utils import embedding_functions
+from langchain_openai import OpenAIEmbeddings
 from langchain_core.tools import tool
 from langchain_core.documents import Document
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
-
-# [수정] 데이터 파이프라인(s3_chroma_pipeline.py)과 완벽히 동일한 설정을 사용합니다.
-
-# 1. 임베딩 함수를 동일하게 설정
-embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
-)
-
-# 2. 컬렉션 이름을 동일하게 설정
-CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "kobaco_pdf_collection")
-
-# 3. DB 경로 설정 (사용자가 수정한 최종 경로)
-DB_PATH = "/home/ubuntu/SKN13-FINAL-1TEAM/data/chroma_db"
 
 @tool
 def RAG_tool(query: str, filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -37,11 +23,10 @@ def RAG_tool(query: str, filter: Optional[Dict[str, Any]] = None) -> List[Dict[s
     The 'metadata' dictionary contains the 'source' of the document, which can be used as a download link.
     If the returned list is empty, it means no relevant information was found.
     """
-    # [수정] LangChain Chroma 래퍼를 사용하되, collection_name과 embedding_function을 명시적으로 지정합니다.
     vector_store = Chroma(
-        persist_directory=DB_PATH,
-        collection_name=CHROMA_COLLECTION_NAME,
-        embedding_function=embedding_function,
+        embedding_function=OpenAIEmbeddings(model="text-embedding-3-large"), 
+        persist_directory="/home/ubuntu/SKN13-FINAL-1TEAM/chroma_db",
+        collection_name="kobaco_pdf_collection"
     )
 
     retriever = vector_store.as_retriever(search_kwargs={"k": 5})
