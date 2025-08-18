@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.runnables import RunnableConfig
 
 # 우리가 만든 RAG_Agent 클래스를 임포트합니다.
 from RAG_Agent import RAG_Agent
@@ -106,6 +107,13 @@ def create_multi_agent_graph():
 
     memory = MemorySaver()
     return graph.compile(checkpointer=memory)
+
+def generate_config(session_id: str) -> RunnableConfig:
+    """Generates a config for the agent run."""
+    return RunnableConfig(
+        recursion_limit=20,
+        configurable={"thread_id": session_id},
+    )
 
 # --- 메인 테스트 로직 ---
 if __name__ == "__main__":
