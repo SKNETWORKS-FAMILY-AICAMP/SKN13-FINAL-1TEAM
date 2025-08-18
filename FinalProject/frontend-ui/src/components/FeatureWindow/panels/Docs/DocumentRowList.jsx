@@ -1,7 +1,7 @@
 // ✅ 파일: frontend-ui/src/components/FeatureWindow/panels/Docs/DocumentRowList.jsx
 // 리스트 전용 (표현)
 import OverflowMenu from "./OverflowMenu.jsx";
-import { formatDistanceToNow } from "./parts/time.js";
+import { formatDistanceToNow } from "./docsparts/time.js";
 
 export default function DocumentRowList({ docs, onDelete }) {
   if (!docs.length) {

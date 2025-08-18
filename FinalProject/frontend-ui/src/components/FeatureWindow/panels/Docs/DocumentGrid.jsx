@@ -1,7 +1,7 @@
 // ✅ 파일: frontend-ui/src/components/FeatureWindow/panels/Docs/DocumentGrid.jsx
 // 카드 그리드 전용 (표현)
 import OverflowMenu from "./OverflowMenu.jsx";
-import { formatDistanceToNow } from "./parts/time.js";
+import { formatDistanceToNow } from "./docsparts/time.js";
 
 export default function DocumentGrid({ docs, onDelete }) {
   if (!docs.length) {
