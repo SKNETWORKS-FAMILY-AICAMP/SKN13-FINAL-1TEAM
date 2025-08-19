@@ -13,7 +13,7 @@ from docx import Document as DocxDocument # python-docx
 
 from .RoutingAgent import RoutingAgent, generate_config
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event, Document
-from .llm_tools.read_hwpx import read_hwpx_file_content # Assuming this function name
+from .llm_tools.read_hwpx import read_hwpx # Assuming this function name
 
 # FastAPI 인스턴스 생성
 app = FastAPI()
@@ -156,7 +156,7 @@ def _convert_to_markdown(file_path: Path, file_type: str) -> str:
                 content += para.text + "\n"
         elif file_type in ["hwp", "hwpx"]:
             # Assuming read_hwpx_file_content returns text content
-            content = read_hwpx_file_content(str(file_path))
+            content = None#read_hwpx_file_content(str(file_path))
         elif file_type in ["md", "txt"]:
             content = file_path.read_text(encoding="utf-8")
         else:
