@@ -100,51 +100,58 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
-    raw_output = event["data"].get("output", None)
-    tool_call_id = event.get("tool_call_id")
-    tool_status = event.get("status")
-    tool_artifact = event.get("artifact")
-
-    # 1. 사용자에게 보여줄 formatted content
-    formatted_content = "[Tool Output]: "
-    parsed_content_for_db = {}
+    raw_output = event["data"].get("output", "")
+    
+    # DB에 저장할 전체 ToolMessage 구조
+    tool_raw_json = None
+    formatted_output = "[Tool Output]: "
 
     try:
         if isinstance(raw_output, ToolMessage):
-            parsed_content_for_db = {
+            # DB 저장용: __dict__ 그대로 JSON 직렬화
+            tool_raw_json = {
                 "content": raw_output.content,
-                "additional_kwargs": raw_output.additional_kwargs,
-                "metadata": raw_output.metadata,
-                "tool_name": getattr(raw_output, "tool_name", None)
+                "type": getattr(raw_output, "type", None),
+                "tool_call_id": getattr(raw_output, "tool_call_id", None),
+                "artifact": getattr(raw_output, "artifact", None),
+                "status": getattr(raw_output, "status", None)
             }
-        elif isinstance(raw_output, dict):
-            parsed_content_for_db = raw_output
-        else:
-            parsed_content_for_db = {"raw": str(raw_output)}
 
-        # JSON 문자열로 보기 좋게 변환 (사용자용)
-        formatted_content += f"\n```json\n{json.dumps(parsed_content_for_db, indent=2, ensure_ascii=False)}\n```"
+            # 사용자 화면용: content만 보여주기
+            parsed_output = raw_output.content
+
+        else:
+            # ToolMessage가 아니라면 그냥 str 처리
+            parsed_output = str(raw_output)
+            tool_raw_json = {"raw": parsed_output}
+
+        # 사용자 화면용 JSON 포맷팅
+        if isinstance(parsed_output, str):
+            try:
+                parsed_json = json.loads(parsed_output)
+                formatted_output += f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
+            except json.JSONDecodeError:
+                formatted_output += f"\n```\n{parsed_output}\n```"
+        elif isinstance(parsed_output, dict):
+            formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+        else:
+            formatted_output += f"`{str(parsed_output)}`"
 
     except Exception as e:
-        formatted_content += f"\n`Error processing output: {e}`"
-        parsed_content_for_db = {"error": str(e)}
+        formatted_output += f"`Error processing output: {e}`"
+        print(f"[Error] raw_output={raw_output} -> {e}")
 
-    # 2. ChatMessage 저장 (사용자에게 보여질 내용)
-    chat_msg = _create_chat_message(db, session_id, "tool", formatted_content)
+    # SSE 전송 (사용자 화면용)
+    yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
 
-    # 3. ToolMessageRecord 저장 (원본 + 메타)
-    tool_record = ToolMessageRecord(
-        chat_message_id=chat_msg.id,
-        tool_call_id=tool_call_id,
-        tool_status=tool_status,
-        tool_artifact=tool_artifact,
-        tool_raw_content=parsed_content_for_db
+    # DB 저장 (원본 ToolMessage 구조 그대로)
+    _create_chat_message(
+        db,
+        session_id,
+        "tool",
+        content=json.dumps(tool_raw_json, ensure_ascii=False)
     )
-    db.add(tool_record)
-    db.commit()
 
-    # 4. SSE 전송
-    yield f"data: {json.dumps({'tool_message': formatted_content})}\n\n"
 
 # --- Pydantic Models (Existing) ---
 class MessageSaveRequest(BaseModel):
