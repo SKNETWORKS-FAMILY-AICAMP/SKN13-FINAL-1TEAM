@@ -10,6 +10,7 @@ from datetime import datetime
 import re
 import fitz # PyMuPDF
 from docx import Document as DocxDocument # python-docx
+from langchain_core.messages.tool import ToolMessage
 
 from .RoutingAgent import RoutingAgent, generate_config
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event, Document
@@ -79,23 +80,15 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
 
     try:
         parsed_output = None
+        print(f"parsed_output_type: {type(raw_output)}")
 
         # 1. dict라면 content만 뽑기
-        if isinstance(raw_output, dict):
+        if isinstance(raw_output, ToolMessage):
             parsed_output = raw_output.get("content", raw_output)
-
-        # 2. str이면 content='...' 형태인지 확인
-        elif isinstance(raw_output, str):
-            content_match = re.search(r"content='(.*?)'", raw_output, re.DOTALL)
-            if content_match:
-                parsed_output = content_match.group(1)
-            else:
-                parsed_output = raw_output
-
         else:
-            print(f"type: {type(raw_output)}")
-            parsed_output=str(raw_output)
+            parsed_output = str(raw_output)
 
+        print(f"parsed_output_type: {type(parsed_output)}")
         # 3. 이제 parsed_output이 JSON 문자열인지 확인 후 dict로 변환
         if isinstance(parsed_output, str):
             try:
