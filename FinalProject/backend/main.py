@@ -2,18 +2,17 @@ from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Generator, Optional
+from typing import List, Generator, Optional
 import json, uuid, shutil
 from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
-import re
 import fitz # PyMuPDF
 from docx import Document as DocxDocument # python-docx
 from langchain_core.messages.tool import ToolMessage
 
 from .RoutingAgent import RoutingAgent, generate_config
-from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event, Document
+from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
 from .llm_tools.read_hwpx import read_hwpx # Assuming this function name
 
 # FastAPI 인스턴스 생성
@@ -72,13 +71,33 @@ def _create_chat_message(db: Session, session_id: str, role: str, content: str, 
 async def _handle_tool_start(event: dict, session_id: str, db: Session):
     tool_name = event.get("name", "Unknown Tool")
     tool_input = event["data"].get("input", {})
-    thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input: '{tool_input}'"
+    tool_call_id = event.get("tool_call_id")
+    # tool_artifact가 있다면 기록 가능
+    tool_artifact = event.get("artifact")
+    
+    # 사용자에게 보여줄 포맷
+    thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input:\n```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
 
-    # SSE 전송
+    # 1. ChatMessage 저장 (사용자용)
+    chat_msg = _create_chat_message(db, session_id, "assistant", thinking_message)
+
+    # 2. ToolMessageRecord 저장 (원본 + 메타)
+    tool_record = ToolMessageRecord(
+        chat_message_id=chat_msg.id,
+        tool_call_id=tool_call_id,
+        tool_status="started",
+        tool_artifact=tool_artifact,
+        tool_raw_content={
+            "tool_name": tool_name,
+            "input": tool_input
+        }
+    )
+    db.add(tool_record)
+    db.commit()
+
+    # 3. SSE 전송
     yield f"data: {json.dumps({'thinking_message': thinking_message})}\n\n"
 
-    # DB 저장
-    _create_chat_message(db, session_id, "assistant", thinking_message)
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
     raw_output = event["data"].get("output", None)
