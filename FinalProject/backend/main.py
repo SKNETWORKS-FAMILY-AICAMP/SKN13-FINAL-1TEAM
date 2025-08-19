@@ -55,9 +55,15 @@ def get_db():
     finally:
         db.close()
 
-# --- Chat Message Handling (Existing) ---
-def _create_chat_message(db: Session, session_id: str, role: str, content: str):
-    message = ChatMessage(session_id=session_id, role=role, content=content)
+# --- Chat Message Handling ---
+def _create_chat_message(db: Session, session_id: str, role: str, content: str, message_id: str = None):
+    message = ChatMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        message_id=message_id,
+        timestamp=datetime.now()
+    )
     db.add(message)
     db.commit()
     db.refresh(message)
@@ -66,50 +72,60 @@ def _create_chat_message(db: Session, session_id: str, role: str, content: str):
 async def _handle_tool_start(event: dict, session_id: str, db: Session):
     tool_name = event.get("name", "Unknown Tool")
     tool_input = event["data"].get("input", {})
-    print(f"DEBUG: on_tool_start event data: {event}")
-    
-    # Format as Markdown
     thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input: '{tool_input}'"
+
+    # SSE 전송
     yield f"data: {json.dumps({'thinking_message': thinking_message})}\n\n"
-    
+
+    # DB 저장
     _create_chat_message(db, session_id, "assistant", thinking_message)
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
-    raw_output = event["data"].get("output", "")
-    formatted_output = "[Tool Output]: "
+    raw_output = event["data"].get("output", None)
+    tool_call_id = event.get("tool_call_id")
+    tool_status = event.get("status")
+    tool_artifact = event.get("artifact")
+
+    # 1. 사용자에게 보여줄 formatted content
+    formatted_content = "[Tool Output]: "
+    parsed_content_for_db = {}
 
     try:
-        parsed_output = None
-
-        # 1. dict라면 content만 뽑기
         if isinstance(raw_output, ToolMessage):
-            parsed_output = raw_output.content
+            parsed_content_for_db = {
+                "content": raw_output.content,
+                "additional_kwargs": raw_output.additional_kwargs,
+                "metadata": raw_output.metadata,
+                "tool_name": getattr(raw_output, "tool_name", None)
+            }
+        elif isinstance(raw_output, dict):
+            parsed_content_for_db = raw_output
         else:
-            parsed_output = str(raw_output)
-        print(f"type(parsed_output):{type(parsed_output)}")
-        # 3. 이제 parsed_output이 JSON 문자열인지 확인 후 dict로 변환
-        if isinstance(parsed_output, str):
-            try:
-                parsed_json = json.loads(parsed_output)
-                # JSON이면 예쁘게 출력
-                formatted_output += f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
-            except json.JSONDecodeError:
-                # JSON이 아니면 그냥 text 블록
-                formatted_output += f"\n```\n{parsed_output}\n```"
-        elif isinstance(parsed_output, dict):
-            formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
-        else:
-            formatted_output += f"`{str(parsed_output)}`"
+            parsed_content_for_db = {"raw": str(raw_output)}
+
+        # JSON 문자열로 보기 좋게 변환 (사용자용)
+        formatted_content += f"\n```json\n{json.dumps(parsed_content_for_db, indent=2, ensure_ascii=False)}\n```"
 
     except Exception as e:
-        formatted_output += f"`Error processing output: {e}`"
-        print(f"[Error] raw_output={raw_output} -> {e}")
+        formatted_content += f"\n`Error processing output: {e}`"
+        parsed_content_for_db = {"error": str(e)}
 
-    # SSE 전송
-    yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
+    # 2. ChatMessage 저장 (사용자에게 보여질 내용)
+    chat_msg = _create_chat_message(db, session_id, "tool", formatted_content)
 
-    # DB 저장
-    _create_chat_message(db, session_id, "tool", formatted_output)
+    # 3. ToolMessageRecord 저장 (원본 + 메타)
+    tool_record = ToolMessageRecord(
+        chat_message_id=chat_msg.id,
+        tool_call_id=tool_call_id,
+        tool_status=tool_status,
+        tool_artifact=tool_artifact,
+        tool_raw_content=parsed_content_for_db
+    )
+    db.add(tool_record)
+    db.commit()
+
+    # 4. SSE 전송
+    yield f"data: {json.dumps({'tool_message': formatted_content})}\n\n"
 
 # --- Pydantic Models (Existing) ---
 class MessageSaveRequest(BaseModel):
