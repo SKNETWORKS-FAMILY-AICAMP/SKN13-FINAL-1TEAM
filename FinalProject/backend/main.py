@@ -93,7 +93,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
                 parsed_output = raw_output
 
         else:
-            print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+            print(f"type: {type(raw_output)}")
             parsed_output=str(raw_output)
 
         # 3. 이제 parsed_output이 JSON 문자열인지 확인 후 dict로 변환
