@@ -80,26 +80,33 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
     try:
         parsed_output = None
 
-        # 1. dict라면 content만 뽑기
         if isinstance(raw_output, dict):
-            parsed_output = raw_output.get("content", raw_output)
+            # 이미 dict라면 content만 뽑기
+            if "content" in raw_output:
+                parsed_output = raw_output["content"]
+            else:
+                parsed_output = raw_output
 
-        # 2. str이면 content='...' 형태인지 확인
         elif isinstance(raw_output, str):
+            # 만약 "content='...'" 이런 형식이라면 regex로 뽑기
             content_match = re.search(r"content='(.*?)'", raw_output, re.DOTALL)
             if content_match:
                 parsed_output = content_match.group(1)
             else:
-                parsed_output = raw_output
+                # 혹시 그냥 json string일 수도 있음
+                try:
+                    parsed_output = json.loads(raw_output)
+                except json.JSONDecodeError:
+                    parsed_output = raw_output
 
-        # 3. 이제 parsed_output이 JSON 문자열인지 확인 후 dict로 변환
+        # 이제 출력 정리
         if isinstance(parsed_output, str):
             try:
-                parsed_json = json.loads(parsed_output)
-                # JSON이면 예쁘게 출력
-                formatted_output += f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
-            except json.JSONDecodeError:
-                # JSON이 아니면 그냥 text 블록
+                # JSON 문자열이라면 예쁘게
+                json_obj = json.loads(parsed_output)
+                formatted_output += f"\n```json\n{json.dumps(json_obj, indent=2, ensure_ascii=False)}\n```"
+            except Exception:
+                # 그냥 텍스트
                 formatted_output += f"\n```\n{parsed_output}\n```"
         elif isinstance(parsed_output, dict):
             formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
@@ -107,15 +114,11 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
             formatted_output += f"`{str(parsed_output)}`"
 
     except Exception as e:
-        formatted_output += f"`Error processing output: {e}`"
-        print(f"[Error] raw_output={raw_output} -> {e}")
+        formatted_output += f"`Error: {e}`"
 
-    # SSE 전송
     yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
 
-    # DB 저장
     _create_chat_message(db, session_id, "tool", formatted_output)
-
 
 # --- Pydantic Models (Existing) ---
 class MessageSaveRequest(BaseModel):
