@@ -94,6 +94,18 @@ class Event(Base):
     calendar = relationship("Calendar", back_populates="events")
 
 
+class Document(Base):
+    __tablename__ = "documents"
+
+    id = Column(String(255), primary_key=True, index=True) # Use string for doc_id (UUID)
+    original_filename = Column(String(255), nullable=False)
+    file_type = Column(String(50), nullable=False) # e.g., "pdf", "docx", "md", "hwpx"
+    original_file_path = Column(String(512), nullable=False) # Path to stored original file
+    markdown_file_path = Column(String(512), nullable=False) # Path to stored markdown file
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 # --- 관계 업데이트 ---
 User.calendars = relationship("Calendar", back_populates="user", cascade="all, delete-orphan")
 
