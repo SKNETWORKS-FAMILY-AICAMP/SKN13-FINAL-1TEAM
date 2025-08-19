@@ -84,7 +84,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
 
         # 1. dict라면 content만 뽑기
         if isinstance(raw_output, ToolMessage):
-            parsed_output = raw_output.get("content", raw_output)
+            parsed_output = raw_output.content
         else:
             parsed_output = str(raw_output)
 
