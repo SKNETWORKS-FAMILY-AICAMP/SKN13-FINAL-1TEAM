@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Generator, Optional
+from typing import List, Generator, Optional, Any
 import json, uuid, shutil
 from pathlib import Path
 from sqlalchemy.orm import Session
@@ -68,72 +68,90 @@ def _create_chat_message(db: Session, session_id: str, role: str, content: str, 
     db.refresh(message)
     return message
 
-async def _handle_tool_start(event: dict, session_id: str, db: Session):
-    tool_name = event.get("name", "Unknown Tool")
-    tool_input = event["data"].get("input", {})
-    tool_call_id = event.get("tool_call_id")
-    # tool_artifact가 있다면 기록 가능
-    tool_artifact = event.get("artifact")
-    
-    # 사용자에게 보여줄 포맷
-    thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input:\n```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
-
-    # 1. ChatMessage 저장 (사용자용)
-    chat_msg = _create_chat_message(db, session_id, "assistant", thinking_message)
-
-    # 2. ToolMessageRecord 저장 (원본 + 메타)
+def _create_tool_message(
+    db: Session,
+    chat_msg_id: int,
+    tool_call_id: str | None = None,
+    status: str | None = None,
+    artifact: dict | None = None,
+    raw_content: dict | str | None = None,
+) -> ToolMessageRecord:
+    """ToolMessageRecord를 DB에 저장하고 반환"""
     tool_record = ToolMessageRecord(
-        chat_message_id=chat_msg.id,
+        chat_message_id=chat_msg_id,
         tool_call_id=tool_call_id,
-        tool_status="started",
-        tool_artifact=tool_artifact,
-        tool_raw_content={
-            "tool_name": tool_name,
-            "input": tool_input
-        }
+        tool_status=status,
+        tool_artifact=artifact,
+        tool_raw_content=raw_content,
     )
     db.add(tool_record)
     db.commit()
+    db.refresh(tool_record)
+    return tool_record
+
+
+async def _handle_tool_start(event: dict, session_id: str, db: Session):
+    tool_name = event.get("name", "Unknown Tool")
+    tool_input = event.get("data", {}).get("input", {})
+    tool_call_id = event.get("tool_call_id")
+    tool_artifact = event.get("artifact")
+
+    # 사용자 화면용 메시지
+    thinking_message = (
+        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
+        f"```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
+    )
+
+    # 1. ChatMessage 저장
+    chat_msg = _create_chat_message(db, session_id, "assistant", thinking_message)
+
+    # 2. ToolMessageRecord 저장
+    tool_raw_content = {"tool_name": tool_name, "input": tool_input}
+    _create_tool_message(
+        db,
+        chat_msg.id,
+        tool_call_id=tool_call_id,
+        status="started",
+        artifact=tool_artifact,
+        raw_content=tool_raw_content,
+    )
 
     # 3. SSE 전송
-    yield f"data: {json.dumps({'thinking_message': thinking_message})}\n\n"
+    yield f"data: {json.dumps({'thinking_message': thinking_message}, ensure_ascii=False)}\n\n"
 
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
-    raw_output = event["data"].get("output", "")
-    
-    # DB에 저장할 전체 ToolMessage 구조
-    tool_raw_json = None
+    raw_output = event.get("data", {}).get("output", "")
     formatted_output = "[Tool Output]: "
+    tool_raw_json = None
 
     try:
         if isinstance(raw_output, ToolMessage):
-            # DB 저장용: __dict__ 그대로 JSON 직렬화
             tool_raw_json = {
                 "content": raw_output.content,
                 "type": getattr(raw_output, "type", None),
                 "tool_call_id": getattr(raw_output, "tool_call_id", None),
                 "artifact": getattr(raw_output, "artifact", None),
-                "status": getattr(raw_output, "status", None)
+                "status": getattr(raw_output, "status", None),
             }
-
-            # 사용자 화면용: content만 보여주기
             parsed_output = raw_output.content
-
         else:
-            # ToolMessage가 아니라면 그냥 str 처리
             parsed_output = str(raw_output)
             tool_raw_json = {"raw": parsed_output}
 
-        # 사용자 화면용 JSON 포맷팅
+        # 사용자용 포맷팅
         if isinstance(parsed_output, str):
             try:
                 parsed_json = json.loads(parsed_output)
-                formatted_output += f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
+                formatted_output += (
+                    f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
+                )
             except json.JSONDecodeError:
                 formatted_output += f"\n```\n{parsed_output}\n```"
         elif isinstance(parsed_output, dict):
-            formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+            formatted_output += (
+                f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+            )
         else:
             formatted_output += f"`{str(parsed_output)}`"
 
@@ -141,15 +159,25 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
         formatted_output += f"`Error processing output: {e}`"
         print(f"[Error] raw_output={raw_output} -> {e}")
 
-    # SSE 전송 (사용자 화면용)
-    yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
+    # 1. SSE 전송
+    yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
 
-    # DB 저장 (원본 ToolMessage 구조 그대로)
-    _create_chat_message(
+    # 2. ChatMessage 저장
+    chat_msg = _create_chat_message(
         db,
         session_id,
         "tool",
-        content=json.dumps(tool_raw_json, ensure_ascii=False)
+        content=json.dumps(tool_raw_json, ensure_ascii=False),
+    )
+
+    # 3. ToolMessageRecord 저장
+    _create_tool_message(
+        db,
+        chat_msg.id,
+        tool_call_id=tool_raw_json.get("tool_call_id"),
+        status=tool_raw_json.get("status", "finished"),
+        artifact=tool_raw_json.get("artifact"),
+        raw_content=tool_raw_json,
     )
 
 
