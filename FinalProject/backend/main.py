@@ -67,7 +67,8 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
     tool_input = event["data"].get("input", {})
     print(f"DEBUG: on_tool_start event data: {event}")
     
-    thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input: {tool_input}"
+    # Format as Markdown
+    thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input: '{tool_input}'"
     yield f"data: {json.dumps({'thinking_message': thinking_message})}\n\n"
     
     _create_chat_message(db, session_id, "assistant", thinking_message)
@@ -75,12 +76,31 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
     raw_output = event["data"].get("output", "")
     
-    if isinstance(raw_output, dict):
-        tool_output = raw_output.get("content", str(raw_output))
-    else:
-        tool_output = str(raw_output)
+    formatted_output = "[Tool Output]: "
+    
+    try:
+        # Attempt to parse raw_output as JSON
+        if isinstance(raw_output, str):
+            parsed_output = json.loads(raw_output)
+        elif isinstance(raw_output, dict):
+            parsed_output = raw_output
+        else:
+            parsed_output = None # Not a JSON string or dict
 
-    formatted_output = f"[Tool Output]: {tool_output}"
+        if parsed_output:
+            # If it's JSON, pretty-print it in a Markdown code block
+            formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+        else:
+            # Otherwise, just put the string in backticks
+            formatted_output += f"`{str(raw_output)}`"
+    except json.JSONDecodeError:
+        # If it's a string but not valid JSON, treat as plain string
+        formatted_output += f"`{str(raw_output)}`"
+    except Exception as e:
+        # Catch any other errors during processing
+        formatted_output += f"`Error processing tool output: {e}`"
+        print(f"Error processing tool output: {raw_output} - {e}") # Log error for debugging
+
     yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
     
     _create_chat_message(db, session_id, "tool", formatted_output)

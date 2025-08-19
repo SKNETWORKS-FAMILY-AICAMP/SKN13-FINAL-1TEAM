@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { PaperClipIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
+import ReactMarkdown from 'react-markdown'; // Added
+import remarkGfm from 'remark-gfm'; // Added
 
 const FileChip = ({ name, url }) => (
   <a
     href={url || '#'}
+
     download={name || 'file'}
     className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-gray-100 text-sm text-gray-800 hover:bg-gray-200"
     title={name}
@@ -90,10 +93,16 @@ export default function MessageBubble({ message }) {
         {hasText && (
           isUser ? (
             <div className="bg-gray-100 border border-gray-200 rounded-2xl px-4 py-3 text-gray-900 whitespace-pre-wrap">
-              {message.content}
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
             </div>
           ) : (
-            <div className="text-gray-900 whitespace-pre-wrap">{message.content}</div>
+            <div className="text-gray-900 whitespace-pre-wrap">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
+            </div>
           )
         )}
       </div>
