@@ -80,15 +80,13 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
 
     try:
         parsed_output = None
-        print(f"parsed_output_type: {type(raw_output)}")
 
         # 1. dict라면 content만 뽑기
         if isinstance(raw_output, ToolMessage):
             parsed_output = raw_output.content
         else:
             parsed_output = str(raw_output)
-
-        print(f"parsed_output_type: {type(parsed_output)}")
+        print(f"type(parsed_output):{type(parsed_output)}")
         # 3. 이제 parsed_output이 JSON 문자열인지 확인 후 dict로 변환
         if isinstance(parsed_output, str):
             try:
