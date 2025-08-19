@@ -75,16 +75,47 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
     raw_output = event["data"].get("output", "")
+    formatted_output = "[Tool Output]: "
 
-    if isinstance(raw_output, dict):
-        tool_output = raw_output.get("content", str(raw_output))
-    else:
-        tool_output = str(raw_output)
+    try:
+        parsed_output = None
 
-    formatted_output = f"[Tool Output]: {tool_output}"
+        # 1. dict라면 content만 뽑기
+        if isinstance(raw_output, dict):
+            parsed_output = raw_output.get("content", raw_output)
+
+        # 2. str이면 content='...' 형태인지 확인
+        elif isinstance(raw_output, str):
+            content_match = re.search(r"content='(.*?)'", raw_output, re.DOTALL)
+            if content_match:
+                parsed_output = content_match.group(1)
+            else:
+                parsed_output = raw_output
+
+        # 3. 이제 parsed_output이 JSON 문자열인지 확인 후 dict로 변환
+        if isinstance(parsed_output, str):
+            try:
+                parsed_json = json.loads(parsed_output)
+                # JSON이면 예쁘게 출력
+                formatted_output += f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
+            except json.JSONDecodeError:
+                # JSON이 아니면 그냥 text 블록
+                formatted_output += f"\n```\n{parsed_output}\n```"
+        elif isinstance(parsed_output, dict):
+            formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+        else:
+            formatted_output += f"`{str(parsed_output)}`"
+
+    except Exception as e:
+        formatted_output += f"`Error processing output: {e}`"
+        print(f"[Error] raw_output={raw_output} -> {e}")
+
+    # SSE 전송
     yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
 
+    # DB 저장
     _create_chat_message(db, session_id, "tool", formatted_output)
+
 
 # --- Pydantic Models (Existing) ---
 class MessageSaveRequest(BaseModel):
