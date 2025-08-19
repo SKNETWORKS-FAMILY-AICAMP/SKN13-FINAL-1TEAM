@@ -144,7 +144,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
             try:
                 parsed_json = json.loads(parsed_output)
                 formatted_output += (
-                    f"\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
+                    f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
                 )
             except json.JSONDecodeError:
                 formatted_output += f"\n```\n{parsed_output}\n```"
