@@ -3,17 +3,20 @@ import FeatureShell from "./FeatureShell";
 import FallbackSidebar from "../Sidebar/FallbackSidebar.jsx";
 // import AdminSidebar from "../Sidebar/AdminSidebar"; // (미래 교체)
 
-import { featureSections, featureFooter } from "../Sidebar/featureNavConfig";
+import { adminSections, userSections, featureFooter } from "../Sidebar/featureNavConfig";
+import MainSidebar from "../Sidebar/MainSidebar.jsx";
 import FeatureHome from "./panels/FeatureHome";
 import FeatureDocs from "./panels/FeatureDocs";
-import FeatureCalendar from "./panels/FeatureCalendar";     // ✅ 추가
+import FeatureCalendar from "./panels/FeatureCalendar";
 
-// const SidebarComponent = AdminSidebar;
-const SidebarComponent = FallbackSidebar;
+const SidebarComponent = MainSidebar;
+// const SidebarComponent = FallbackSidebar;
 
 export default function FeatureApp() {
   const [active, setActive] = useState("docs");
   const [collapsed, setCollapsed] = useState(false);
+
+  const sections = pageType === "admin" ? adminSections : userSections;
 
   const handleSelect = (key) => {
     if (key === "logout") return;
@@ -21,9 +24,9 @@ export default function FeatureApp() {
   };
 
   return (
-    <FeatureShell
+    <MainSidebar
       SidebarComponent={SidebarComponent}
-      sections={featureSections}
+      sections={sections}
       footer={featureFooter}
       activeKey={active}
       onSelect={handleSelect}
@@ -42,6 +45,6 @@ export default function FeatureApp() {
         </div>
       )}
       {active === "calendar" && <FeatureCalendar />}{/* ✅ reports → calendar */}
-    </FeatureShell>
+    </MainSidebar>
   );
 }

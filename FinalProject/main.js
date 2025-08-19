@@ -7,6 +7,7 @@ const fs = require('fs');
 
 let mainWindow = null;     // 로그인/챗봇 창
 let featureWindow = null;  // 기능부 전용 창
+let adminWindow = null;    // 관리자페이지 창
 
 // ── 실행 환경 분기
 const isDev   = !!process.env.VITE_DEV_SERVER_URL || !app.isPackaged;
@@ -60,8 +61,13 @@ function createMainWindow() {
     },
   });
 
-  if (isDev) mainWindow.loadURL(DEV_URL);
-  else mainWindow.loadFile(PROD_INDEX);
+  if (isDev) {
+    mainWindow.loadURL(DEV_URL);
+    // 개발 모드에서만 DevTools 열기
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  } else {
+    mainWindow.loadFile(PROD_INDEX);
+  }
 
   Menu.setApplicationMenu(null);
 
@@ -99,6 +105,92 @@ function createFeatureWindow() {
 
   Menu.setApplicationMenu(null);
   featureWindow.on('closed', () => { featureWindow = null; });
+}
+
+// 관리자 창 생성 함수
+function createAdminWindow() {
+  if (adminWindow) {
+    if (adminWindow.isMinimized()) adminWindow.restore();
+    adminWindow.focus();
+    return;
+  }
+
+  adminWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 1000,
+    minHeight: 700,
+    frame: false,
+    backgroundColor: '#ffffff',
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  if (isDev) {
+    featureWindow.loadURL(`${DEV_URL}?feature=1`);
+  } else {
+    featureWindow.loadFile(PROD_INDEX, { query: { feature: '1' } });
+  }
+
+  // (앱 전체 메뉴 숨김을 유지하려면 그대로 둠)
+  Menu.setApplicationMenu(null);
+
+  // (선택) 기능부 창 리사이즈 이벤트도 필요하면 브로드캐스트 가능
+  // featureWindow.on('resize', () => {
+  //   featureWindow.webContents.send('window-resized');
+  // });
+
+  featureWindow.on('closed', () => {
+    featureWindow = null;
+  });
+}
+
+// 관리자 창 생성 함수
+function createAdminWindow() {
+  if (adminWindow) {
+    if (adminWindow.isMinimized()) adminWindow.restore();
+    adminWindow.focus();
+    return;
+  }
+
+  adminWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 1000,
+    minHeight: 700,
+    frame: false,
+    backgroundColor: '#ffffff',
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  if (isDev) {
+    // 예: http://localhost:5173/?admin=1
+    adminWindow.loadURL(`${DEV_URL}?admin=1`);
+  } else {
+    // 예: dist/index.html?admin=1
+    adminWindow.loadFile(PROD_INDEX, { query: { admin: '1' } });
+  }
+
+  // (앱 전체 메뉴 숨김을 유지하려면 그대로 둠)
+  Menu.setApplicationMenu(null);
+
+  // (선택) 필요 시 리사이즈 브로드캐스트
+  // adminWindow.on('resize', () => {
+  //   adminWindow.webContents.send('window-resized');
+  // });
+
+  adminWindow.on('closed', () => {
+    adminWindow = null;
+  });
 }
 
 /* ─────────────────────────────
@@ -226,102 +318,49 @@ async function upsertOpened({ path: p, name }) {
 /* ─────────────────────────────
  *  fsBridge IPC — preload.js의 fsBridge와 1:1 매칭
  * ───────────────────────────── */
-ipcMain.handle('fs:listDocs', async (_evt, subdir = '') => {
-  const base = resolveBaseDir();
-  const dir = safeJoin(base, subdir);
-  if (!fs.existsSync(dir)) return [];
+// ipcMain.on('auth:success', (_evt, payload) => {
+//   const role = payload?.role;
+//   const userId = payload?.userId;
 
-  // 열람 인덱스와 merge
-  const openedIndex = await readOpenedIndex(); // [{path,name,opened_at}...]
-  const openedMap = new Map(openedIndex.map(x => [x.path, x.opened_at]));
+//   if (!mainWindow) {
+//     createMainWindow();
+//   }
+//   if (typeof role !== 'string') return;
 
-  const names = await fs.promises.readdir(dir);
-  const out = [];
-  for (const name of names) {
-    if (isHiddenOrSystem(name)) continue;
-    if (!isAllowedDoc(name)) continue;
+//   if (role === 'employee' && !featureWindow) {
+//     console.log('[auth:success] role =', role);
+//     createFeatureWindow();
+//   } else if (role === 'admin' && !adminWindow) {
+//     console.log('[auth:success] role =', role);
+//     createAdminWindow();
+//   }
 
-    const full = path.join(dir, name);
-    const st = await fs.promises.stat(full);
-    if (!st.isFile()) continue;
+// });
+// 🔐 로그인 성공 이벤트 - 교체
+ipcMain.on('auth:success', (_evt, payload) => {
+  const role = payload?.role;
+  if (!role) return;
 
-    out.push({
-      name,
-      path: full,
-      size: st.size,
-      updated_at: new Date(st.mtimeMs).toISOString(),
-      mime: guessMime(name),
-      opened_at: openedMap.get(full) || null,
-    });
+  // 관리자
+  if (role === 'admin') {
+    if (!adminWindow) createAdminWindow();
+    // 기존 창들 정리
+    featureWindow?.close();   // 혹시 떠 있었다면 닫기
+    // 메인(챗봇)창 노출 방지
+    // 닫고 싶으면 .close(), 일시 숨김이면 .hide()
+    mainWindow?.hide();
+    return;
   }
 
-  out.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-  return out;
-});
-
-ipcMain.handle('fs:readDoc', async (_evt, filePath) => {
-  const base = resolveBaseDir();
-  const safe = safeJoin(base, path.relative(base, filePath));
-  if (!fs.existsSync(safe)) throw new Error('File not found');
-  try {
-    const txt = await fs.promises.readFile(safe, 'utf-8');
-    return { mode: 'text', content: txt };
-  } catch {
-    const buf = await fs.promises.readFile(safe);
-    return { mode: 'base64', content: buf.toString('base64') };
+  // 사원
+  if (role === 'employee') {
+    if (!featureWindow) createFeatureWindow();
+    adminWindow?.close();     // 혹시 떠 있었다면 닫기
+    mainWindow?.hide();       // 메인(챗봇)창 숨김
+    return;
   }
 });
 
-ipcMain.handle('fs:saveDoc', async (_evt, payload) => {
-  const { name, content, subdir = '' } = payload || {};
-  if (!name || typeof content !== 'string') throw new Error('Invalid payload for saveDoc');
-
-  const base = resolveBaseDir();
-  const dir = safeJoin(base, subdir);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const dest = safeJoin(dir, name);
-
-  const looksBase64 = /^[A-Za-z0-9+/=\s]+$/.test(content) && content.length % 4 === 0;
-  if (looksBase64) await fs.promises.writeFile(dest, Buffer.from(content, 'base64'));
-  else await fs.promises.writeFile(dest, content, 'utf-8');
-
-  const st = await fs.promises.stat(dest);
-  return {
-    name,
-    path: dest,
-    size: st.size,
-    updated_at: new Date(st.mtimeMs).toISOString(),
-    mime: guessMime(name),
-  };
-});
-
-ipcMain.handle('fs:deleteDoc', async (_evt, filePath) => {
-  const base = resolveBaseDir();
-  const safe = safeJoin(base, path.relative(base, filePath));
-  if (!fs.existsSync(safe)) return { ok: false };
-  await fs.promises.unlink(safe);
-  return { ok: true };
-});
-
-// 🔹 OS 기본 앱으로 열기 + 열람기록 저장
-ipcMain.handle('fs:open', async (_evt, filePath) => {
-  if (!filePath) return false;
-  try {
-    const base = resolveBaseDir();
-    const safe = safeJoin(base, path.relative(base, filePath));
-    if (!fs.existsSync(safe)) return false;
-    await upsertOpened({ path: safe, name: path.basename(safe) });
-    const r = await shell.openPath(safe);
-    return r === "";
-  } catch (e) {
-    console.error('[fs:open] failed:', e);
-    return false;
-  }
-});
-
-/* ─────────────────────────────
- *  앱 라이프사이클
- * ───────────────────────────── */
 app.whenReady().then(() => {
   createMainWindow();
   app.on('activate', () => {
