@@ -17,7 +17,7 @@ class DocumentRetriever:
         Initializes the DocumentRetriever.
         """
         # Corrected DB path to point to project root
-        self.db_path = db_path or "../../chroma_db"
+        self.db_path = db_path or "../chroma_db"
         self.collection_name = os.getenv("CHROMA_COLLECTION_NAME", "kobaco_pdf_collection")
         # Changed embedding function class and model
         self.embedding_function = OpenAIEmbeddings(model=model_name)

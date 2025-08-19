@@ -25,7 +25,7 @@ def RAG_tool(query: str, filter: Optional[Dict[str, Any]] = None) -> List[Dict[s
     """
     vector_store = Chroma(
         embedding_function=OpenAIEmbeddings(model="text-embedding-3-large"), 
-        persist_directory="/home/ubuntu/SKN13-FINAL-1TEAM/chroma_db",
+        persist_directory="../../chroma_db",
         collection_name="kobaco_pdf_collection"
     )
 
