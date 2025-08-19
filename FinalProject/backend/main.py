@@ -7,7 +7,7 @@ import json, uuid, shutil
 from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
-import re
+
 import fitz # PyMuPDF
 from docx import Document as DocxDocument # python-docx
 
@@ -75,49 +75,34 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
     raw_output = event["data"].get("output", "")
+    
     formatted_output = "[Tool Output]: "
-
+    
     try:
-        parsed_output = None
+        # Attempt to parse raw_output as JSON
+        if isinstance(raw_output, str):
+            parsed_output = json.loads(raw_output)
+        elif isinstance(raw_output, dict):
+            parsed_output = raw_output
+        else:
+            parsed_output = None # Not a JSON string or dict
 
-        if isinstance(raw_output, dict):
-            # 이미 dict라면 content만 뽑기
-            if "content" in raw_output:
-                parsed_output = raw_output["content"]
-            else:
-                parsed_output = raw_output
-
-        elif isinstance(raw_output, str):
-            # 만약 "content='...'" 이런 형식이라면 regex로 뽑기
-            content_match = re.search(r"content='(.*?)'", raw_output, re.DOTALL)
-            if content_match:
-                parsed_output = content_match.group(1)
-            else:
-                # 혹시 그냥 json string일 수도 있음
-                try:
-                    parsed_output = json.loads(raw_output)
-                except json.JSONDecodeError:
-                    parsed_output = raw_output
-
-        # 이제 출력 정리
-        if isinstance(parsed_output, str):
-            try:
-                # JSON 문자열이라면 예쁘게
-                json_obj = json.loads(parsed_output)
-                formatted_output += f"\n```json\n{json.dumps(json_obj, indent=2, ensure_ascii=False)}\n```"
-            except Exception:
-                # 그냥 텍스트
-                formatted_output += f"\n```\n{parsed_output}\n```"
-        elif isinstance(parsed_output, dict):
+        if parsed_output:
+            # If it's JSON, pretty-print it in a Markdown code block
             formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
         else:
-            formatted_output += f"`{str(parsed_output)}`"
-
+            # Otherwise, just put the string in backticks
+            formatted_output += f"`{str(raw_output)}`"
+    except json.JSONDecodeError:
+        # If it's a string but not valid JSON, treat as plain string
+        formatted_output += f"`{str(raw_output)}`"
     except Exception as e:
-        formatted_output += f"`Error: {e}`"
+        # Catch any other errors during processing
+        formatted_output += f"`Error processing tool output: {e}`"
+        print(f"Error processing tool output: {raw_output} - {e}") # Log error for debugging
 
     yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
-
+    
     _create_chat_message(db, session_id, "tool", formatted_output)
 
 # --- Pydantic Models (Existing) ---
