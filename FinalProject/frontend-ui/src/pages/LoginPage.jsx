@@ -1,13 +1,13 @@
 // ✅ components/Login/LoginPage.jsx
 import React, { useState, useEffect } from "react";
-import HeaderBar from "../shared/HeaderBar";
+import HeaderBar from "../components/shared/HeaderBar";
 
 const EMP_ID_KEY = "employee_saved_id";
 const ADM_ID_KEY = "admin_saved_id";
 const USER_KEY = "currentUserId";
 const TOKEN_KEY = "userToken";
 
-export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
+export default function LoginPage({ onLoginSuccess, onFindId, onFindPw, onAdminPage }) {
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -34,6 +34,7 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
 
   const handleLogin = async () => {
     const isEmployee = role === "employee";
+    // const isAdmin = role === "admin";
 
     const ok =
       (isEmployee && userId === "test" && password === "1234") ||
@@ -43,6 +44,8 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
       setError("아이디, 비밀번호 또는 역할이 올바르지 않습니다.");
       return;
     }
+
+    
 
     // 아이디 저장/삭제
     const idKey = isEmployee ? EMP_ID_KEY : ADM_ID_KEY;

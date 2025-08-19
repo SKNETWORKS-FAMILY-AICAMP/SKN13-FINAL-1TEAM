@@ -4,10 +4,11 @@ import ChatWindow from './components/ChatWindow/ChatWindow.jsx';
 import Sidebar from './components/Sidebar/Sidebar.jsx';
 import HeaderBar from './components/shared/HeaderBar.jsx';
 import { getChatSessions } from './components/services/chatApi';
-import LoginPage from './components/Login/LoginPage.jsx';
+import LoginPage from './pages/LoginPage.jsx';
 import FindId from './components/Login/FindId.jsx';
 import ResetPassword from './components/Login/ResetPassword.jsx';
 import FeatureMain from './components/FeatureWindow/FeatureApp.jsx';
+import AdminPage from './pages/AdminPage.jsx';
 
 const USER_KEY  = 'user';
 const TOKEN_KEY = 'userToken';
@@ -28,9 +29,22 @@ export default function App() {
     }
   }, []);
 
+  // ✅ 관리자 전용 창 여부
+  const isAdminWindow = useMemo(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return p.get('admin') === '1' || window.location.hash.startsWith('#/admin');
+    } catch { return false; }
+  }, []);
+
   // 🔀 기능부 전용 창이면, 로그인/챗봇 분기 없이 기능부 UI만 렌더
   if (isFeatureWindow) {
     return <FeatureMain />;
+  }
+
+  // 🔀 관리자 전용 창이면, 바로 관리자 UI만 렌더 (채팅/로그인 로직 실행 안 함)
+  if (isAdminWindow) {
+    return <AdminPage />;
   }
 
   // ─────────── 세션 로드 & 선택 ───────────
@@ -90,8 +104,14 @@ export default function App() {
   // 로그인 성공
   const handleLoginSuccess = (userData) => {
     localStorage.setItem(USER_KEY, JSON.stringify(userData));
+    console.log(JSON.stringify(userData));
+    console.log("관리자 여부", userData['is_superuser']);
     setSidebarOpen(false);
-    setCurrentPage('chat');
+    if (userData?.is_superuser == true) {
+      setCurrentPage('admin');
+    } else {
+      setCurrentPage('chat');
+    }
   };
 
   // 채팅 페이지로 넘어오면 세션 목록 로드
@@ -106,6 +126,7 @@ export default function App() {
         onLoginSuccess={handleLoginSuccess}
         onFindId={() => setCurrentPage('find-id')}
         onFindPw={() => setCurrentPage('find-pw')}
+        // onAdminPage=
       />
     );
   }
@@ -114,6 +135,9 @@ export default function App() {
   }
   if (currentPage === 'find-pw') {
     return <ResetPassword onBack={() => setCurrentPage('login')} />;
+  }
+  if (currentPage === 'admin') {
+    return <AdminPage />
   }
 
   // ─────────── 채팅 화면 ───────────
