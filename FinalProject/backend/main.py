@@ -74,37 +74,42 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
     
     _create_chat_message(db, session_id, "assistant", thinking_message)
 
+import json
+from langchain_core.messages.tool import ToolMessage
+from sqlalchemy.orm import Session
+
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
     raw_output = event["data"].get("output", "")
-    formatted_output = "[Tool Output]: "
-
+    
     try:
-        parsed_output = None
-        print(f"parsed_output_type: {type(raw_output)}")
-
-        # 1. dict라면 content만 뽑기
+        # ToolMessage 객체라면 모든 속성을 dict로 변환
         if isinstance(raw_output, ToolMessage):
-            parsed_output = raw_output.content
+            # __dict__는 일반적으로 모든 속성을 반환하지만, 안전하게 필요한 필드만 포함
+            output_dict = {
+                "content": raw_output.content,
+                "tool_call_id": getattr(raw_output, "tool_call_id", None),
+                "type": getattr(raw_output, "type", None),
+                "artifact": getattr(raw_output, "artifact", None),
+                "status": getattr(raw_output, "status", None),
+            }
+        elif isinstance(raw_output, dict):
+            output_dict = raw_output
         else:
-            parsed_output = str(raw_output)
+            # str, list, 기타 타입도 dict로 래핑
+            output_dict = {"raw": raw_output}
 
-        print(f"parsed_output_type: {type(parsed_output)}")
-        # 3. 이제 parsed_output이 JSON 문자열인지 확인 후 dict로 변환
-        if isinstance(parsed_output, str):
+        # JSON 문자열이면 dict로 변환 시도
+        if isinstance(output_dict.get("content"), str):
             try:
-                parsed_json = json.loads(parsed_output)
-                # JSON이면 예쁘게 출력
-                formatted_output += f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
-            except json.JSONDecodeError:
-                # JSON이 아니면 그냥 text 블록
-                formatted_output += f"\n```\n{parsed_output}\n```"
-        elif isinstance(parsed_output, dict):
-            formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
-        else:
-            formatted_output += f"`{str(parsed_output)}`"
+                output_dict["content"] = json.loads(output_dict["content"])
+            except (json.JSONDecodeError, TypeError):
+                pass  # JSON이 아니면 그대로 둠
+
+        # 예쁘게 포맷
+        formatted_output = "[Tool Output]:\n" + json.dumps(output_dict, indent=2, ensure_ascii=False)
 
     except Exception as e:
-        formatted_output += f"`Error processing output: {e}`"
+        formatted_output = f"[Tool Output]: `Error processing output: {e}`"
         print(f"[Error] raw_output={raw_output} -> {e}")
 
     # SSE 전송
@@ -112,6 +117,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
 
     # DB 저장
     _create_chat_message(db, session_id, "tool", formatted_output)
+
 
 # --- Pydantic Models (Existing) ---
 class MessageSaveRequest(BaseModel):
