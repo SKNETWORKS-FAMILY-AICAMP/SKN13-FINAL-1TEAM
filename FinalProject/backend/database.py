@@ -1,21 +1,21 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-HOST = os.getenv("HOST")
-PORT = os.getenv("PORT")
-USER = os.getenv("USER")
-PASS = os.getenv("PASS")
-DB   = os.getenv("DB")
+load_dotenv(dotenv_path="/home/ubuntu/SKN13-FINAL-1TEAM/FinalProject/backend/.env")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT","3306")
+DB_USER = os.getenv("DB_USER","root")
+DB_PASS = os.getenv("DB_PASS")
+DB   = os.getenv("DB","final")
 
 # MySQL 연결 (pymysql 드라이버 사용)
 # 예: mysql+pymysql://user:pass@localhost:3306/dbname
 engine = create_engine(
-    f"mysql+pymysql://{USER}:{PASS}@{HOST}:{PORT}/{DB}",
+    f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB}",
     pool_pre_ping=True,
     pool_recycle=3600,
     future=True,  # 기존 코드 스타일 유지
@@ -63,6 +63,51 @@ class ChatMessage(Base):
     timestamp = Column(DateTime, default=datetime.now, index=True)
 
     session = relationship("ChatSession", back_populates="messages")
+
+
+class Calendar(Base):
+    __tablename__ = "calendars"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    name = Column(String(255), nullable=False, default="My Calendar")
+    description = Column(Text, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    user = relationship("User", back_populates="calendars")
+    events = relationship("Event", back_populates="calendar", cascade="all, delete-orphan")
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    start = Column(DateTime, nullable=False)
+    end = Column(DateTime, nullable=True)
+    all_day = Column(Boolean, default=False)
+    color = Column(String(20), nullable=True)
+    calendar_id = Column(Integer, ForeignKey("calendars.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    calendar = relationship("Calendar", back_populates="events")
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id = Column(String(255), primary_key=True, index=True) # Use string for doc_id (UUID)
+    original_filename = Column(String(255), nullable=False)
+    file_type = Column(String(50), nullable=False) # e.g., "pdf", "docx", "md", "hwpx"
+    original_file_path = Column(String(512), nullable=False) # Path to stored original file
+    markdown_file_path = Column(String(512), nullable=False) # Path to stored markdown file
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# --- 관계 업데이트 ---
+User.calendars = relationship("Calendar", back_populates="user", cascade="all, delete-orphan")
 
 
 # 테이블 생성 (데이터베이스에 테이블이 없으면 생성)

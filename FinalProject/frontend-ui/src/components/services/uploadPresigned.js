@@ -1,59 +1,47 @@
-// presign → storage 직접 업로드 → 첨부 메타 저장
-// 백엔드 요구 API:
-// 1) POST /files/presign        body: { filename, contentType, size }
-//    -> { uploadUrl, fields, fileUrl, key, expiresIn }
-// 2) POST /attachments          body: { sessionId, fileUrl, name, size, type, storageKey? }
-//    headers: { "Idempotency-Key": crypto.randomUUID() }
+// ✅ uploadPresigned.js (수정된 버전)
 
-import { BASE_URL, FILE_UPLOAD_URL } from "./env.js";
-
-async function http(url, options = {}) {
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${res.statusText} - ${text}`);
-  }
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return res.json();
-  return null;
-}
-
+/**
+ * Electron 백엔드에서 presigned URL을 받아와 S3로 직접 파일을 업로드한다.
+ * @param {File} file - 업로드할 파일 객체
+ * @param {{sessionId: string}} metadata - 추가 메타데이터 (현재는 사용되지 않음)
+ * @returns {Promise<{fileUrl: string}>} - 업로드 완료 후 최종 파일 URL을 포함한 객체
+ */
 export async function uploadChatbotFilePresigned(file, { sessionId }) {
-  // 1) presign 발급
-  const presign = await http(FILE_UPLOAD_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      filename: file.name,
-      contentType: file.type,
-      size: file.size,
-    }),
-  });
+  console.log(`'${file.name}' 파일 업로드를 시작한다.`);
 
-  // 2) 스토리지로 직접 업로드 (S3 POST 방식 예시)
-  const form = new FormData();
-  Object.entries(presign.fields || {}).forEach(([k, v]) => form.append(k, v));
-  form.append("file", file);
+  // 1. preload에 만들어둔 함수를 통해 Electron 백엔드(main.js)에 presigned URL을 요청한다.
+  // 이게 올바른 방법이다. HTTP 서버는 필요 없다.
+  const response = await window.electron.getS3UploadUrl(file.name);
 
-  const upRes = await fetch(presign.uploadUrl, { method: "POST", body: form });
-  if (!upRes.ok) throw new Error("Storage upload failed");
+  if (response.error || !response.url) {
+    throw new Error(`Presigned URL을 받아오지 못했다: ${response.error || 'URL이 없음.'}`);
+  }
 
-  // 3) 첨부 메타 저장 (백엔드)
-  const meta = await http(`${BASE_URL}/attachments`, {
-    method: "POST",
+  const uploadUrl = response.url;
+  console.log(`Presigned URL을 받았다. S3에 업로드를 시작한다...`);
+
+  // 2. 받은 URL을 사용해서 파일 본문을 PUT 요청으로 직접 S3에 업로드한다.
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
     headers: {
-      "Content-Type": "application/json",
-      "Idempotency-Key": (globalThis.crypto?.randomUUID?.() ?? String(Date.now())),
+      'Content-Type': file.type || 'application/octet-stream',
     },
-    body: JSON.stringify({
-      sessionId,
-      fileUrl: presign.fileUrl, // 최종 접근 URL
-      name: file.name,
-      size: file.size,
-      type: file.type || "application/octet-stream",
-      storageKey: presign.key,  // (선택) 서버 내부용 오브젝트 키
-    }),
+    body: file,
   });
 
-  return meta; // { id, fileUrl, name, size, mime, ... }
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(`S3 업로드 실패: ${uploadResponse.status} ${errorText}`);
+  }
+
+  console.log(`'${file.name}' 파일 업로드에 성공했다.`);
+
+  // 3. 업로드 성공 후, 파일에 접근할 수 있는 최종 URL을 반환한다.
+  // presigned URL에서 쿼리스트링(?AWSAccessKeyId=...)을 제거하면 순수한 파일 URL이 된다.
+  const finalFileUrl = uploadUrl.split('?')[0];
+  
+  // 이 URL을 채팅 메시지에 첨부하거나 다른 곳에 사용할 수 있다.
+  // 네놈의 원래 코드에 있던 '첨부 메타 저장' 로직은 별도의 백엔드 API가 필요하므로,
+  // 그 기능이 필요하다면 그건 따로 만들어야 한다. 지금은 파일 업로드 자체에만 집중한다.
+  return { fileUrl: finalFileUrl };
 }

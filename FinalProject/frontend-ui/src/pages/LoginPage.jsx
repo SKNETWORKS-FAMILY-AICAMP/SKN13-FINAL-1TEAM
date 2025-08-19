@@ -74,7 +74,7 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw, onAdminP
 
   return (
     <div className="h-screen w-screen bg-white overflow-hidden">
-      <HeaderBar showSidebarToggle={false} />
+      <HeaderBar />
       <div className="flex items-center justify-center h-[calc(100%-40px)]">
         <div className="w-[380px] p-10">
           {logoError ? (

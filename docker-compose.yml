@@ -1,0 +1,163 @@
+# FinalProject 중심 최적화된 Docker Compose
+# CLIKCA (Click + Assistant) - RAG 기반 업무 보조 AI 비서
+
+version: '3.8'
+
+x-backend-base: &backend-base
+  image: ${ECR_REPOSITORY_URI:-123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/skn13-clikca}:${IMAGE_TAG:-runtime}
+  restart: unless-stopped
+  environment:
+    - DEBUG=${DEBUG:-false}
+    - RELOAD=${RELOAD:-false}
+    - MYSQL_HOST=mysql
+    - MYSQL_PORT=3306
+    - MYSQL_DATABASE=${MYSQL_DATABASE:-clikca_db}
+    - MYSQL_USER=${MYSQL_USER:-clikca_user}
+    - MYSQL_PASSWORD=${MYSQL_PASSWORD:-clikca1234}
+    - CHROMA_HOST=chromadb
+    - CHROMA_PORT=8000
+    - OPENAI_API_KEY=${OPENAI_API_KEY}
+    - VOYAGE_API_KEY=${VOYAGE_API_KEY}
+  ports:
+    - "8000:8000"
+  depends_on:
+    - mysql
+    - chromadb
+  networks:
+    - skn13_network
+  deploy:
+    resources:
+      limits:
+        memory: 512M
+      reservations:
+        memory: 256M
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: skn13_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root1234}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-clikca_db}
+      MYSQL_USER: ${MYSQL_USER:-clikca_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-clikca1234}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./FinalProject/backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - skn13_network
+
+  # ChromaDB Vector Database
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: skn13_chromadb
+    restart: unless-stopped
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - skn13_network
+
+  # FastAPI Backend (Development)
+  backend-dev:
+    <<: *backend-base
+    container_name: skn13_backend_dev
+    volumes:
+      - ./FinalProject/backend:/app/backend
+      - ./data:/app/data
+      - ./logs:/app/logs
+    profiles:
+      - development
+
+  # FastAPI Backend (Production)
+  backend-prod:
+    <<: *backend-base
+    container_name: skn13_backend_prod
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    profiles:
+      - production
+
+  # React Frontend (Development)
+  frontend-dev:
+    image: ${ECR_REPOSITORY_URI:-123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/skn13-clikca}:${IMAGE_TAG:-dev}
+    container_name: skn13_frontend_dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - VITE_BACKEND_API_URL=${BACKEND_API_URL:-http://localhost:8000}
+      - VITE_FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./FinalProject/frontend-ui:/app/frontend
+      - /app/frontend/node_modules
+    depends_on:
+      - backend-dev
+    networks:
+      - skn13_network
+    command: npm run dev
+    profiles:
+      - development
+
+  # Nginx (Production)
+  nginx:
+    image: nginx:alpine
+    container_name: skn13_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./FinalProject/frontend-ui/dist:/usr/share/nginx/html
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend-prod
+    networks:
+      - skn13_network
+    profiles:
+      - production
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: skn13_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - skn13_network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+volumes:
+  mysql_data:
+    driver: local
+  chroma_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  skn13_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

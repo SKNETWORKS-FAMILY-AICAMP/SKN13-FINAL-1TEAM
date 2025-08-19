@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { PaperClipIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
+import ReactMarkdown from 'react-markdown'; // Added
+import remarkGfm from 'remark-gfm'; // Added
 
 const FileChip = ({ name, url }) => (
   <a
     href={url || '#'}
+
     download={name || 'file'}
     className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-gray-100 text-sm text-gray-800 hover:bg-gray-200"
     title={name}
@@ -47,7 +50,7 @@ export default function MessageBubble({ message }) {
   }, [viewerOpen, closeViewer, prevImg, nextImg]);
 
   return (
-    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}>
       {/* 세로 스택: [첨부] -> [텍스트] */}
       <div className={`flex flex-col gap-2 max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
         {/* ⬆ 첨부: 말풍선과 같은 라인으로 끝 정렬 */}
@@ -90,10 +93,16 @@ export default function MessageBubble({ message }) {
         {hasText && (
           isUser ? (
             <div className="bg-gray-100 border border-gray-200 rounded-2xl px-4 py-3 text-gray-900 whitespace-pre-wrap">
-              {message.content}
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
             </div>
           ) : (
-            <div className="text-gray-900 whitespace-pre-wrap">{message.content}</div>
+            <div className="text-gray-900 whitespace-pre-wrap">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
+            </div>
           )
         )}
       </div>

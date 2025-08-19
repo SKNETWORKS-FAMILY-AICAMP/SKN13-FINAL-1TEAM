@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "dotenv": "^17.2.1",
     "event-source-polyfill": "^1.0.31",
     "lucide-react": "^0.535.0",
     "react": "^19.1.0",
