@@ -34,9 +34,10 @@ class DocumentRetriever:
         print(f"Retrieving docs for query '{query}'")
         return self.retriever.invoke(query)
 
-    def search(self, keywords: List[str]) -> Dict[str, Any]:
+    def search(self, keywords: List[str]) -> str:
         """
-        Searches for documents using a list of keywords, deduplicates the results, and returns them.
+        Searches for documents using a list of keywords, deduplicates them, 
+        and returns a single formatted string.
         """
         all_docs = []
         seen_sources = set()
@@ -47,14 +48,25 @@ class DocumentRetriever:
                 if source and source not in seen_sources:
                     all_docs.append({"page_content": doc.page_content, "metadata": doc.metadata})
                     seen_sources.add(source)
-        return {"retrieved_docs": all_docs}
+        
+        if not all_docs:
+            return "관련 문서를 찾지 못했습니다."
+
+        # Format the output as a clean, human-readable string
+        output_parts = ["아래는 검색된 문서 목록입니다:"]
+        for doc in all_docs:
+            source = doc.get("metadata", {}).get("source", "알 수 없음")
+            content = doc.get("page_content", "내용 없음")
+            output_parts.append(f"---\n\n**문서 출처:** `{source}`\n\n**내용:**\n{content}")
+        
+        return "\n\n".join(output_parts)
 
 # Create a single instance of the retriever for the tool
 # Pass the model name explicitly to ensure consistency
 retriever_instance = DocumentRetriever(model_name="text-embedding-3-large")
 
 @tool
-def RAG_search_tool(keywords: List[str]) -> Dict[str, Any]:
+def RAG_search_tool(keywords: List[str]) -> str:
     """
     [Instruction]
     한국방송광고진흥공사의 내부 재무성과 관련 마크다운 문서를 기반으로 정보를 조회하는 RAG 툴입니다.
