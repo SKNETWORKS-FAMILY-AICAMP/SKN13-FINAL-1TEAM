@@ -3,7 +3,7 @@ from typing import TypedDict, Annotated, List, Dict, Any
 from langgraph.graph.message import add_messages
 
 # --- RAG 에이전트의 내부 상태 정의 ---
-class RagState(TypedDict):
+class AgentState(TypedDict):
     """ RAG 에이전트의 작업 흐름(그래프) 내에서 사용될 상태 객체입니다. """
     # 사용자의 원본 질문
     original_query: str

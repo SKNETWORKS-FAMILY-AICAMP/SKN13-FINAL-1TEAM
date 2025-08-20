@@ -1,6 +1,6 @@
 
 from ..document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
-from ..DocumentSearchAgentTools.RagState import RagState
+from ..DocumentSearchAgentTools.AgentState import RagState
 
 def run_document_edit(state: RagState, llm_client) -> dict:
     """
