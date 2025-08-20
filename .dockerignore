@@ -15,21 +15,28 @@ requirements.txt
 docker/
 docker-compose.yml
 .dockerignore
+DOCKER_README.md
+setup_docker.sh
+deploy_ecr.sh
 
 # Git 관련
 .git/
 .gitignore
 README.md
+inline_AI_analysis.md
 
 # 환경 설정 파일들
 .env
 .envrc
+.env.local
+.env.production
 
 # 로그 및 임시 파일들
 *.log
 logs/
 temp/
 tmp/
+*.tmp
 
 # ===== FinalProject 외부 제외 =====
 # FinalProject가 아닌 다른 디렉토리들
@@ -52,6 +59,8 @@ venv.bak/
 *.swp
 *.swo
 *~
+.eslintcache
+.npm
 
 # ===== OS 관련 =====
 .DS_Store
@@ -68,3 +77,27 @@ vector_db/
 DB1/
 chroma/
 __pycache__/
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+test/
+tests/
+coverage/
+
+# ===== 빌드 아티팩트 =====
+dist/
+build/
+*.tar.gz
+*.zip
+
+# ===== 데이터베이스 및 캐시 =====
+chroma_db/
+*.db
+*.sqlite
+*.sqlite3
+
+# ===== 백업 파일 =====
+*.backup
+*.bak
+*.old

@@ -1,48 +1,72 @@
 # Frontend Dockerfile
 # CLIKCA (Click + Assistant) - RAG 기반 업무 보조 AI 비서
 
-# Build Stage
-FROM node:18-alpine AS build
+# Build stage with optimized caching
+FROM node:18-alpine AS deps
 WORKDIR /app
-
-# 프론트엔드 의존성 설치
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --only=production && npm cache clean --force
 
-# 프론트엔드 소스 복사 및 빌드
-COPY . ./
+FROM node:18-alpine AS build-deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+
+# Build stage
+FROM build-deps AS build
+WORKDIR /app
+COPY . .
 RUN npm run build
 
-# Development Stage
+# Development stage
 FROM node:18-alpine AS development
 WORKDIR /app
 
-# 의존성 설치
+# Install dependencies
 COPY package*.json ./
-RUN npm ci
+RUN npm ci && npm cache clean --force
 
-# 소스 복사
-COPY . ./
+# Copy source code
+COPY . .
 
-# 포트 노출
+# Expose port
 EXPOSE 3000
 
-# 개발용 명령어 (핫 리로드)
-CMD ["npm", "run", "dev"]
+# Development command with hot reload
+ENV NODE_ENV=development
+ENV VITE_DEV_SERVER_HOST=0.0.0.0
+ENV VITE_DEV_SERVER_PORT=3000
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 
-# Production Stage (Nginx)
+# Production stage with Nginx
 FROM nginx:alpine AS production
 WORKDIR /usr/share/nginx/html
 
-# 빌드 결과 복사
+# Copy built files
 COPY --from=build /app/dist ./
 
-# 포트 노출
-EXPOSE 80
-
-# Nginx 설정
+# Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Runtime Stage (기본)
-FROM development AS runtime
-CMD ["npm", "start"]
+# Create nginx user if not exists
+RUN addgroup -g 1001 -S nginx && \
+    adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
+
+# Set proper permissions
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    chown -R nginx:nginx /etc/nginx/conf.d
+
+# Switch to non-root user
+USER nginx
+
+# Expose port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+
+# Runtime stage (default)
+FROM production AS runtime
