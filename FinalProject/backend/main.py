@@ -1,14 +1,19 @@
-from fastapi import FastAPI, Depends, APIRouter, HTTPException
+from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Generator, Optional
-import json
+from typing import List, Generator, Optional, Any
+import json, uuid, shutil
+from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
+import fitz # PyMuPDF
+from docx import Document as DocxDocument # python-docx
+from langchain_core.messages.tool import ToolMessage
 
 from .RoutingAgent import RoutingAgent, generate_config
-from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event
+from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
+from .llm_tools.read_hwpx import read_hwpx # Assuming this function name
 
 # FastAPI 인스턴스 생성
 app = FastAPI()
@@ -30,10 +35,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 데이터베이스 테이블 생성
+# --- Document Storage Paths ---
+UPLOAD_DIR = Path("uploaded_files")
+EDITABLE_MD_DIR = Path("editable_markdown")
+
+# 데이터베이스 테이블 생성 및 디렉토리 생성
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    EDITABLE_MD_DIR.mkdir(parents=True, exist_ok=True)
 
 # DB 세션 의존성
 def get_db():
@@ -43,47 +54,139 @@ def get_db():
     finally:
         db.close()
 
-def _create_chat_message(db: Session, session_id: str, role: str, content: str):
-    """DB에 메시지를 저장하고 반환"""
-    message = ChatMessage(session_id=session_id, role=role, content=content)
+# --- Chat Message Handling ---
+def _create_chat_message(db: Session, session_id: str, role: str, content: str, message_id: str = None):
+    message = ChatMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        message_id=message_id,
+        timestamp=datetime.now()
+    )
     db.add(message)
     db.commit()
     db.refresh(message)
     return message
 
+def _create_tool_message(
+    db: Session,
+    chat_msg_id: int,
+    tool_call_id: str | None = None,
+    status: str | None = None,
+    artifact: dict | None = None,
+    raw_content: dict | str | None = None,
+) -> ToolMessageRecord:
+    """ToolMessageRecord를 DB에 저장하고 반환"""
+    tool_record = ToolMessageRecord(
+        chat_message_id=chat_msg_id,
+        tool_call_id=tool_call_id,
+        tool_status=status,
+        tool_artifact=artifact,
+        tool_raw_content=raw_content,
+    )
+    db.add(tool_record)
+    db.commit()
+    db.refresh(tool_record)
+    return tool_record
+
+
 async def _handle_tool_start(event: dict, session_id: str, db: Session):
-    """툴 시작 이벤트 처리"""
     tool_name = event.get("name", "Unknown Tool")
-    tool_input = event["data"].get("input", {})
-    print(f"DEBUG: on_tool_start event data: {event}")
-    
-    thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input: {tool_input}"
-    yield f"data: {json.dumps({'thinking_message': thinking_message})}\n\n"
-    
-    _create_chat_message(db, session_id, "assistant", thinking_message)
+    tool_input = event.get("data", {}).get("input", {})
+    tool_call_id = event.get("tool_call_id")
+    tool_artifact = event.get("artifact")
+
+    # 사용자 화면용 메시지
+    thinking_message = (
+        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
+        f"```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
+    )
+
+    # 1. ChatMessage 저장
+    chat_msg = _create_chat_message(db, session_id, "assistant", thinking_message)
+
+    # 2. ToolMessageRecord 저장
+    tool_raw_content = {"tool_name": tool_name, "input": tool_input}
+    _create_tool_message(
+        db,
+        chat_msg.id,
+        tool_call_id=tool_call_id,
+        status="started",
+        artifact=tool_artifact,
+        raw_content=tool_raw_content,
+    )
+
+    # 3. SSE 전송
+    yield f"data: {json.dumps({'thinking_message': thinking_message}, ensure_ascii=False)}\n\n"
+
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
-    """툴 종료 이벤트 처리 및 결과 저장"""
-    raw_output = event["data"].get("output", "")
-    
-    if isinstance(raw_output, dict):
-        tool_output = raw_output.get("content", str(raw_output))
-    else:
-        tool_output = str(raw_output)
+    raw_output = event.get("data", {}).get("output", "")
+    formatted_output = "[Tool Output]: "
+    tool_raw_json = None
 
-    formatted_output = f"[Tool Output]: {tool_output}"
-    yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
-    
-    _create_chat_message(db, session_id, "tool", formatted_output)
+    try:
+        if isinstance(raw_output, ToolMessage):
+            tool_raw_json = {
+                "content": raw_output.content,
+                "type": getattr(raw_output, "type", None),
+                "tool_call_id": getattr(raw_output, "tool_call_id", None),
+                "artifact": getattr(raw_output, "artifact", None),
+                "status": getattr(raw_output, "status", None),
+            }
+            parsed_output = raw_output.content
+        else:
+            parsed_output = str(raw_output)
+            tool_raw_json = {"raw": parsed_output}
+
+        # 사용자용 포맷팅
+        if isinstance(parsed_output, str):
+            try:
+                parsed_json = json.loads(parsed_output)
+                formatted_output += (
+                    f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
+                )
+            except json.JSONDecodeError:
+                formatted_output += f"\n```\n{parsed_output}\n```"
+        elif isinstance(parsed_output, dict):
+            formatted_output += (
+                f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+            )
+        else:
+            formatted_output += f"`{str(parsed_output)}`"
+
+    except Exception as e:
+        formatted_output += f"`Error processing output: {e}`"
+        print(f"[Error] raw_output={raw_output} -> {e}")
+
+    # 1. SSE 전송
+    yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
+
+    # 2. ChatMessage 저장
+    chat_msg = _create_chat_message(
+        db,
+        session_id,
+        "tool",
+        content=json.dumps(tool_raw_json, ensure_ascii=False),
+    )
+
+    # 3. ToolMessageRecord 저장
+    _create_tool_message(
+        db,
+        chat_msg.id,
+        tool_call_id=tool_raw_json.get("tool_call_id"),
+        status=tool_raw_json.get("status", "finished"),
+        artifact=tool_raw_json.get("artifact"),
+        raw_content=tool_raw_json,
+    )
 
 
-# --- Pydantic 모델 ---
+# --- Pydantic Models (Existing) ---
 class MessageSaveRequest(BaseModel):
     session_id: str
     role: str
     content: str
 
-# --- Calendar Event Pydantic Models ---
 class EventBase(BaseModel):
     title: str
     description: Optional[str] = None
@@ -114,7 +217,130 @@ class EventOut(BaseModel):
     allDay: bool
     color: Optional[str] = None
 
-# --- API 엔드포인트 ---
+# --- Helper for Document Conversion ---
+def _convert_to_markdown(file_path: Path, file_type: str) -> str:
+    content = ""
+    try:
+        if file_type == "pdf":
+            doc = fitz.open(file_path)
+            for page in doc:
+                content += page.get_text()
+            doc.close()
+        elif file_type == "docx":
+            doc = DocxDocument(file_path)
+            for para in doc.paragraphs:
+                content += para.text + "\n"
+        elif file_type in ["hwp", "hwpx"]:
+            # Assuming read_hwpx_file_content returns text content
+            content = None#read_hwpx_file_content(str(file_path))
+        elif file_type in ["md", "txt"]:
+            content = file_path.read_text(encoding="utf-8")
+        else:
+            raise ValueError(f"Unsupported file type for conversion: {file_type}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File conversion failed: {e}")
+    return content
+
+# --- Document Management API Endpoints ---
+
+@api_router.post("/documents/upload")
+async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    file_extension = Path(file.filename).suffix.lower().lstrip('.')
+    if file_extension not in ["pdf", "docx", "hwp", "hwpx", "md", "txt"]:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_extension}")
+
+    doc_id = str(uuid.uuid4())
+    original_file_path = UPLOAD_DIR / f"{doc_id}_{file.filename}"
+    markdown_file_path = EDITABLE_MD_DIR / f"{doc_id}.md"
+
+    # Save original file
+    try:
+        with open(original_file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not save original file: {e}")
+
+    # Convert to Markdown
+    try:
+        markdown_content = _convert_to_markdown(original_file_path, file_extension)
+        with open(markdown_file_path, "w", encoding="utf-8") as f:
+            f.write(markdown_content)
+    except Exception as e:
+        # Clean up if conversion fails
+        original_file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"File conversion to Markdown failed: {e}")
+
+    # Save metadata to DB
+    db_document = Document(
+        id=doc_id,
+        original_filename=file.filename,
+        file_type=file_extension,
+        original_file_path=str(original_file_path),
+        markdown_file_path=str(markdown_file_path)
+    )
+    db.add(db_document)
+    db.commit()
+    db.refresh(db_document)
+
+    return JSONResponse(content={"doc_id": doc_id, "markdown_content": markdown_content, "message": "Document uploaded and converted successfully"})
+
+@api_router.get("/documents/{doc_id}/content")
+async def get_document_content(doc_id: str, db: Session = Depends(get_db)):
+    db_document = db.query(Document).filter(Document.id == doc_id).first()
+    if not db_document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    markdown_file_path = Path(db_document.markdown_file_path)
+    if not markdown_file_path.exists():
+        raise HTTPException(status_code=404, detail="Markdown content not found for this document")
+    
+    content = markdown_file_path.read_text(encoding="utf-8")
+    return JSONResponse(content={"doc_id": doc_id, "markdown_content": content})
+
+@api_router.put("/documents/{doc_id}/save_content")
+async def save_document_content(doc_id: str, content: str, db: Session = Depends(get_db)):
+    db_document = db.query(Document).filter(Document.id == doc_id).first()
+    if not db_document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    markdown_file_path = Path(db_document.markdown_file_path)
+    
+    try:
+        markdown_file_path.write_text(content, encoding="utf-8")
+        db_document.updated_at = datetime.now()
+        db.commit()
+        db.refresh(db_document)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save markdown content: {e}")
+    
+    return JSONResponse(content={"doc_id": doc_id, "message": "Markdown content saved successfully"})
+
+@api_router.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str, db: Session = Depends(get_db)):
+    db_document = db.query(Document).filter(Document.id == doc_id).first()
+    if not db_document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    original_file_path = Path(db_document.original_file_path)
+    markdown_file_path = Path(db_document.markdown_file_path)
+
+    try:
+        if original_file_path.exists():
+            original_file_path.unlink()
+        if markdown_file_path.exists():
+            markdown_file_path.unlink()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete files: {e}")
+    
+    db.delete(db_document)
+    db.commit()
+    
+    return JSONResponse(content={"message": "Document and associated files deleted successfully"})
+
+# --- Existing API Endpoints (Calendar, Chat) ---
 
 # Helper function to get or create a default calendar for a user
 def get_or_create_default_calendar(db: Session, user_id: int) -> Calendar:
@@ -128,9 +354,6 @@ def get_or_create_default_calendar(db: Session, user_id: int) -> Calendar:
 
 @api_router.post("/events", response_model=EventOut)
 def create_event(event: EventCreate, db: Session = Depends(get_db)):
-    """
-    새로운 일정을 생성합니다.
-    """
     default_user_id = 1  # 임시 사용자
     calendar = get_or_create_default_calendar(db, default_user_id)
     
@@ -154,9 +377,6 @@ def create_event(event: EventCreate, db: Session = Depends(get_db)):
 
 @api_router.get("/events", response_model=List[EventOut])
 def get_events(start: datetime, end: datetime, db: Session = Depends(get_db)):
-    """
-    특정 기간 내의 모든 일정을 조회합니다. (FullCalendar 연동용)
-    """
     default_user_id = 1 # 임시 사용자
     
     calendar = get_or_create_default_calendar(db, default_user_id)
@@ -181,9 +401,6 @@ def get_events(start: datetime, end: datetime, db: Session = Depends(get_db)):
 
 @api_router.put("/events/{event_id}", response_model=EventOut)
 def update_event(event_id: int, event: EventUpdate, db: Session = Depends(get_db)):
-    """
-    기존 일정을 업데이트합니다.
-    """
     db_event = db.query(Event).filter(Event.id == event_id).first()
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -210,9 +427,6 @@ def update_event(event_id: int, event: EventUpdate, db: Session = Depends(get_db
 
 @api_router.delete("/events/{event_id}", status_code=204)
 def delete_event(event_id: int, db: Session = Depends(get_db)):
-    """
-    일정을 삭제합니다.
-    """
     db_event = db.query(Event).filter(Event.id == event_id).first()
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -227,7 +441,6 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
 
 @api_router.post("/chat/save")
 async def save_message(request: MessageSaveRequest, db: Session = Depends(get_db)):
-    """프론트엔드에서 보낸 메시지를 저장합니다."""
     default_user_id = 1
     user = db.query(User).filter(User.id == default_user_id).first()
     if not user:
@@ -256,7 +469,6 @@ async def save_message(request: MessageSaveRequest, db: Session = Depends(get_db
 
 @api_router.get("/chat/sessions")
 async def get_chat_sessions(db: Session = Depends(get_db)):
-    """저장된 모든 채팅 세션의 목록을 반환합니다."""
     default_user_id = 1
     sessions = db.query(ChatSession).filter(ChatSession.user_id == default_user_id).order_by(ChatSession.created_at.desc()).all()
     sessions_list = []
@@ -266,20 +478,17 @@ async def get_chat_sessions(db: Session = Depends(get_db)):
 
 @api_router.get("/chat/messages/{session_id}")
 async def get_messages(session_id: str, db: Session = Depends(get_db)):
-    """특정 세션 ID의 모든 메시지를 반환합니다."""
     messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]}
 
 @api_router.get("/llm/stream")
 async def llm_stream(session_id: str, prompt: str, db: Session = Depends(get_db)):
-    """LLM의 응답을 실시간 스트리밍으로 반환합니다."""
     config = generate_config(session_id)
     chat_agent = RoutingAgent()
 
     return StreamingResponse(_stream_llm_response(session_id, prompt, chat_agent, config, db), media_type="text/event-stream")
 
 async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config, db: Session) -> Generator:
-    """AI 응답을 조각내어 실시간으로 생성하는 제너레이터"""
     full_response_content = ""
     
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
