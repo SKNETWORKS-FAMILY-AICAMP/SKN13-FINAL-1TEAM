@@ -1,8 +1,6 @@
 # FinalProject 중심 최적화된 Docker Compose
 # CLIKCA (Click + Assistant) - RAG 기반 업무 보조 AI 비서
 
-version: '3.8'
-
 x-backend-base: &backend-base
   build:
     context: ./FinalProject/backend
