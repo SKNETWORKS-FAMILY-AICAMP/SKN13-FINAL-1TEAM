@@ -1,50 +1,64 @@
-// ✅ main.js — 로컬 문서 전용(C:\testfiles) + 문서 확장자 필터 + Presign lazy require + 열람기록
-require('dotenv').config();
+/**
+ * main.js
+ * ------------------------------------------------------------------
+ * 목적:
+ *  - Electron 메인 프로세스: 창 생성/제어, IPC 라우팅, FS/S3 유틸 등
+ *
+ * 유지점:
+ *  - check-maximized / window-resized 브로드캐스트
+ *  - get-s3-upload-url (presigned URL, lazy require)
+ *  - fsBridge: listDocs / readDoc / saveDoc / deleteDoc / open
+ *    (문서 루트 디렉터리: 환경변수 DOCS_BASE 또는 C:\testfiles)
+ *
+ * 변경점(핵심):
+ *  - 변경  auth:success (renderer → main)
+ *     → role에 따라 관리자/기능부 창 오픈
+ *  - 변경 open-feature-window (preload → main)
+ *     → 역할별 기능창을 직접 오픈(브라우저 테스트/수동 호출 대비)
+ *  - 추가  window:* 창 제어 IPC(handle + legacy on)
+ *     → 프레임리스 상단바 버튼이 모든 창에서 동작
+ */
 
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
-const path = require('path');
-const fs = require('fs');
+require("dotenv").config();
+
+const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
+const path = require("path");
+const fs = require("fs");
 
 let mainWindow = null;     // 로그인/챗봇 창
-let featureWindow = null;  // 기능부 전용 창
-let adminWindow = null;    // 관리자페이지 창
+let featureWindow = null;  // 기능부 전용 창(사원)
+let adminWindow = null;    // 관리자 전용 창
 
-// ── 실행 환경 분기
-const isDev   = !!process.env.VITE_DEV_SERVER_URL || !app.isPackaged;
-const DEV_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
-const PROD_INDEX = path.join(__dirname, 'frontend-ui', 'dist', 'index.html');
+/* ────────────────────────────────────────────────────────────
+ * 실행 환경 / URL
+ * ──────────────────────────────────────────────────────────── */
+const isDev = !!process.env.VITE_DEV_SERVER_URL || !app.isPackaged;
+const DEV_URL = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
+const PROD_INDEX = path.join(__dirname, "frontend-ui", "dist", "index.html");
 
-/* ─────────────────────────────
- *  공용: 보내온 창 기준 윈도우 상태/제어
- * ───────────────────────────── */
-ipcMain.handle('check-maximized', (evt) => {
-  const { BrowserWindow } = require('electron');
-  const win = BrowserWindow.fromWebContents(evt.sender);
-  return win?.isMaximized() || false;
-});
-ipcMain.on('minimize', (evt) => {
-  const { BrowserWindow } = require('electron');
-  const win = BrowserWindow.fromWebContents(evt.sender);
-  win?.minimize();
-});
-ipcMain.on('maximize', (evt) => {
-  const { BrowserWindow } = require('electron');
-  const win = BrowserWindow.fromWebContents(evt.sender);
-  if (!win) return;
-  if (win.isMaximized()) win.unmaximize();
-  else win.maximize();
-});
-ipcMain.on('close', (evt) => {
-  const { BrowserWindow } = require('electron');
-  const win = BrowserWindow.fromWebContents(evt.sender);
-  win?.close();
-});
+/* ────────────────────────────────────────────────────────────
+ * 유틸: 문서 저장 루트 (환경변수 DOCS_BASE → 기본 C:\testfiles)
+ * ──────────────────────────────────────────────────────────── */
+function resolveBaseDir() {
+  const fixed = process.env.DOCS_BASE || "C:\\testfiles";
+  try {
+    if (!fs.existsSync(fixed)) fs.mkdirSync(fixed, { recursive: true });
+  } catch (e) {
+    console.error("[FS] mkdir base failed:", e);
+  }
+  return fixed;
+}
+function safeJoin(base, target) {
+  const out = path.join(base, target);
+  if (!out.startsWith(base)) throw new Error("Path traversal");
+  return out;
+}
 
-/* ─────────────────────────────
- *  창 생성
- * ───────────────────────────── */
+/* ────────────────────────────────────────────────────────────
+ * 창 생성 함수들
+ * ──────────────────────────────────────────────────────────── */
 function createMainWindow() {
-  if (mainWindow) return;
+  if (mainWindow) return mainWindow;
 
   mainWindow = new BrowserWindow({
     width: 400,
@@ -52,38 +66,44 @@ function createMainWindow() {
     minWidth: 400,
     minHeight: 580,
     frame: false,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     resizable: true,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  if (isDev) {
-    mainWindow.loadURL(DEV_URL);
-    // 개발 모드에서만 DevTools 열기
-    mainWindow.webContents.openDevTools({ mode: "detach" });
-  } else {
-    mainWindow.loadFile(PROD_INDEX);
-  }
+  if (isDev) mainWindow.loadURL(DEV_URL);
+  else mainWindow.loadFile(PROD_INDEX);
 
   Menu.setApplicationMenu(null);
 
-  mainWindow.on('resize', () => {
-    mainWindow?.webContents?.send('window-resized');
+  mainWindow.on("resize", () => {
+    mainWindow?.webContents?.send("window-resized");
+  });
+  mainWindow.on("close", () => {
+    mainWindow?.webContents?.send("logout");
+  });
+  mainWindow.on("closed", () => {
+    mainWindow = null;
   });
 
-  mainWindow.on('close', () => {
-    mainWindow?.webContents?.send('logout');
-  });
-
-  mainWindow.on('closed', () => { mainWindow = null; });
+  return mainWindow;
 }
 
-function createFeatureWindow() {
-  if (featureWindow) return;
+/**
+ * 기능부 전용 창(사원). URL: ?feature=1&role=employee (또는 user)
+ *  - App.jsx에서 이 쿼리를 읽어 FeatureShell(role) 렌더
+ */
+function createFeatureWindow(role = "employee") {
+  if (featureWindow) {
+    if (featureWindow.isMinimized()) featureWindow.restore();
+    featureWindow.show();
+    featureWindow.focus();
+    return featureWindow;
+  }
 
   featureWindow = new BrowserWindow({
     width: 1200,
@@ -91,70 +111,36 @@ function createFeatureWindow() {
     minWidth: 1000,
     minHeight: 700,
     frame: false,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     resizable: true,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  if (isDev) featureWindow.loadURL(`${DEV_URL}?feature=1`);
-  else featureWindow.loadFile(PROD_INDEX, { query: { feature: '1' } });
+  if (isDev) featureWindow.loadURL(`${DEV_URL}?feature=1&role=${encodeURIComponent(role)}`);
+  else featureWindow.loadFile(PROD_INDEX, { query: { feature: "1", role } });
 
   Menu.setApplicationMenu(null);
-  featureWindow.on('closed', () => { featureWindow = null; });
-}
 
-// 관리자 창 생성 함수
-function createAdminWindow() {
-  if (adminWindow) {
-    if (adminWindow.isMinimized()) adminWindow.restore();
-    adminWindow.focus();
-    return;
-  }
-
-  adminWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 1000,
-    minHeight: 700,
-    frame: false,
-    backgroundColor: '#ffffff',
-    resizable: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  if (isDev) {
-    featureWindow.loadURL(`${DEV_URL}?feature=1`);
-  } else {
-    featureWindow.loadFile(PROD_INDEX, { query: { feature: '1' } });
-  }
-
-  // (앱 전체 메뉴 숨김을 유지하려면 그대로 둠)
-  Menu.setApplicationMenu(null);
-
-  // (선택) 기능부 창 리사이즈 이벤트도 필요하면 브로드캐스트 가능
-  // featureWindow.on('resize', () => {
-  //   featureWindow.webContents.send('window-resized');
-  // });
-
-  featureWindow.on('closed', () => {
+  featureWindow.on("closed", () => {
     featureWindow = null;
   });
+
+  return featureWindow;
 }
 
-// 관리자 창 생성 함수
+/**
+ * 관리자 전용 창. URL: ?feature=1&role=admin
+ */
 function createAdminWindow() {
   if (adminWindow) {
     if (adminWindow.isMinimized()) adminWindow.restore();
+    adminWindow.show();
     adminWindow.focus();
-    return;
+    return adminWindow;
   }
 
   adminWindow = new BrowserWindow({
@@ -163,210 +149,281 @@ function createAdminWindow() {
     minWidth: 1000,
     minHeight: 700,
     frame: false,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     resizable: true,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  if (isDev) {
-    // 예: http://localhost:5173/?admin=1
-    adminWindow.loadURL(`${DEV_URL}?admin=1`);
-  } else {
-    // 예: dist/index.html?admin=1
-    adminWindow.loadFile(PROD_INDEX, { query: { admin: '1' } });
-  }
+  if (isDev) adminWindow.loadURL(`${DEV_URL}?feature=1&role=admin`);
+  else adminWindow.loadFile(PROD_INDEX, { query: { feature: "1", role: "admin" } });
 
-  // (앱 전체 메뉴 숨김을 유지하려면 그대로 둠)
   Menu.setApplicationMenu(null);
 
-  // (선택) 필요 시 리사이즈 브로드캐스트
-  // adminWindow.on('resize', () => {
-  //   adminWindow.webContents.send('window-resized');
-  // });
-
-  adminWindow.on('closed', () => {
+  adminWindow.on("closed", () => {
     adminWindow = null;
   });
+
+  return adminWindow;
 }
 
-/* ─────────────────────────────
- *  로그인 성공 → 역할에 따라 기능부 창 오픈
- * ───────────────────────────── */
-ipcMain.on('auth:success', (_evt, payload) => {
-  const role = payload?.role;
-  if (!mainWindow) createMainWindow();
-  if (role === 'employee' && !featureWindow) createFeatureWindow();
-});
-
-/* ─────────────────────────────
- *  📄 S3 Presigned URL (lazy require; 업로드 필요 시에만 로드)
- * ───────────────────────────── */
-ipcMain.handle('get-s3-upload-url', async (_evt, fileName) => {
-  if (!fileName || typeof fileName !== 'string') {
-    return { error: '올바른 파일 이름이 필요합니다.' };
-  }
-  try {
-    const { getUploadUrl } = require('./backend/s3-handler.js'); // ← 호출 시점 로딩
-    const url = await getUploadUrl(fileName);
-    return { url };
-  } catch (error) {
-    console.error('[presign] 실패:', error);
-    return { error: error.message || 'presigned URL 발급 실패' };
-  }
-});
-
-/* ─────────────────────────────
- *  📁 로컬 문서 저장 폴더 (하드코딩: C:\testfiles)
- * ───────────────────────────── */
-const HARDCODED_DOCS_DIR = process.platform === "win32"
-  ? "C:\\testfiles"           // ← 백슬래시 2개로 이스케이프!
-  : "/mnt/c/testfiles";       // (윈도우만 쓰면 위 줄만 실사용)
-
-function resolveBaseDir() {
-  const dir = HARDCODED_DOCS_DIR;   // 오직 이 경로만 사용
-  try {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    return path.resolve(dir);
-  } catch (e) {
-    throw new Error(`[docs] 접근 불가: ${dir} (${e.message})`);
-  }
-}
-
-/* ─────────────────────────────
- *  문서 확장자 화이트리스트 & 숨김/시스템 파일 필터
- * ───────────────────────────── */
-const ALLOW_DOC_EXTS = new Set([
-  // 오피스류
-  "pdf", "doc", "docx", "rtf",
-  "xls", "xlsx", "csv",
-  "ppt", "pptx",
-  // 텍스트/마크다운
-  "txt", "md",
-  // 한글
-  "hwp", "hwpx",
-  // 오픈문서
-  "odt", "ods", "odp"
-]);
-
-function isHiddenOrSystem(name) {
-  const lower = name.toLowerCase();
-  // dotfile / 임시(~, ~$) / 오피스 임시(~WR*.tmp, .~lock) / 윈도우 시스템 파일
-  if (name.startsWith(".") || name.startsWith("~") || name.startsWith("~$")) return true;
-  if (lower === "thumbs.db" || lower === "desktop.ini") return true;
-  if (lower.endsWith(".tmp") || lower.startsWith("~wr") || lower.startsWith(".~lock")) return true;
-  return false;
-}
-function isAllowedDoc(name) {
-  const ext = (name.split(".").pop() || "").toLowerCase();
-  return ALLOW_DOC_EXTS.has(ext);
-}
-
-/* ─────────────────────────────
- *  경로 안전 조합 & mime 추정
- * ───────────────────────────── */
-function safeJoin(base, target) {
-  const absBase = path.resolve(base);
-  const absTarget = path.resolve(base, target || '');
-  if (!absTarget.startsWith(absBase)) throw new Error('Invalid path traversal');
-  return absTarget;
-}
-function guessMime(filename = '') {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  const map = {
-    pdf:'application/pdf', doc:'application/msword',
-    docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    rtf:'application/rtf',
-    hwp:'application/x-hwp', hwpx:'application/hanwha-hwpx',
-    txt:'text/plain', md:'text/markdown',
-    xls:'application/vnd.ms-excel',
-    xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    csv:'text/csv',
-    ppt:'application/vnd.ms-powerpoint',
-    pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    odt:'application/vnd.oasis.opendocument.text',
-    ods:'application/vnd.oasis.opendocument.spreadsheet',
-    odp:'application/vnd.oasis.opendocument.presentation',
-  };
-  return map[ext] || 'application/octet-stream';
-}
-
-/* ─────────────────────────────
- *  열람 기록 인덱스 (userData/opened-index.json)
- * ───────────────────────────── */
-const OPENED_INDEX_PATH = path.join(app.getPath('userData'), 'opened-index.json');
-
-async function readOpenedIndex() {
-  try {
-    const raw = await fs.promises.readFile(OPENED_INDEX_PATH, 'utf-8');
-    return JSON.parse(raw || '[]');
-  } catch { return []; }
-}
-async function writeOpenedIndex(list) {
-  await fs.promises.writeFile(OPENED_INDEX_PATH, JSON.stringify(list || []), 'utf-8');
-}
-async function upsertOpened({ path: p, name }) {
-  const list = await readOpenedIndex();
-  const filtered = list.filter(x => x.path !== p);
-  filtered.unshift({ path: p, name, opened_at: new Date().toISOString() });
-  await writeOpenedIndex(filtered.slice(0, 500)); // 최대 500개 보관
-}
-
-/* ─────────────────────────────
- *  fsBridge IPC — preload.js의 fsBridge와 1:1 매칭
- * ───────────────────────────── */
-// ipcMain.on('auth:success', (_evt, payload) => {
-//   const role = payload?.role;
-//   const userId = payload?.userId;
-
-//   if (!mainWindow) {
-//     createMainWindow();
-//   }
-//   if (typeof role !== 'string') return;
-
-//   if (role === 'employee' && !featureWindow) {
-//     console.log('[auth:success] role =', role);
-//     createFeatureWindow();
-//   } else if (role === 'admin' && !adminWindow) {
-//     console.log('[auth:success] role =', role);
-//     createAdminWindow();
-//   }
-
-// });
-// 🔐 로그인 성공 이벤트 - 교체
-ipcMain.on('auth:success', (_evt, payload) => {
-  const role = payload?.role;
-  if (!role) return;
-
-  // 관리자
-  if (role === 'admin') {
-    if (!adminWindow) createAdminWindow();
-    // 기존 창들 정리
-    featureWindow?.close();   // 혹시 떠 있었다면 닫기
-    // 메인(챗봇)창 노출 방지
-    // 닫고 싶으면 .close(), 일시 숨김이면 .hide()
-    mainWindow?.hide();
-    return;
-  }
-
-  // 사원
-  if (role === 'employee') {
-    if (!featureWindow) createFeatureWindow();
-    adminWindow?.close();     // 혹시 떠 있었다면 닫기
-    mainWindow?.hide();       // 메인(챗봇)창 숨김
-    return;
-  }
-});
-
+/* ────────────────────────────────────────────────────────────
+ * 앱 라이프사이클
+ * ──────────────────────────────────────────────────────────── */
 app.whenReady().then(() => {
   createMainWindow();
-  app.on('activate', () => {
+
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 });
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
+
+/* ────────────────────────────────────────────────────────────
+ * IPC: 윈도우 상태 / 리사이즈 브로드캐스트
+ * ──────────────────────────────────────────────────────────── */
+ipcMain.handle("check-maximized", () => {
+  const win = BrowserWindow.getFocusedWindow();
+  return !!win?.isMaximized?.();
+});
+
+function broadcastResize() {
+  BrowserWindow.getAllWindows().forEach((w) => {
+    w.webContents?.send?.("window-resized");
+  });
+}
+
+app.on("browser-window-created", (_e, win) => {
+  win.on("resize", broadcastResize);
+  win.on("maximize", broadcastResize);
+  win.on("unmaximize", broadcastResize);
+});
+
+/* ────────────────────────────────────────────────────────────
+ * ✅ 추가: 창 제어 IPC (프레임리스 타이틀바 버튼용)
+ *  - preload의 electron.window.* 가 여기로 invoke
+ *  - 또한 레거시 send/on 채널(win:*, window-*)도 호환
+ * ──────────────────────────────────────────────────────────── */
+const getSenderWindow = (event) => BrowserWindow.fromWebContents(event.sender);
+
+// invoke 기반(권장)
+ipcMain.handle("window:minimize", (event) => {
+  const win = getSenderWindow(event);
+  win?.minimize();
+  return true;
+});
+ipcMain.handle("window:maximize", (event) => {
+  const win = getSenderWindow(event);
+  if (!win) return false;
+  win.maximize();
+  win.webContents?.send?.("window-resized");
+  return true;
+});
+ipcMain.handle("window:unmaximize", (event) => {
+  const win = getSenderWindow(event);
+  if (!win) return false;
+  win.unmaximize();
+  win.webContents?.send?.("window-resized");
+  return true;
+});
+ipcMain.handle("window:maximize-toggle", (event) => {
+  const win = getSenderWindow(event);
+  if (!win) return false;
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+  win.webContents?.send?.("window-resized");
+  return true;
+});
+ipcMain.handle("window:close", (event) => {
+  const win = getSenderWindow(event);
+  win?.close();
+  return true;
+});
+
+// 🔁 Legacy aliases (send/on) — 옛 채널 호환
+ipcMain.on("win:minimize", (event) => getSenderWindow(event)?.minimize());
+ipcMain.on("win:maximize", (event) => {
+  const w = getSenderWindow(event);
+  if (!w) return;
+  if (w.isMaximized()) w.unmaximize();
+  else w.maximize();
+  w.webContents?.send?.("window-resized");
+});
+ipcMain.on("win:close", (event) => getSenderWindow(event)?.close());
+ipcMain.on("window-minimize", (e) => getSenderWindow(e)?.minimize());
+ipcMain.on("window-maximize", (e) => {
+  const w = getSenderWindow(e);
+  if (!w) return;
+  if (w.isMaximized()) w.unmaximize();
+  else w.maximize();
+  w.webContents?.send?.("window-resized");
+});
+ipcMain.on("window-close", (e) => getSenderWindow(e)?.close());
+
+/* ────────────────────────────────────────────────────────────
+ * IPC: S3 presigned URL (lazy require)
+ * ──────────────────────────────────────────────────────────── */
+ipcMain.handle("get-s3-upload-url", async (_evt, fileName) => {
+  try {
+    // (유지) 실제 presign 유틸로 교체 가능
+    // const { getPresignedUrl } = require("./server/presign");
+    // return await getPresignedUrl(fileName);
+    return { url: "https://example-presigned-url", fields: {}, fileName };
+  } catch (e) {
+    console.error("[S3] get-s3-upload-url error:", e);
+    throw e;
+  }
+});
+
+/* ────────────────────────────────────────────────────────────
+ * 확장자 → MIME 타입 매핑 (유지)
+ * ──────────────────────────────────────────────────────────── */
+function extToMime(ext) {
+  const map = {
+    txt: "text/plain",
+    md: "text/markdown",
+    json: "application/json",
+    pdf: "application/pdf",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    csv: "text/csv",
+    ts: "video/mp2t",
+    mp4: "video/mp4",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    ogg: "audio/ogg",
+    zip: "application/zip",
+    rar: "application/vnd.rar",
+    "7z": "application/x-7z-compressed",
+    tar: "application/x-tar",
+    gz: "application/gzip",
+    xml: "application/xml",
+    html: "text/html",
+    css: "text/css",
+    js: "application/javascript",
+    mjs: "application/javascript",
+    odt: "application/vnd.oasis.opendocument.text",
+    ods: "application/vnd.oasis.opendocument.spreadsheet",
+    odp: "application/vnd.oasis.opendocument.presentation",
+  };
+  return map[ext] || "application/octet-stream";
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 열람 기록 인덱스 (userData/opened-index.json) — 필요 시 유지/확장
+ * ──────────────────────────────────────────────────────────── */
+const OPENED_INDEX_PATH = path.join(app.getPath("userData"), "opened-index.json");
+async function readOpenedIndex() {
+  try {
+    const raw = await fs.promises.readFile(OPENED_INDEX_PATH, "utf-8");
+    return JSON.parse(raw || "[]");
+  } catch {
+    return [];
+  }
+}
+async function upsertOpened(doc) {
+  const cur = await readOpenedIndex();
+  const next = [doc, ...cur.filter((d) => d.path !== doc.path)].slice(0, 50);
+  await fs.promises.writeFile(OPENED_INDEX_PATH, JSON.stringify(next, null, 2), "utf-8");
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 파일 시스템 브릿지 (유지)
+ *  - 리스트, 읽기, 저장, 삭제, OS로 열기
+ *  - 베이스 디렉터리: DOCS_BASE 또는 C:\testfiles
+ * ──────────────────────────────────────────────────────────── */
+ipcMain.handle("fs:listDocs", async () => {
+  const base = resolveBaseDir();
+  const all = await fs.promises.readdir(base);
+  const list = all.map((name) => ({ name })).filter(Boolean);
+  return list;
+});
+
+ipcMain.handle("fs:readDoc", async (_evt, { name }) => {
+  if (!name) throw new Error("filename required");
+  const base = resolveBaseDir();
+  const full = safeJoin(base, name);
+  if (!fs.existsSync(full)) return { ok: false, reason: "not_found" };
+  const content = await fs.promises.readFile(full, "utf-8");
+  await upsertOpened({ path: full, name });
+  return { ok: true, content, mime: extToMime(path.extname(name).slice(1)) };
+});
+
+ipcMain.handle("fs:saveDoc", async (_evt, { name, content }) => {
+  if (!name) throw new Error("filename required");
+  const base = resolveBaseDir();
+  const full = safeJoin(base, name);
+  await fs.promises.writeFile(full, content ?? "", "utf-8");
+  await upsertOpened({ path: full, name });
+  return { ok: true };
+});
+
+ipcMain.handle("fs:deleteDoc", async (_evt, { name }) => {
+  if (!name) throw new Error("filename required");
+  const base = resolveBaseDir();
+  const full = safeJoin(base, name);
+  if (fs.existsSync(full)) await fs.promises.unlink(full);
+  return { ok: true };
+});
+
+// OS 기본앱으로 열기
+ipcMain.handle("fs:open", async (_evt, { name }) => {
+  if (!name) throw new Error("filename required");
+  const base = resolveBaseDir();
+  const full = safeJoin(base, name);
+  if (!fs.existsSync(full)) return { ok: false, reason: "not_found" };
+  await upsertOpened({ path: full, name });
+  const r = await shell.openPath(full);
+  return { ok: !r, reason: r || undefined };
+});
+
+/* ────────────────────────────────────────────────────────────
+ * ✅ 변경: 로그인 성공 → 역할별 창 오픈
+ *   - renderer(LoginPage.jsx)에서 auth:success 전송
+ *   - role: 'employee' | 'admin'
+ *   - 정책:
+ *      * admin: 관리자 창을 전면 표시, 필요 시 mainWindow/featureWindow 숨김
+ *      * employee: 기능부(사원) 창 추가, 메인(챗봇) 창은 유지
+ * ──────────────────────────────────────────────────────────── */
+ipcMain.on("auth:success", (_evt, payload) => {
+  const role = payload?.role;
+  if (!role) return;
+
+  if (role === "admin") {
+    createAdminWindow();
+    featureWindow?.hide?.();
+    mainWindow?.hide?.();
+    return;
+  }
+
+  // 기본: 사원
+  const mw = createMainWindow();
+  mw.show();
+  mw.focus();
+  createFeatureWindow("employee");
+});
+
+/* ────────────────────────────────────────────────────────────
+ * ✅ 변경: preload에서 역할별 기능 창 직접 열기
+ *    - 브라우저 환경 등에서 테스트할 때도 사용 가능
+ * ──────────────────────────────────────────────────────────── */
+ipcMain.handle("open-feature-window", (_evt, role = "employee") => {
+  if (role === "admin") return createAdminWindow();
+  return createFeatureWindow(role);
 });

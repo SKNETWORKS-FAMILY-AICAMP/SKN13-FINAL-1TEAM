@@ -140,6 +140,8 @@ export default function FeatureDocs() {
           onViewChange={setView}
         />
 
+        {/* ⛔️ '다시 불러오기' 영역 완전 제거 */}
+
         <div className="px-4 pb-6 overflow-auto">
           {loading ? (
             <div className="p-10 text-sm text-gray-500">불러오는 중…</div>
