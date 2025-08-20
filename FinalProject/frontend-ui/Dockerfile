@@ -2,13 +2,13 @@
 # CLIKCA (Click + Assistant) - RAG 기반 업무 보조 AI 비서
 
 # Dependencies stage - production dependencies only
-FROM node:18-alpine AS deps
+FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # Build dependencies stage - all dependencies for build
-FROM node:18-alpine AS build-deps
+FROM node:20-alpine AS build-deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
@@ -21,7 +21,7 @@ COPY . .
 RUN npm run build
 
 # Development stage
-FROM node:18-alpine AS development
+FROM node:20-alpine AS development
 WORKDIR /app
 
 # Install dependencies
