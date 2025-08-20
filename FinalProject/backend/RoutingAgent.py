@@ -9,7 +9,7 @@ from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableConfig
 
 # Import the comprehensive state and the sub-agents
-from .DocumentSearchAgentTools.AgentState import RagState
+from .DocumentSearchAgentTools.AgentState import AgentState
 from .chat_agent import agent as GeneralChatAgent
 from .DocumentSearchAgent import DocumentSearchAgent
 from .DocumentEditorAgent import DocumentEditorAgent
@@ -18,7 +18,7 @@ load_dotenv()
 
 # --- Router Logic ---
 
-def route_question(state: RagState) -> Literal["document_search", "general_chat", "document_edit"]:
+def route_question(state: AgentState) -> Literal["document_search", "general_chat", "document_edit"]:
     """
     Classifies the user's question to decide which agent should handle it, considering conversation history.
     """
