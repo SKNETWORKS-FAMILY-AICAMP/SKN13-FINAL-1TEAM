@@ -1,8 +1,8 @@
 
 from ..document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
-from ..DocumentSearchAgentTools.AgentState import RagState
+from ..DocumentSearchAgentTools.AgentState import AgentState
 
-def run_document_edit(state: RagState, llm_client) -> dict:
+def run_document_edit(state: AgentState, llm_client) -> dict:
     """
     문서 편집 LLM 호출을 실행하는 툴 함수.
     상태(state)에서 필요한 정보를 추출하고, 결과를 상태 업데이트 사전으로 반환합니다.
