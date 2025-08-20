@@ -1,5 +1,19 @@
-// ✅ components/Login/LoginPage.jsx
-import React, { useState, useEffect } from "react";
+/**
+ * components/Login/LoginPage.jsx
+ * ------------------------------------------------------------------
+ * 목적:
+ *  - 역할(사원/관리자) 선택 + 로그인
+ *  - 로그인 성공 시:
+ *     1) localStorage에 사용자/토큰/역할 저장
+ *     2) 메인 프로세스에 auth:success 송신(역할 전달)
+ *     3) preload 브릿지로 openFeatureWindow(role) 호출 → 새 창 오픈
+ *
+ * 유지점:
+ *  - 아이디 저장(역할별 저장 키 분리)
+ *  - onLoginSuccess 콜백(메인 App 상태 연동)
+ */
+
+import React, { useEffect, useState } from "react";
 import HeaderBar from "../shared/HeaderBar";
 
 const EMP_ID_KEY = "employee_saved_id";
@@ -10,12 +24,12 @@ const TOKEN_KEY = "userToken";
 export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [role, setRole] = useState("employee");
+  const [role, setRole] = useState("employee"); // 'employee' | 'admin'
   const [saveId, setSaveId] = useState(false);
+  const [error, setError] = useState("");
   const [logoError, setLogoError] = useState(false);
 
-  // 역할 변경 시 저장된 ID 불러오기
+  /** 역할 전환 시, 역할별 저장된 아이디 로드 */
   useEffect(() => {
     const key = role === "employee" ? EMP_ID_KEY : ADM_ID_KEY;
     const saved = localStorage.getItem(key);
@@ -28,13 +42,16 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
     }
   }, [role]);
 
+  /** Enter 제출 */
   const handleKeyDown = (e) => {
     if (e.key === "Enter") handleLogin();
   };
 
+  /** 로그인 시도 (여기선 mock) */
   const handleLogin = async () => {
     const isEmployee = role === "employee";
 
+    // [KEEP] 실제 로그인 API 연동부로 교체하세요.
     const ok =
       (isEmployee && userId === "test" && password === "1234") ||
       (!isEmployee && userId === "admin" && password === "admin123");
@@ -44,28 +61,38 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
       return;
     }
 
-    // 아이디 저장/삭제
+    // 역할별 아이디 저장
     const idKey = isEmployee ? EMP_ID_KEY : ADM_ID_KEY;
     if (saveId) localStorage.setItem(idKey, userId);
     else localStorage.removeItem(idKey);
 
-    // 세션 저장
+    // 세션 저장 (필요하면 더 저장)
     localStorage.setItem(TOKEN_KEY, isEmployee ? "employee-token" : "admin-token");
     localStorage.setItem(USER_KEY, userId);
 
-    // 🔔 메인 프로세스에 로그인 성공 알림
+    // 메인 프로세스에 로그인 성공 이벤트 송신 (역할 전달)
     try {
       window?.electron?.ipcRenderer?.send("auth:success", {
         role: isEmployee ? "employee" : "admin",
         userId,
       });
-    } catch (_) {}
+    } catch (e) {
+      // noop
+    }
 
-    // ✅ 사이드바 자동 오픈 방지 → 상태 false 전달
-    onLoginSuccess({
+    // 안전하게 역할별 기능창 열기 (preload 브릿지)
+    try {
+      await window?.electron?.openFeatureWindow?.(role);
+    } catch (e) {
+      // noop
+    }
+
+    // React App 내부 상태 전달
+    onLoginSuccess?.({
       id: userId,
       is_superuser: !isEmployee,
-      sidebarOpen: false, // 추가
+      sidebarOpen: false,
+      role,
     });
   };
 
@@ -74,6 +101,7 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
       <HeaderBar />
       <div className="flex items-center justify-center h-[calc(100%-40px)]">
         <div className="w-[380px] p-10">
+          {/* 로고 */}
           {logoError ? (
             <div className="h-20 flex items-center justify-center text-xl font-bold text-gray-400 mb-6">
               로고 이미지
@@ -89,22 +117,27 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
 
           <h2 className="text-md font-semibold text-left mb-4">Sign-in</h2>
 
-          {/* 사원/관리자 선택 */}
+          {/* 역할 선택(사원/관리자) */}
           <div className="flex mb-4 rounded-full overflow-hidden border border-gray-200">
             <button
               onClick={() => setRole("employee")}
-              className={`w-1/2 py-2 ${role === "employee" ? "bg-black text-white font-bold" : "bg-gray-100 text-gray-600"}`}
+              className={`w-1/2 py-2 ${
+                role === "employee" ? "bg-black text-white font-bold" : "bg-gray-100 text-gray-600"
+              }`}
             >
               사원
             </button>
             <button
               onClick={() => setRole("admin")}
-              className={`w-1/2 py-2 ${role === "admin" ? "bg-black text-white font-bold" : "bg-gray-100 text-gray-600"}`}
+              className={`w-1/2 py-2 ${
+                role === "admin" ? "bg-black text-white font-bold" : "bg-gray-100 text-gray-600"
+              }`}
             >
               관리자
             </button>
           </div>
 
+          {/* 입력 필드 */}
           <input
             type="text"
             placeholder="아이디를 입력하세요"
@@ -113,7 +146,6 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
             onKeyDown={handleKeyDown}
             className="w-full bg-gray-100 placeholder-gray-400 px-4 py-3 mb-3 rounded-lg focus:outline-none"
           />
-
           <input
             type="password"
             placeholder="비밀번호를 입력하세요"

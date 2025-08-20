@@ -11,7 +11,7 @@ from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-from .DocumentSearchAgentTools.RagState import RagState
+from .DocumentSearchAgentTools.AgentState import AgentState
 from .DocumentSearchAgentTools.retriever_tool import RAG_search_tool
 from .DocumentSearchAgentTools.agent_logic import AgentTools
 from .document_search_system_prompt import get_document_search_system_prompt 
@@ -20,7 +20,7 @@ load_dotenv()
 
 # --- Main Agent Node ---
 
-def agent_node(state: RagState, llm_with_tools: Any) -> dict:
+def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """Calls the LLM with the current state and returns the AI's response."""
     messages = state["messages"]
     if not any(isinstance(msg, SystemMessage) for msg in messages):
@@ -49,10 +49,10 @@ def DocumentSearchAgent() -> Any:
     
     llm_with_tools = llm.bind_tools(tools)
     
-    def runnable_agent_node(state: RagState):
+    def runnable_agent_node(state: AgentState):
         return agent_node(state, llm_with_tools)
 
-    graph = StateGraph(RagState)
+    graph = StateGraph(AgentState)
     graph.add_node("agent", runnable_agent_node)
     graph.add_node("tools", ToolNode(tools))
     
