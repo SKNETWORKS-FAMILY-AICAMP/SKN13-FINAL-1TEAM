@@ -1,6 +1,6 @@
 
 from langchain_openai import ChatOpenAI
-from .DocumentSearchAgentTools.editor_tool import run_document_edit
+from .DocumentEditorAgentTools.editor_tool import run_document_edit
 from .DocumentSearchAgentTools.AgentState import AgentState
 
 class DocumentEditorAgent:
