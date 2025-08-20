@@ -68,7 +68,7 @@ def RoutingAgent():
     document_editor_agent = DocumentEditorAgent()
 
     # Define the master graph
-    workflow = StateGraph(RagState)
+    workflow = StateGraph(AgentState)
 
     # Add the sub-graphs as nodes
     workflow.add_node("document_search", document_search_agent)
