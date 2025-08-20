@@ -2,17 +2,17 @@ from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Generator, Optional
+from typing import List, Generator, Optional, Any
 import json, uuid, shutil
 from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
-
 import fitz # PyMuPDF
 from docx import Document as DocxDocument # python-docx
+from langchain_core.messages.tool import ToolMessage
 
 from .RoutingAgent import RoutingAgent, generate_config
-from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event, Document
+from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
 from .llm_tools.read_hwpx import read_hwpx # Assuming this function name
 
 # FastAPI 인스턴스 생성
@@ -54,56 +54,132 @@ def get_db():
     finally:
         db.close()
 
-# --- Chat Message Handling (Existing) ---
-def _create_chat_message(db: Session, session_id: str, role: str, content: str):
-    message = ChatMessage(session_id=session_id, role=role, content=content)
+# --- Chat Message Handling ---
+def _create_chat_message(db: Session, session_id: str, role: str, content: str, message_id: str = None):
+    message = ChatMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        message_id=message_id,
+        timestamp=datetime.now()
+    )
     db.add(message)
     db.commit()
     db.refresh(message)
     return message
 
+def _create_tool_message(
+    db: Session,
+    chat_msg_id: int,
+    tool_call_id: str | None = None,
+    status: str | None = None,
+    artifact: dict | None = None,
+    raw_content: dict | str | None = None,
+) -> ToolMessageRecord:
+    """ToolMessageRecord를 DB에 저장하고 반환"""
+    tool_record = ToolMessageRecord(
+        chat_message_id=chat_msg_id,
+        tool_call_id=tool_call_id,
+        tool_status=status,
+        tool_artifact=artifact,
+        tool_raw_content=raw_content,
+    )
+    db.add(tool_record)
+    db.commit()
+    db.refresh(tool_record)
+    return tool_record
+
+
 async def _handle_tool_start(event: dict, session_id: str, db: Session):
     tool_name = event.get("name", "Unknown Tool")
-    tool_input = event["data"].get("input", {})
-    print(f"DEBUG: on_tool_start event data: {event}")
-    
-    # Format as Markdown
-    thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input: '{tool_input}'"
-    yield f"data: {json.dumps({'thinking_message': thinking_message})}\n\n"
-    
-    _create_chat_message(db, session_id, "assistant", thinking_message)
+    tool_input = event.get("data", {}).get("input", {})
+    tool_call_id = event.get("tool_call_id")
+    tool_artifact = event.get("artifact")
+
+    # 사용자 화면용 메시지
+    thinking_message = (
+        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
+        f"```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
+    )
+
+    # 1. ChatMessage 저장
+    chat_msg = _create_chat_message(db, session_id, "assistant", thinking_message)
+
+    # 2. ToolMessageRecord 저장
+    tool_raw_content = {"tool_name": tool_name, "input": tool_input}
+    _create_tool_message(
+        db,
+        chat_msg.id,
+        tool_call_id=tool_call_id,
+        status="started",
+        artifact=tool_artifact,
+        raw_content=tool_raw_content,
+    )
+
+    # 3. SSE 전송
+    yield f"data: {json.dumps({'thinking_message': thinking_message}, ensure_ascii=False)}\n\n"
+
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
-    raw_output = event["data"].get("output", "")
-    
+    raw_output = event.get("data", {}).get("output", "")
     formatted_output = "[Tool Output]: "
-    
+    tool_raw_json = None
+
     try:
-        # Attempt to parse raw_output as JSON
-        if isinstance(raw_output, str):
-            parsed_output = json.loads(raw_output)
-        elif isinstance(raw_output, dict):
-            parsed_output = raw_output
+        if isinstance(raw_output, ToolMessage):
+            tool_raw_json = {
+                "content": raw_output.content,
+                "type": getattr(raw_output, "type", None),
+                "tool_call_id": getattr(raw_output, "tool_call_id", None),
+                "artifact": getattr(raw_output, "artifact", None),
+                "status": getattr(raw_output, "status", None),
+            }
+            parsed_output = raw_output.content
         else:
-            parsed_output = None # Not a JSON string or dict
+            parsed_output = str(raw_output)
+            tool_raw_json = {"raw": parsed_output}
 
-        if parsed_output:
-            # If it's JSON, pretty-print it in a Markdown code block
-            formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+        # 사용자용 포맷팅
+        if isinstance(parsed_output, str):
+            try:
+                parsed_json = json.loads(parsed_output)
+                formatted_output += (
+                    f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
+                )
+            except json.JSONDecodeError:
+                formatted_output += f"\n```\n{parsed_output}\n```"
+        elif isinstance(parsed_output, dict):
+            formatted_output += (
+                f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+            )
         else:
-            # Otherwise, just put the string in backticks
-            formatted_output += f"`{str(raw_output)}`"
-    except json.JSONDecodeError:
-        # If it's a string but not valid JSON, treat as plain string
-        formatted_output += f"`{str(raw_output)}`"
+            formatted_output += f"`{str(parsed_output)}`"
+
     except Exception as e:
-        # Catch any other errors during processing
-        formatted_output += f"`Error processing tool output: {e}`"
-        print(f"Error processing tool output: {raw_output} - {e}") # Log error for debugging
+        formatted_output += f"`Error processing output: {e}`"
+        print(f"[Error] raw_output={raw_output} -> {e}")
 
-    yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
-    
-    _create_chat_message(db, session_id, "tool", formatted_output)
+    # 1. SSE 전송
+    yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
+
+    # 2. ChatMessage 저장
+    chat_msg = _create_chat_message(
+        db,
+        session_id,
+        "tool",
+        content=json.dumps(tool_raw_json, ensure_ascii=False),
+    )
+
+    # 3. ToolMessageRecord 저장
+    _create_tool_message(
+        db,
+        chat_msg.id,
+        tool_call_id=tool_raw_json.get("tool_call_id"),
+        status=tool_raw_json.get("status", "finished"),
+        artifact=tool_raw_json.get("artifact"),
+        raw_content=tool_raw_json,
+    )
+
 
 # --- Pydantic Models (Existing) ---
 class MessageSaveRequest(BaseModel):
