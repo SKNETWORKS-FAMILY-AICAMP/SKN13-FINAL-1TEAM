@@ -20,7 +20,7 @@ load_dotenv()
 
 # --- Main Agent Node ---
 
-def agent_node(state: RagState, llm_with_tools: Any) -> dict:
+def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """Calls the LLM with the current state and returns the AI's response."""
     messages = state["messages"]
     if not any(isinstance(msg, SystemMessage) for msg in messages):
@@ -49,10 +49,10 @@ def DocumentSearchAgent() -> Any:
     
     llm_with_tools = llm.bind_tools(tools)
     
-    def runnable_agent_node(state: RagState):
+    def runnable_agent_node(state: AgentState):
         return agent_node(state, llm_with_tools)
 
-    graph = StateGraph(RagState)
+    graph = StateGraph(AgentState)
     graph.add_node("agent", runnable_agent_node)
     graph.add_node("tools", ToolNode(tools))
     

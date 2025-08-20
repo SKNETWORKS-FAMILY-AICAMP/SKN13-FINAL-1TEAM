@@ -30,7 +30,7 @@ class AgentTools:
         return {"expanded_queries": queries}
 
     @tool
-    def route_query_tool(self, state: RagState) -> Dict[str, Any]:
+    def route_query_tool(self, state: AgentState) -> Dict[str, Any]:
         """
         LLM을 사용하여 사용자의 최신 질문이 후속 질문인지, 신규 검색인지 지능적으로 판단합니다.
         """
@@ -67,7 +67,7 @@ class AgentTools:
         return {"is_follow_up": is_follow_up, "original_query": last_query}
 
     @tool
-    def handle_follow_up_tool(self, state: RagState) -> Dict[str, Any]:
+    def handle_follow_up_tool(self, state: AgentState) -> Dict[str, Any]:
         """
         후속 질문 처리, 상태 변경 없이 기존 retrieved_docs 사용. (의도적인 No-Op)
         """

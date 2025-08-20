@@ -10,7 +10,7 @@ class DocumentEditorAgent:
         """
         self.llm_client = ChatOpenAI(model_name='gpt-4o', temperature=0)
 
-    def run(self, state: RagState) -> RagState:
+    def run(self, state: AgentState) -> AgentState:
         """
         상태를 기반으로 문서 편집 툴을 호출하고, 업데이트된 상태를 반환합니다.
         """
