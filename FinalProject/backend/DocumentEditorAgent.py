@@ -1,7 +1,7 @@
 
 from langchain_openai import ChatOpenAI
 from .DocumentSearchAgentTools.editor_tool import run_document_edit
-from .DocumentSearchAgentTools.AgentState import RagState
+from .DocumentSearchAgentTools.AgentState import AgentState
 
 class DocumentEditorAgent:
     def __init__(self):
