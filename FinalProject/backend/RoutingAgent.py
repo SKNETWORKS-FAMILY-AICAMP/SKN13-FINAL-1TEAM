@@ -12,12 +12,13 @@ from langchain_core.runnables import RunnableConfig
 from .DocumentSearchAgentTools.RagState import RagState
 from .chat_agent import agent as GeneralChatAgent
 from .DocumentSearchAgent import DocumentSearchAgent
+from .DocumentEditorAgent import DocumentEditorAgent
 
 load_dotenv()
 
 # --- Router Logic ---
 
-def route_question(state: RagState) -> Literal["document_search", "general_chat"]:
+def route_question(state: RagState) -> Literal["document_search", "general_chat", "document_edit"]:
     """
     Classifies the user's question to decide which agent should handle it, considering conversation history.
     """
@@ -28,17 +29,18 @@ def route_question(state: RagState) -> Literal["document_search", "general_chat"
     
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
     
-    # Modified system_prompt to include history and better routing instructions
+    # Modified system_prompt to include the new DocumentEditorAgent
     system_prompt = f"""You are an expert at routing a user's question to the correct specialized agent.
 You must consider the entire conversation history to make an accurate routing decision.
 
-There are two available agents:
-1.  **DocumentSearchAgent**: Use this agent for questions that require searching through specific internal documents, such as financial reports, audit results, internal regulations, or other official company materials. This includes follow-up questions related to previous document searches (e.g., asking for a download link after a document was found).
-2.  **GeneralChatAgent**: Use this for all other questions, including general conversation, greetings, or questions about topics not contained in the internal documents.
+There are three available agents:
+1.  **DocumentSearchAgent**: Use this agent for questions that require searching through specific internal documents, such as financial reports, audit results, internal regulations, or other official company materials. This includes follow-up questions related to previous document searches.
+2.  **DocumentEditorAgent**: Use this agent for requests to edit, modify, change, or add to the document content that the user is currently working with. The user's message will contain the editing command and the document's current content.
+3.  **GeneralChatAgent**: Use this for all other questions, including general conversation, greetings, or questions about topics not contained in the internal documents.
 
 Based on the conversation history and the user's latest question, which agent should be used?
 
-Respond with ONLY 'DocumentSearchAgent' or 'GeneralChatAgent'.
+Respond with ONLY 'DocumentSearchAgent', 'DocumentEditorAgent', or 'GeneralChatAgent'.
 """
 
     # Invoke LLM with the system prompt and the entire message history
@@ -49,6 +51,8 @@ Respond with ONLY 'DocumentSearchAgent' or 'GeneralChatAgent'.
 
     if "DocumentSearchAgent" in decision:
         return "document_search"
+    elif "DocumentEditorAgent" in decision:
+        return "document_edit"
     else:
         return "general_chat"
 
@@ -61,6 +65,7 @@ def RoutingAgent():
     # Instantiate the sub-agents that this router will call
     general_agent = GeneralChatAgent()
     document_search_agent = DocumentSearchAgent()
+    document_editor_agent = DocumentEditorAgent()
 
     # Define the master graph
     workflow = StateGraph(RagState)
@@ -68,6 +73,7 @@ def RoutingAgent():
     # Add the sub-graphs as nodes
     workflow.add_node("document_search", document_search_agent)
     workflow.add_node("general_chat", general_agent)
+    workflow.add_node("document_edit", document_editor_agent)
 
     # The entry point is the router function
     workflow.set_conditional_entry_point(
@@ -75,12 +81,14 @@ def RoutingAgent():
         {
             "document_search": "document_search",
             "general_chat": "general_chat",
+            "document_edit": "document_edit",
         }
     )
 
     # Add edges from the sub-agents to the end
     workflow.add_edge("document_search", END)
     workflow.add_edge("general_chat", END)
+    workflow.add_edge("document_edit", END)
 
     # Compile the master agent
     return workflow.compile()

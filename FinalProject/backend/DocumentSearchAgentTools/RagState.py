@@ -17,3 +17,9 @@ class RagState(TypedDict):
     is_follow_up: bool
     # 대화 기록
     messages: Annotated[list, add_messages]
+
+    # --- Document Editor Agent를 위한 추가 상태 ---
+    # 사용자의 편집 명령어
+    user_command: str | None
+    # 편집할 문서의 현재 내용
+    document_content: str | None
