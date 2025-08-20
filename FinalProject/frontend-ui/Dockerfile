@@ -1,12 +1,13 @@
 # Frontend Dockerfile
 # CLIKCA (Click + Assistant) - RAG 기반 업무 보조 AI 비서
 
-# Build stage with optimized caching
+# Dependencies stage - production dependencies only
 FROM node:18-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
+# Build dependencies stage - all dependencies for build
 FROM node:18-alpine AS build-deps
 WORKDIR /app
 COPY package*.json ./
@@ -16,6 +17,7 @@ RUN npm ci && npm cache clean --force
 FROM build-deps AS build
 WORKDIR /app
 COPY . .
+# Ensure all dependencies are available for build
 RUN npm run build
 
 # Development stage
