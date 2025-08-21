@@ -521,7 +521,7 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]}
 
 from .DocumentEditorAgent import DocumentEditorAgent # GigaChad Added
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import ToolMessage, AIMessage
 
 # ... (other models)
 
@@ -535,11 +535,7 @@ class ChatRequest(BaseModel):
 
 # ... (other code)
 
-# @api_router.get("/llm/stream")
-# async def llm_stream(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
-#     config = generate_config(session_id)
-#     chat_agent = RoutingAgent()
-#     return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
+# @api_router.get("/llm/stream") ... (old endpoint commented out)
 
 @api_router.post("/llm/stream")
 async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
@@ -549,16 +545,32 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
         agent_context = request.agent_context
         messages = agent_context.get("messages", [])
         
+        # Reconstruct the assistant message with the tool call
+        assistant_message = AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": request.tool_result["tool_call_id"],
+                    "type": "function",
+                    "function": {
+                        "name": "read_document_content",
+                        "arguments": "{}" # No arguments
+                    }
+                }
+            ]
+        )
+
+        # Create the tool message with the result from the frontend
         tool_message = ToolMessage(
             content=request.tool_result["result"],
             tool_call_id=request.tool_result["tool_call_id"]
         )
+
+        messages.append(assistant_message)
         messages.append(tool_message)
         
         input_data = {"messages": messages}
         
-        # For now, we assume the agent to continue is the DocumentEditorAgent
-        # A more robust solution would properly serialize/deserialize the agent state
         agent = DocumentEditorAgent()
         
         return StreamingResponse(_stream_llm_response_v2(input_data, agent, config, db, request.session_id), media_type="text/event-stream")
