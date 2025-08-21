@@ -3,7 +3,7 @@ from langchain_openai import ChatOpenAI
 from backend.document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
 from bs4 import BeautifulSoup
 import re
-import requests # requests 임포트 추가
+import requests
 
 @tool
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
@@ -41,8 +41,6 @@ def edit_html_document(document_content: str, instruction: str) -> str:
             else:
                 soup.append(new_h1)
     elif "문단 추가" in instruction or "추가해줘" in instruction:
-        # "문서에 '새로운 문단입니다.' 문단을 추가해줘" 또는 "문서에 '재미있는 농담'을 추가해줘"
-        # instruction에서 추가할 내용을 추출
         match = re.search(r"'(.*?)'", instruction)
         if match:
             text_to_add = match.group(1)
@@ -59,7 +57,6 @@ def edit_html_document(document_content: str, instruction: str) -> str:
         img_tag = soup.find('img')
         if img_tag:
             img_tag.decompose()
-    # TODO: 더 많은 HTML 편집 시나리오를 여기에 추가해야 합니다.
 
     return str(soup)
 
@@ -80,10 +77,6 @@ def request_frontend_document_content() -> str:
     """
     print("--- Running request_frontend_document_content Tool ---")
     try:
-        # Electron 메인 프로세스의 HTTP 서버 주소
-        # Electron 앱이 실행되는 로컬 환경의 IP 주소와 포트를 사용해야 합니다.
-        # 여기서는 예시로 localhost:8080을 사용합니다.
-        # 실제 배포 환경에서는 Electron 앱이 실행되는 머신의 IP 주소를 사용해야 합니다.
         response = requests.get("http://localhost:8080/get-document-content")
         response.raise_for_status() # HTTP 오류 발생 시 예외 발생
         data = response.json()
@@ -103,7 +96,7 @@ def run_document_edit(user_command: str, document_content: str) -> str:
 
     llm_client = ChatOpenAI(model_name='gpt-4o', temperature=0)
 
-    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document, read_document_content, request_frontend_document_content]) # 새로운 툴 추가
+    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document, read_document_content, request_frontend_document_content])
 
     user_prompt_content = f"""
     **현재 HTML 문서 내용:**
@@ -127,6 +120,7 @@ def run_document_edit(user_command: str, document_content: str) -> str:
         ]
     )
 
+    # GPT의 응답이 Tool Call이면 Tool을 실행하고 결과를 반환
     if response.tool_calls:
         for tool_call in response.tool_calls:
             if tool_call.function.name == "edit_html_document":
@@ -147,11 +141,9 @@ def run_document_edit(user_command: str, document_content: str) -> str:
             elif tool_call.function.name == "request_frontend_document_content":
                 # 프론트엔드에서 content를 가져온 후, 그 content를 사용하여 다시 GPT에게 요청을 보내거나
                 # 해당 content를 기반으로 다른 툴을 호출하도록 로직을 추가해야 합니다.
-                # 여기서는 일단 가져온 content를 반환합니다.
                 fetched_content = request_frontend_document_content()
-                # 가져온 content를 사용하여 다시 run_document_edit을 호출하거나,
-                # GPT에게 다시 판단을 맡길 수 있습니다.
-                # 여기서는 간단하게 가져온 content를 반환하도록 하겠습니다.
-                return fetched_content
+                # 가져온 content를 사용하여 다시 run_document_edit을 호출하여 GPT에게 재판단 요청
+                return run_document_edit(user_command, fetched_content)
     
+    # Tool Call이 아니면 GPT의 직접 응답 (수정된 HTML)을 반환
     return response.content

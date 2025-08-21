@@ -61,36 +61,7 @@ EDIT REQUEST:
 
     # Tool Calling 수행
     response = llm_with_tools.invoke(messages)
-    
-    # GPT의 응답이 Tool Call이면 Tool을 실행하고 결과를 반환
-    if response.tool_calls:
-        tool_outputs = []
-        for tool_call in response.tool_calls:
-            # 여기서 실제 툴 함수를 호출해야 합니다.
-            # DocumentEditorAgentTools/editor_tool.py에 정의된 함수들을 직접 호출합니다.
-            if tool_call.function.name == "run_document_edit":
-                # run_document_edit은 이미 내부적으로 다른 툴을 바인딩하고 있으므로,
-                # 여기서는 run_document_edit의 인자를 직접 전달합니다.
-                # 이 부분은 LangGraph의 ToolNode와 유사하게 동작해야 합니다.
-                # 현재 구조에서는 run_document_edit이 최종 결과를 반환하므로,
-                # 여기서 직접 호출하고 그 결과를 tool_outputs에 추가합니다.
-                # 하지만 LangGraph의 AgentState는 ToolMessage를 기대하므로,
-                # ToolMessage 형태로 변환하여 반환해야 합니다.
-                # 이 부분은 LangGraph의 ToolNode가 자동으로 처리하는 부분입니다.
-                # 여기서는 수동으로 ToolMessage를 생성합니다.
-                from .DocumentEditorAgentTools.editor_tool import run_document_edit
-                output = run_document_edit(
-                    user_command=tool_call.function.args["user_command"],
-                    document_content=tool_call.function.args["document_content"]
-                )
-                tool_outputs.append(ToolMessage(content=output, tool_call_id=tool_call.id))
-            # 다른 툴이 있다면 여기에 추가
-            # elif tool_call.function.name == "another_tool":
-            #    ...
-        return {"messages": [response] + tool_outputs}
-    else:
-        # Tool Call이 아니면 GPT의 직접 응답을 반환
-        return {"messages": [response]}
+    return {"messages": [response]}
 
 
 # -------------------------------
