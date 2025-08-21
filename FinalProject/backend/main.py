@@ -521,7 +521,7 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]}
 
 from .DocumentEditorAgent import DocumentEditorAgent # GigaChad Added
-from langchain_core.messages import ToolMessage, AIMessage
+from langchain_core.messages import ToolMessage, AIMessage, message_from_dict
 
 # ... (other models)
 
@@ -543,7 +543,10 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
 
     if request.is_tool_response and request.tool_result:
         agent_context = request.agent_context
-        messages = agent_context.get("messages", [])
+        
+        # Deserialize messages from dicts back to LangChain objects
+        message_dicts = agent_context.get("messages", [])
+        messages = [message_from_dict(m) for m in message_dicts]
         
         # Reconstruct the assistant message with the tool call
         assistant_message = AIMessage(
@@ -594,6 +597,13 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
         return StreamingResponse(_stream_llm_response_v2(input_data, chat_agent, config, db, request.session_id), media_type="text/event-stream")
 
 
+from langchain_core.messages import BaseMessage
+
+def _serialize_message(message):
+    if isinstance(message, BaseMessage):
+        return message.dict()
+    return message
+
 async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db: Session, session_id: str) -> Generator:
     full_response_content = ""
     last_tool_call_id = None # Variable to hold the ID from the stream
@@ -603,7 +613,6 @@ async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db
 
         if kind == "on_chat_model_stream":
             chunk = event["data"]["chunk"]
-            # If the model is starting a tool call, it will be in the tool_call_chunks
             if chunk.tool_call_chunks:
                 for tool_chunk in chunk.tool_call_chunks:
                     if tool_chunk.get("id"):
@@ -620,18 +629,18 @@ async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db
             print(event)
             print(f"--- END RAW TOOL START EVENT ---")
             if event["name"] == "read_document_content":
-                tool_call_id = last_tool_call_id # Use the ID captured from the stream
+                tool_call_id = last_tool_call_id
                 
                 if not tool_call_id:
                     print("ERROR: tool_call_id was not captured from the stream before on_tool_start.")
-                    # Handle error case, maybe by sending an error to the client
                     yield f"data: {json.dumps({'error': 'Could not determine tool_call_id.'})}\n\n"
                     return
 
-                # This context will be sent back by the frontend
+                serializable_messages = [_serialize_message(m) for m in input_data["messages"]]
+
                 agent_context = {
                     "agent_type": "DocumentEditorAgent",
-                    "messages": input_data["messages"],
+                    "messages": serializable_messages,
                     "tool_call_id": tool_call_id,
                 }
                 
@@ -640,7 +649,7 @@ async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db
                     "agent_context": agent_context
                 }
                 yield f"data: {json.dumps(response_data, ensure_ascii=False)}\n\n"
-                return # Stop the generator
+                return
 
             # For other tools, use the original handler
             async for chunk in _handle_tool_start(event, session_id, db):
