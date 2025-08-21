@@ -564,14 +564,35 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 yield chunk
         
         elif kind == "on_end": # New block to capture final state
-            # Check if the final state contains a 'final_answer' (which is our updated document)
             final_state = event.get("data", {}).get("output", {})
-            print(f"--- Final State: {final_state}") # Add this line
-            if "final_answer" in final_state:
-                updated_document_content = final_state["final_answer"]
-                print(f"--- Updated Document Content (from final_answer): {updated_document_content[:100]}...") # Add this line
-                # Stream this back to the frontend with a specific event type
-                yield f"data: {json.dumps({'document_update': updated_document_content}, ensure_ascii=False)}\n\n"
+            print(f"--- Final State (on_end): {final_state}") # More specific log
+
+            # Try to find the final_answer from the messages in the final state
+            # This is a more robust way to get the agent's final output
+            final_answer_content = None
+            if "messages" in final_state:
+                for msg in reversed(final_state["messages"]): # Check messages in reverse order
+                    if isinstance(msg, dict) and msg.get("final_answer"):
+                        final_answer_content = msg["final_answer"]
+                        break
+                    elif isinstance(msg, ToolMessage) and msg.content: # Check if it's a ToolMessage with content
+                        # This might be the output of run_document_edit
+                        final_answer_content = msg.content
+                        break
+                    elif isinstance(msg, str) and "final_answer" in msg: # Simple string check
+                        try:
+                            parsed_msg = json.loads(msg)
+                            if parsed_msg.get("final_answer"):
+                                final_answer_content = parsed_msg["final_answer"]
+                                break
+                        except json.JSONDecodeError:
+                            pass # Not a JSON string
+
+            if final_answer_content:
+                print(f"--- Updated Document Content (from final_answer_content): {final_answer_content[:100]}...")
+                yield f"data: {json.dumps({'document_update': final_answer_content}, ensure_ascii=False)}\n\n"
+            else:
+                print("--- No final_answer_content found in final_state messages. ---")
                 # We might also want to save this updated document content to the database
                 # if it's associated with a specific document ID.
                 # This would require passing the document ID through the state or session.
