@@ -520,8 +520,27 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
     messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]}
 
-from .DocumentEditorAgent import DocumentEditorAgent # GigaChad Added
-from langchain_core.messages import ToolMessage, AIMessage, message_from_dict
+from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, SystemMessage, BaseMessage
+
+# GigaChad Added: Serialization/Deserialization helpers
+def _serialize_message(message):
+    if isinstance(message, BaseMessage):
+        return message.dict()
+    return message # Should not happen if logic is correct
+
+def _message_from_dict(message_dict: dict) -> BaseMessage:
+    message_type = message_dict.get("type")
+    if message_type == "human":
+        return HumanMessage(**message_dict)
+    elif message_type == "ai":
+        return AIMessage(**message_dict)
+    elif message_type == "system":
+        return SystemMessage(**message_dict)
+    elif message_type == "tool":
+        return ToolMessage(**message_dict)
+    else:
+        raise ValueError(f"Unknown message type: {message_type}")
+
 
 # ... (other models)
 
@@ -535,8 +554,6 @@ class ChatRequest(BaseModel):
 
 # ... (other code)
 
-# @api_router.get("/llm/stream") ... (old endpoint commented out)
-
 @api_router.post("/llm/stream")
 async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
     config = generate_config(request.session_id)
@@ -544,11 +561,9 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
     if request.is_tool_response and request.tool_result:
         agent_context = request.agent_context
         
-        # Deserialize messages from dicts back to LangChain objects
         message_dicts = agent_context.get("messages", [])
-        messages = [message_from_dict(m) for m in message_dicts]
+        messages = [_message_from_dict(m) for m in message_dicts]
         
-        # Reconstruct the assistant message with the tool call
         assistant_message = AIMessage(
             content="",
             tool_calls=[
@@ -560,7 +575,6 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
             ]
         )
 
-        # Create the tool message with the result from the frontend
         tool_message = ToolMessage(
             content=request.tool_result["result"],
             tool_call_id=request.tool_result["tool_call_id"]
@@ -570,25 +584,23 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
         messages.append(tool_message)
         
         input_data = {"messages": messages}
-        
         agent = DocumentEditorAgent()
-        
         return StreamingResponse(_stream_llm_response_v2(input_data, agent, config, db, request.session_id), media_type="text/event-stream")
 
     else:
         chat_agent = RoutingAgent()
         
-        history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == request.session_id).order_by(ChatMessage.timestamp).all()
+        history_from_db = db.query(ChatMessage).filter(ChatMessage.session_id == request.session_id).order_by(ChatMessage.timestamp).all()
         
         messages = []
-        for msg in history_messages:
-            if msg.role == "tool":
-                continue
-            role = "ai" if msg.role == "assistant" else msg.role
-            messages.append((role, msg.content))
+        for msg in history_from_db:
+            if msg.role == "user":
+                messages.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                messages.append(AIMessage(content=msg.content))
         
-        if not messages or messages[-1] != ("user", request.message):
-            messages.append(("user", request.message))
+        if not messages or messages[-1].content != request.message:
+            messages.append(HumanMessage(content=request.message))
 
         input_data = {"messages": messages}
         if request.document_content:
@@ -597,16 +609,9 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
         return StreamingResponse(_stream_llm_response_v2(input_data, chat_agent, config, db, request.session_id), media_type="text/event-stream")
 
 
-from langchain_core.messages import BaseMessage
-
-def _serialize_message(message):
-    if isinstance(message, BaseMessage):
-        return message.dict()
-    return message
-
 async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db: Session, session_id: str) -> Generator:
     full_response_content = ""
-    last_tool_call_id = None # Variable to hold the ID from the stream
+    last_tool_call_id = None
     
     async for event in agent.astream_events(input_data, config=config):
         kind = event["event"]
@@ -655,12 +660,6 @@ async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db
             async for chunk in _handle_tool_start(event, session_id, db):
                 yield chunk
         
-        elif kind == "on_chat_model_stream":
-            content = event["data"]["chunk"].content
-            if content:
-                yield f"data: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
-                full_response_content += content
-                
         elif kind == "on_tool_end":
             async for chunk in _handle_tool_end(event, session_id, db):
                 yield chunk
