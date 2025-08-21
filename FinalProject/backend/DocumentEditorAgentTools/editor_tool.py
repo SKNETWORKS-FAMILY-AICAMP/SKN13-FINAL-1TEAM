@@ -61,13 +61,15 @@ def edit_html_document(document_content: str, instruction: str) -> str:
     return str(soup)
 
 @tool
-def read_document_content(document_content: str) -> str:
+def read_document_content() -> str:
     """
-    현재 편집 중인 문서의 전체 내용을 읽어서 반환합니다.
-    GPT가 문서의 현재 상태를 파악해야 할 때 사용합니다.
+    현재 편집 중인 문서의 전체 내용을 읽기 위해 프론트엔드에 요청합니다.
+    GPT가 문서의 현재 상태를 파악해야 할 때 사용합니다. 이 툴은 파라미터가 필요 없습니다.
     """
-    print("--- Running read_document_content Tool ---")
-    return document_content
+    print("--- Triggering read_document_content Tool (will be intercepted) ---")
+    # This tool's body is not executed. It's a signal.
+    # Returning a placeholder.
+    return "Requesting document content from the frontend..."
 
 @tool
 def run_document_edit(user_command: str, document_content: str) -> str:
