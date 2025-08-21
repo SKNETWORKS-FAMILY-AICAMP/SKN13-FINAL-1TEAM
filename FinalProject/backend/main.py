@@ -521,13 +521,13 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]}
 
 @api_router.get("/llm/stream")
-async def llm_stream(session_id: str, prompt: str, db: Session = Depends(get_db)):
+async def llm_stream(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
     config = generate_config(session_id)
     chat_agent = RoutingAgent()
 
-    return StreamingResponse(_stream_llm_response(session_id, prompt, chat_agent, config, db), media_type="text/event-stream")
+    return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
 
-async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config, db: Session) -> Generator:
+async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
     full_response_content = ""
     
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
@@ -543,6 +543,9 @@ async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config,
         messages.append(("user", prompt))
 
     input_data = {"messages": messages}
+    # Add document_content to input_data if provided
+    if document_content:
+        input_data["document_content"] = document_content
 
     async for event in chat_agent.astream_events(input_data, config=config):
         kind = event["event"]
