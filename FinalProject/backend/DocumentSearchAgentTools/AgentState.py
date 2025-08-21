@@ -23,3 +23,5 @@ class AgentState(TypedDict):
     user_command: str | None
     # 편집할 문서의 현재 내용
     document_content: str | None
+    # 현재 문서 편집 세션 중인지 여부
+    is_document_editing_session: bool | None

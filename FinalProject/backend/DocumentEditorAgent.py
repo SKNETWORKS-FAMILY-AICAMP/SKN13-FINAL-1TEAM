@@ -21,30 +21,56 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     document_content = state.get("document_content")
 
     if not user_command or not document_content:
+        # If initial command or content is missing, return an error message.
+        # This might need to be handled differently if it's an iterative turn.
         return {"messages": [("user", "문서 편집에 필요한 정보가 부족합니다.")]}
 
     messages = [
-        SystemMessage(content="You are an assistant that uses tools to edit documents."),
-        (
-            "user",
-            f"Please edit the following document based on my request.\n\n"
-            f"DOCUMENT CONTENT:\n---\n{document_content}\n---\n\n"
-            f"EDIT REQUEST: {user_command}"
-        ),
+        SystemMessage(content="You are an assistant that uses tools to edit documents. You will receive a document and an edit request. Use the 'run_document_edit' tool to perform the edit. After editing, the updated document will be provided back to you. If the user provides further instructions, continue editing. If the user indicates they are done, you can finalize."),
+        ("user", f"Please edit the following document based on my request.\n\n"
+                 f"DOCUMENT CONTENT:\n---\n{document_content}\n---\n\n"
+                 f"EDIT REQUEST: {user_command}")
     ]
     
     response = llm_with_tools.invoke(messages)
     
     return {"messages": [response]}
 
+def update_document_state_node(state: AgentState) -> dict:
+    """
+    툴 실행 결과를 AgentState의 document_content에 반영하는 노드.
+    """
+    print("--- Updating Document State with Tool Output ---")
+    tool_outputs = [msg for msg in state['messages'] if isinstance(msg, ToolMessage)]
+    if tool_outputs:
+        # Get the content of the last tool message, which should be the edited document
+        last_tool_output = tool_outputs[-1].content
+        print(f"--- Last Tool Output (Edited Document Snippet): {last_tool_output[:100]}... ---")
+        return {"document_content": last_tool_output}
+    return {} # No update if no tool output
+
+def decide_next_step(state: AgentState) -> str:
+    """
+    다음 단계를 결정하는 조건부 함수.
+    사용자의 명령에 '완료' 또는 '끝'과 같은 종료 지시가 포함되어 있는지 확인합니다.
+    """
+    print("--- Deciding Next Step ---")
+    user_command = state.get("user_command", "").lower()
+    # For simplicity, let's assume any command after an edit means continue,
+    # unless a specific "done" or "finalize" command is given.
+    # This part can be made more sophisticated based on LLM's output or user intent.
+    if "완료" in user_command or "끝" in user_command or "종료" in user_command:
+        return "finalize"
+    return "continue"
+
 def final_node(state: AgentState) -> dict:
     """
-    툴 실행 결과를 최종 답변으로 정리하는 노드.
+    최종 답변을 정리하는 노드.
     """
     print("--- Finalizing DocumentEditorAgent ---")
-    tool_outputs = [msg for msg in state['messages'] if isinstance(msg, ToolMessage)]
-    last_tool_output = tool_outputs[-1].content if tool_outputs else ""
-    return {"final_answer": last_tool_output}
+    # The final answer should be the last known document_content
+    final_doc_content = state.get("document_content", "문서 편집이 완료되었습니다.")
+    return {"final_answer": final_doc_content}
 
 def DocumentEditorAgent() -> Any:
     """
@@ -60,11 +86,22 @@ def DocumentEditorAgent() -> Any:
     
     graph.add_node("agent", runnable_agent_node)
     graph.add_node("tools", ToolNode(tools))
+    graph.add_node("update_document_state", update_document_state_node)
     graph.add_node("final_answer_node", final_node)
 
     graph.set_entry_point("agent")
     graph.add_edge("agent", "tools")
-    graph.add_edge("tools", "final_answer_node")
+    graph.add_edge("tools", "update_document_state")
+    
+    # Conditional edge from update_document_state
+    graph.add_conditional_edges(
+        "update_document_state",
+        decide_next_step,
+        {
+            "continue": "agent",  # Loop back to agent for more commands
+            "finalize": "final_answer_node" # Go to final node
+        }
+    )
     graph.add_edge("final_answer_node", END)
 
     return graph.compile()
