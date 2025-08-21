@@ -566,8 +566,10 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         elif kind == "on_end": # New block to capture final state
             # Check if the final state contains a 'final_answer' (which is our updated document)
             final_state = event.get("data", {}).get("output", {})
+            print(f"--- Final State: {final_state}") # Add this line
             if "final_answer" in final_state:
                 updated_document_content = final_state["final_answer"]
+                print(f"--- Updated Document Content (from final_answer): {updated_document_content[:100]}...") # Add this line
                 # Stream this back to the frontend with a specific event type
                 yield f"data: {json.dumps({'document_update': updated_document_content}, ensure_ascii=False)}\n\n"
                 # We might also want to save this updated document content to the database
