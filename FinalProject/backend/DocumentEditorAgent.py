@@ -36,9 +36,10 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
             "Your primary goal is to assist users with editing a document.\n"
             "1. First, you MUST know the content of the document you are editing.\n"
             "2. If the document content is not provided in the user's message, you MUST use the `read_document_content` tool to request it. This tool requires no parameters.\n"
-            "3. Once you have the document content, you can proceed with the user's edit request.\n"
-            "4. Use the `run_document_edit` or `replace_text_in_document` tools to perform the actual edits.\n"
-            "5. Return the final, updated document content to the user."
+            "3. The result of this tool will be provided to you in a subsequent message with the role 'tool'. You MUST read this message to get the document content.\n"
+            "4. Once you have the document content from the 'tool' message, you can proceed with the user's edit request.\n"
+            "5. Use the `run_document_edit` or `replace_text_in_document` tools to perform the actual edits.\n"
+            "6. Return the final, updated document content to the user."
         )
         messages = [SystemMessage(content=system_prompt_content)] + messages
 
