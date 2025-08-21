@@ -1,55 +1,118 @@
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from backend.document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
+from bs4 import BeautifulSoup # BeautifulSoup 임포트 추가
 
 @tool
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
     """
     주어진 문서 내용에서 특정 텍스트를 찾아 다른 텍스트로 교체합니다.
-    이 툴은 문서 내의 특정 문자열을 정확히 교체해야 할 때 사용합니다.
-    예시: replace_text_in_document(document_content="Hello world", old_text="world", new_text="GigaChad")
+    GPT가 단순 문자열 치환을 해야 할 때 사용하는 경량 툴.
     """
     print(f"--- Running replace_text_in_document Tool: Replacing '{old_text}' with '{new_text}' ---")
     return document_content.replace(old_text, new_text)
 
 @tool
+def edit_html_document(document_content: str, instruction: str) -> str:
+    """
+    주어진 HTML 문서 내용과 편집 지시를 바탕으로 HTML 문서를 수정합니다.
+    이 툴은 HTML 구조를 이해하고, 특정 요소의 텍스트를 변경하거나, 요소를 추가/삭제하는 등의 복잡한 편집을 수행할 수 있습니다.
+    예시:
+    - "제목을 '새로운 제목'으로 변경해줘"
+    - "본문에 '안녕하세요'라는 문단을 추가해줘"
+    - "첫 번째 이미지 태그를 삭제해줘"
+    """
+    print(f"--- Running edit_html_document Tool with instruction: '{instruction}' ---")
+    soup = BeautifulSoup(document_content, 'html.parser')
+
+    # 여기에 instruction에 따른 HTML 수정 로직을 구현해야 합니다.
+    # 이 부분은 GPT가 instruction을 해석하여 어떤 HTML 조작을 할지 결정해야 합니다.
+    # 현재는 GPT가 직접 HTML을 수정하는 것이 아니라, GPT가 이 툴을 호출하고,
+    # 이 툴 내부에서 instruction을 파싱하여 HTML을 조작하는 방식입니다.
+    # 이 툴은 GPT가 HTML을 직접 조작하는 대신, 구조화된 방식으로 HTML을 수정할 수 있도록 돕습니다.
+
+    # 예시: instruction에 '제목'이라는 단어가 포함되어 있으면 h1 태그를 수정
+    if "제목" in instruction:
+        new_title = instruction.split("'")[1] if "'" in instruction else "새로운 제목"
+        h1_tag = soup.find('h1')
+        if h1_tag:
+            h1_tag.string = new_title
+        else:
+            # h1 태그가 없으면 body에 추가
+            new_h1 = soup.new_tag("h1")
+            new_h1.string = new_title
+            if soup.body:
+                soup.body.insert(0, new_h1)
+            else:
+                soup.append(new_h1)
+    elif "문단 추가" in instruction:
+        new_paragraph_text = instruction.split("'")[1] if "'" in instruction else "새로운 문단입니다."
+        new_p = soup.new_tag("p")
+        new_p.string = new_paragraph_text
+        if soup.body:
+            soup.body.append(new_p)
+        else:
+            soup.append(new_p)
+    elif "이미지 삭제" in instruction:
+        img_tag = soup.find('img')
+        if img_tag:
+            img_tag.decompose()
+    # TODO: 더 많은 HTML 편집 시나리오를 여기에 추가해야 합니다.
+    # 이 부분은 GPT가 instruction을 기반으로 어떤 HTML 조작을 할지 결정하는 로직이 필요합니다.
+    # 현재는 매우 기본적인 예시만 포함되어 있습니다.
+
+    return str(soup)
+
+@tool
 def run_document_edit(user_command: str, document_content: str) -> str:
     """
-    사용자의 명령에 따라 주어진 문서의 내용을 수정합니다.
-    이 툴은 문서 편집 요청이 있을 때 사용해야 합니다.
+    사용자의 편집 요청에 따라 문서를 수정하는 툴.
+    GPT가 이 툴을 호출하여 편집 전략을 세우고 문서를 반환합니다.
+    이 툴은 HTML 문서를 수정하는 데 특화되어 있습니다.
     """
-    print("--- Running Document Editor Tool ---")
-    
+    print("--- Running Document Editor Tool (HTML Focused) ---")
+
     llm_client = ChatOpenAI(model_name='gpt-4o', temperature=0)
 
-    # Modify user_prompt to be more explicit about appending for generation tasks
-    # This is a heuristic, might need more sophisticated NLP if requests vary widely
-    if "작성해줘" in user_command or "만들어줘" in user_command or "생성해줘" in user_command:
-        # If it's a generation request, instruct to append
-        user_prompt_content = f"""
-        **기존 문서 내용:**
-        {document_content}
+    # GPT가 edit_html_document 툴을 사용하도록 유도
+    # GPT에게 HTML 문서와 편집 요청을 주고, edit_html_document 툴을 사용하도록 지시합니다.
+    # GPT는 instruction을 기반으로 edit_html_document 툴의 인자를 결정해야 합니다.
+    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document]) # 새로운 툴 추가
 
-        **사용자 편집 요청:**
-        사용자의 요청에 따라 새로운 내용을 생성하고, 이를 **기존 문서 내용의 마지막에 추가**하여 전체 문서를 반환하십시오.
-        요청: {user_command}
-        """
-    else:
-        # For other types of edits (modification, deletion, etc.)
-        user_prompt_content = f"""
-        **기존 문서 내용:**
-        {document_content}
+    user_prompt_content = f"""
+    **현재 HTML 문서 내용:**
+    {document_content}
 
-        **사용자 편집 요청:**
-        {user_command}
-        """
+    **사용자 편집 요청:**
+    {user_command}
 
-    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document])
+    당신은 HTML 문서를 편집하는 전문가입니다. 사용자의 편집 요청을 분석하여 HTML 문서를 수정해야 합니다.
+    HTML 문서의 특정 부분을 수정해야 한다면 `edit_html_document` 툴을 사용하십시오.
+    단순 텍스트 치환이 필요하다면 `replace_text_in_document` 툴을 사용하십시오.
+    최종적으로 수정된 HTML 문서 내용을 반환해야 합니다.
+    """
+
     response = llm_with_internal_tools.invoke(
         messages=[
             {"role": "system", "content": EDITOR_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt_content} # Use the modified user_prompt_content
+            {"role": "user", "content": user_prompt_content}
         ]
     )
 
+    # GPT의 응답이 Tool Call이면 Tool을 실행하고 결과를 반환
+    if response.tool_calls:
+        for tool_call in response.tool_calls:
+            if tool_call.function.name == "edit_html_document":
+                return edit_html_document(
+                    document_content=document_content,
+                    instruction=tool_call.function.args["instruction"]
+                )
+            elif tool_call.function.name == "replace_text_in_document":
+                return replace_text_in_document(
+                    document_content=document_content,
+                    old_text=tool_call.function.args["old_text"],
+                    new_text=tool_call.function.args["new_text"]
+                )
+    
+    # Tool Call이 아니면 GPT의 직접 응답 (수정된 HTML)을 반환
     return response.content
