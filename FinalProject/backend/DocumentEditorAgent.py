@@ -6,14 +6,14 @@ from langgraph.prebuilt import ToolNode, tools_condition # tools_condition 임�
 
 # 상태 타입
 from .DocumentSearchAgentTools.AgentState import AgentState # AgentState 재사용
-from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document
+from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document, read_document_content
 
 
 # -------------------------------
 # LangChain Tool 등록
 # -------------------------------
 # @tool 데코레이터는 editor_tool.py에 이미 적용되어 있으므로 여기서는 tools 리스트만 정의
-tools = [run_document_edit, replace_text_in_document]
+tools = [run_document_edit, replace_text_in_document, read_document_content]
 
 
 # -------------------------------
@@ -32,11 +32,13 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     messages = state["messages"]
     if not any(isinstance(msg, SystemMessage) for msg in messages):
         system_prompt_content = (
-            "You are a document editor assistant. "
-            "You receive a document and an edit request from the user. "
-            "If the edit request requires modifying the document, "
-            "use the 'run_document_edit' tool to perform the edit. "
-            "Return the updated document content after applying the changes."
+            "You are an expert document editor assistant.\n"
+            "Your primary goal is to assist users with editing a document.\n"
+            "1. First, you MUST know the content of the document you are editing.\n"
+            "2. If the document content is not provided in the user's message, you MUST use the `read_document_content` tool to request it. This tool requires no parameters.\n"
+            "3. Once you have the document content, you can proceed with the user's edit request.\n"
+            "4. Use the `run_document_edit` or `replace_text_in_document` tools to perform the actual edits.\n"
+            "5. Return the final, updated document content to the user."
         )
         messages = [SystemMessage(content=system_prompt_content)] + messages
 
