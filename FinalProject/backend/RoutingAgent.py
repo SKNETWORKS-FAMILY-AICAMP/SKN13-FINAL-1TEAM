@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableConfig
 from .DocumentSearchAgentTools.AgentState import AgentState
 from .chat_agent import agent as GeneralChatAgent
 from .DocumentSearchAgent import DocumentSearchAgent
-from .DocumentEditorAgent import DocumentEditorAgent
+from .DocumentEditorAgent import DocumentEditAgent
 
 load_dotenv()
 
@@ -70,7 +70,7 @@ def RoutingAgent():
     # Instantiate the sub-agents that this router will call
     general_agent = GeneralChatAgent()
     document_search_agent = DocumentSearchAgent()
-    document_editor_agent = DocumentEditorAgent()
+    document_editor_agent = DocumentEditAgent()
 
     # Define the master graph
     workflow = StateGraph(AgentState)
