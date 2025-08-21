@@ -307,7 +307,8 @@ async def export_document_as_docx(request: ExportDocxRequest):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
             temp_filepath = temp_file.name
         
-        success = convert_html_to_docx(request.html_content, temp_filepath)
+        doc_title = os.path.splitext(safe_filename)[0]
+        success = convert_html_to_docx(request.html_content, temp_filepath, title=doc_title)
 
         if not success:
             raise HTTPException(status_code=500, detail="Failed to convert HTML to DOCX.")
