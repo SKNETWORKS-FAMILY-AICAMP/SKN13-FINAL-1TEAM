@@ -6,14 +6,14 @@ from langgraph.prebuilt import ToolNode, tools_condition # tools_condition 임�
 
 # 상태 타입
 from .DocumentSearchAgentTools.AgentState import AgentState # AgentState 재사용
-from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document, read_document_content, request_frontend_document_content
+from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document, read_document_content
 
 
 # -------------------------------
 # LangChain Tool 등록
 # -------------------------------
 # @tool 데코레이터는 editor_tool.py에 이미 적용되어 있으므로 여기서는 tools 리스트만 정의
-tools = [run_document_edit, replace_text_in_document, read_document_content, request_frontend_document_content]
+tools = [run_document_edit, replace_text_in_document, read_document_content]
 
 
 # -------------------------------
