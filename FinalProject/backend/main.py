@@ -587,17 +587,38 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
 
 async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db: Session, session_id: str) -> Generator:
     full_response_content = ""
+    last_tool_call_id = None # Variable to hold the ID from the stream
     
     async for event in agent.astream_events(input_data, config=config):
         kind = event["event"]
 
-        if kind == "on_tool_start":
+        if kind == "on_chat_model_stream":
+            chunk = event["data"]["chunk"]
+            # If the model is starting a tool call, it will be in the tool_call_chunks
+            if chunk.tool_call_chunks:
+                for tool_chunk in chunk.tool_call_chunks:
+                    if tool_chunk.get("id"):
+                        last_tool_call_id = tool_chunk.get("id")
+                        print(f"--- Captured tool_call_id: {last_tool_call_id} ---")
+            
+            content = chunk.content
+            if content:
+                yield f"data: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+                full_response_content += content
+
+        elif kind == "on_tool_start":
             print(f"--- RAW TOOL START EVENT ---")
             print(event)
             print(f"--- END RAW TOOL START EVENT ---")
             if event["name"] == "read_document_content":
-                tool_call_id = event.get("tool_call_id")
+                tool_call_id = last_tool_call_id # Use the ID captured from the stream
                 
+                if not tool_call_id:
+                    print("ERROR: tool_call_id was not captured from the stream before on_tool_start.")
+                    # Handle error case, maybe by sending an error to the client
+                    yield f"data: {json.dumps({'error': 'Could not determine tool_call_id.'})}\n\n"
+                    return
+
                 # This context will be sent back by the frontend
                 agent_context = {
                     "agent_type": "DocumentEditorAgent",
