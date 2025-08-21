@@ -61,6 +61,8 @@ venv.bak/
 *~
 .eslintcache
 .npm
+.prettierrc
+.prettierignore
 
 # ===== OS 관련 =====
 .DS_Store
@@ -84,20 +86,41 @@ __pycache__/
 test/
 tests/
 coverage/
+.nyc_output/
 
 # ===== 빌드 아티팩트 =====
 dist/
 build/
 *.tar.gz
 *.zip
+.next/
+.nuxt/
+.output/
 
 # ===== 데이터베이스 및 캐시 =====
 chroma_db/
 *.db
 *.sqlite
 *.sqlite3
+.cache/
+.parcel-cache/
 
 # ===== 백업 파일 =====
 *.backup
 *.bak
 *.old
+*.orig
+
+# ===== Node.js 22 관련 =====
+.npmrc
+.yarnrc
+.yarnrc.yml
+yarn.lock
+pnpm-lock.yaml
+package-lock.json.bak
+
+# ===== 개발 환경 =====
+.env.development
+.env.test
+.env.staging
+.env.production.local
