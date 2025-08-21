@@ -57,10 +57,7 @@ def DocumentSearchAgent() -> Any:
     graph.add_node("tools", ToolNode(tools))
     
     graph.set_entry_point("agent")
-    graph.add_conditional_edges(
-        "agent",
-        tools_condition,
-    )
+    graph.add_conditional_edges("agent", tools_condition,)
     graph.add_edge("tools", "agent")
 
     return graph.compile(checkpointer=MemorySaver())
