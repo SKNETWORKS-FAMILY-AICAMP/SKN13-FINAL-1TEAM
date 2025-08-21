@@ -27,6 +27,11 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
         system_prompt_content = get_document_search_system_prompt()
         messages = [SystemMessage(content=system_prompt_content)] + messages
 
+    # Add document_content to messages if it exists in the state
+    if state.get("document_content"):
+        document_context_message = SystemMessage(content=f"사용자가 현재 보고 있는 문서의 내용입니다:\n\n{state["document_content"]}")
+        messages.insert(0, document_context_message) # Insert at the beginning for context
+
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 
@@ -44,8 +49,7 @@ def DocumentSearchAgent() -> Any:
         tool_executor.expand_query_tool,
         tool_executor.route_query_tool,
         tool_executor.handle_follow_up_tool,
-        tool_executor.summarize_tool,
-        tool_executor.finish_conversation_tool
+        tool_executor.summarize_tool
     ]
     
     llm_with_tools = llm.bind_tools(tools)
@@ -58,14 +62,7 @@ def DocumentSearchAgent() -> Any:
     graph.add_node("tools", ToolNode(tools))
     
     graph.set_entry_point("agent")
-    graph.add_conditional_edges(
-        "agent",
-        lambda state: "tools" if state["messages"][-1].tool_calls else END,
-        {
-            "tools": "tools",
-            END: END
-        }
-    )
+    graph.add_conditional_edges("agent", tools_condition,)
     graph.add_edge("tools", "agent")
 
     return graph.compile(checkpointer=MemorySaver())
