@@ -592,6 +592,9 @@ async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db
         kind = event["event"]
 
         if kind == "on_tool_start":
+            print(f"--- RAW TOOL START EVENT ---")
+            print(event)
+            print(f"--- END RAW TOOL START EVENT ---")
             if event["name"] == "read_document_content":
                 tool_call_id = event.get("tool_call_id")
                 
