@@ -551,7 +551,7 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
         
         tool_message = ToolMessage(
             content=request.tool_result["result"],
-            tool_call_id=agent_context["tool_call_id"]
+            tool_call_id=request.tool_result["tool_call_id"]
         )
         messages.append(tool_message)
         
