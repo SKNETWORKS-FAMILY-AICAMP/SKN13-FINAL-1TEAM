@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Generator, Optional, Any
-import json, uuid, shutil
+import json, uuid, shutil, tempfile, os
 from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -14,6 +15,7 @@ from langchain_core.messages.tool import ToolMessage
 from .RoutingAgent import RoutingAgent, generate_config
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
 from .llm_tools.read_hwpx import read_hwpx # Assuming this function name
+from .llm_tools.html_to_docx import convert_html_to_docx
 
 # FastAPI 인스턴스 생성
 app = FastAPI()
@@ -217,6 +219,10 @@ class EventOut(BaseModel):
     allDay: bool
     color: Optional[str] = None
 
+class ExportDocxRequest(BaseModel):
+    html_content: str
+    filename: str = "exported_document.docx"
+
 # --- Helper for Document Conversion ---
 def _convert_to_markdown(file_path: Path, file_type: str) -> str:
     content = ""
@@ -286,6 +292,38 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
     db.refresh(db_document)
 
     return JSONResponse(content={"doc_id": doc_id, "markdown_content": markdown_content, "message": "Document uploaded and converted successfully"})
+
+@api_router.post("/documents/export/docx")
+async def export_document_as_docx(request: ExportDocxRequest):
+    # Sanitize filename to prevent security issues
+    safe_filename = request.filename.replace("\n", "").replace("\r", "").strip()
+    if not safe_filename:
+        safe_filename = "exported_document.docx"
+    if not safe_filename.endswith(".docx"):
+        safe_filename += ".docx"
+
+    # Use a temporary file for the conversion
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+            temp_filepath = temp_file.name
+        
+        success = convert_html_to_docx(request.html_content, temp_filepath)
+
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to convert HTML to DOCX.")
+
+        # Return the file and schedule it for deletion after the response is sent
+        return FileResponse(
+            path=temp_filepath,
+            filename=safe_filename,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            background=BackgroundTask(os.unlink, temp_filepath)
+        )
+    except Exception as e:
+        # Ensure temp file is deleted on error before raising HTTP exception
+        if 'temp_filepath' in locals() and os.path.exists(temp_filepath):
+            os.unlink(temp_filepath)
+        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
 
 @api_router.get("/documents/{doc_id}/content")
 async def get_document_content(doc_id: str, db: Session = Depends(get_db)):
