@@ -15,41 +15,57 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     The primary node for the Document Editor Agent.
     It constructs a prompt based on the current state and calls the LLM.
     """
-    print("--- Calling DocumentEditAgent (Simple Mode) ---")
+    print("--- Calling DocumentEditAgent (Final Version) ---")
 
-    messages = state["messages"]
-    
-    # Add a system prompt if one doesn't exist
-    if not any(isinstance(msg, SystemMessage) for msg in messages):
-        system_prompt_content = (
-            "You are a document editor assistant. "
-            "You receive an edit request from the user, and sometimes the document content itself. "
-            "If the document content is provided, use it to fulfill the request. "
-            "Use the available tools to perform edits."
-        )
-        messages = [SystemMessage(content=system_prompt_content)] + messages
-
-    # If document_content is in the state, add it to the prompt
+    current_messages = state["messages"]
     document_content = state.get("document_content")
+
+    system_prompt_content = (
+        "You are a helpful document editor assistant. "
+        "You will be given the full content of a document and a user request. "
+        "Fulfill the user's request to the best of your ability. "
+        "Use the available tools if necessary to perform edits."
+    )
+
+    # If document content is present, create a clean, single prompt for this turn
     if document_content:
-        # We get the user command from the last message in the history
-        last_message = messages[-1].content if messages else ""
+        print("--- Document content found, creating clean prompt. ---")
+        last_user_message_content = ""
+        for msg in reversed(current_messages):
+            if isinstance(msg, HumanMessage):
+                last_user_message_content = msg.content
+                break
+        
+        # Combine context into a single, clear prompt
         prompt_with_context = f"""
 DOCUMENT CONTENT:
 ---
 {document_content}
 ---
 
-EDIT REQUEST:
-{last_message}
-        """
-        # Replace the last user message with this new combined prompt
-        if messages and isinstance(messages[-1], HumanMessage):
-            messages[-1] = HumanMessage(content=prompt_with_context)
-        else:
-            messages.append(HumanMessage(content=prompt_with_context))
+USER REQUEST: "{last_user_message_content}"
 
-    response = llm_with_tools.invoke(messages)
+Please fulfill the request based on the document content provided.
+        """
+        # Use a clean message list for the LLM call to avoid loops
+        messages_for_llm = [
+            SystemMessage(content=system_prompt_content),
+            HumanMessage(content=prompt_with_context)
+        ]
+    else:
+        # No document content, just respond that it's needed.
+        print("--- No document content, responding to user. ---")
+        # This path should ideally not be taken if the frontend works correctly.
+        messages_for_llm = current_messages
+        if not any(isinstance(msg, SystemMessage) for msg in messages_for_llm):
+            messages_for_llm = [
+                SystemMessage(content="You are a document editor. If the user asks for an edit but does not provide the document, inform them you need the document content."),
+                *messages_for_llm
+            ]
+
+    response = llm_with_tools.invoke(messages_for_llm)
+    
+    # The graph will append this response to the state's messages list
     return {"messages": [response]}
 
 def DocumentEditorAgent() -> Any:
