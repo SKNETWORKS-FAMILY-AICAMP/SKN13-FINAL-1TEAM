@@ -585,6 +585,9 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
         messages.append(tool_message)
         
         input_data = {"messages": messages}
+        # Force the document content into the state for the next turn
+        input_data["document_content"] = request.tool_result["result"]
+        
         agent = DocumentEditorAgent()
         return StreamingResponse(_stream_llm_response_v2(input_data, agent, config, db, request.session_id), media_type="text/event-stream")
 
