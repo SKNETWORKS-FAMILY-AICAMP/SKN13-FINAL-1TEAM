@@ -3,6 +3,16 @@ from langchain_openai import ChatOpenAI
 from backend.document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
 
 @tool
+def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
+    """
+    주어진 문서 내용에서 특정 텍스트를 찾아 다른 텍스트로 교체합니다.
+    이 툴은 문서 내의 특정 문자열을 정확히 교체해야 할 때 사용합니다.
+    예시: replace_text_in_document(document_content="Hello world", old_text="world", new_text="GigaChad")
+    """
+    print(f"--- Running replace_text_in_document Tool: Replacing '{old_text}' with '{new_text}' ---")
+    return document_content.replace(old_text, new_text)
+
+@tool
 def run_document_edit(user_command: str, document_content: str) -> str:
     """
     사용자의 명령에 따라 주어진 문서의 내용을 수정합니다.
@@ -34,13 +44,12 @@ def run_document_edit(user_command: str, document_content: str) -> str:
         {user_command}
         """
 
-    response = llm_client.chat.completions.create(
-        model="gpt-4o",
+    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document])
+    response = llm_with_internal_tools.invoke(
         messages=[
             {"role": "system", "content": EDITOR_SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt_content} # Use the modified user_prompt_content
-        ],
-        temperature=0.0
+        ]
     )
 
-    return response.choices[0].message.content
+    return response.content

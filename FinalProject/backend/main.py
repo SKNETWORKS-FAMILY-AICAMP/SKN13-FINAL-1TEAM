@@ -559,6 +559,18 @@ async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config,
         elif kind == "on_tool_end":
             async for chunk in _handle_tool_end(event, session_id, db):
                 yield chunk
+        
+        elif kind == "on_end": # New block to capture final state
+            # Check if the final state contains a 'final_answer' (which is our updated document)
+            final_state = event.get("data", {}).get("output", {})
+            if "final_answer" in final_state:
+                updated_document_content = final_state["final_answer"]
+                # Stream this back to the frontend with a specific event type
+                yield f"data: {json.dumps({'document_update': updated_document_content}, ensure_ascii=False)}\n\n"
+                # We might also want to save this updated document content to the database
+                # if it's associated with a specific document ID.
+                # This would require passing the document ID through the state or session.
+                # For now, just streaming it.
 
     if full_response_content:
         new_message = ChatMessage(session_id=session_id, role="assistant", content=full_response_content)
