@@ -1,23 +1,18 @@
 from typing import Any
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
-from langchain_core.tools import tool
 from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode, tools_condition # tools_condition 임포트
 
 # 상태 타입
-from .DocumentSearchAgentTools.AgentState import AgentState
+from .DocumentSearchAgentTools.AgentState import AgentState # AgentState 재사용
 from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document, read_document_content, request_frontend_document_content
 
 
 # -------------------------------
 # LangChain Tool 등록
 # -------------------------------
-@tool
-def document_edit_tool(document: str, instruction: str) -> str:
-    """문서와 편집 요청을 입력받아 문서를 수정하는 툴"""
-    return run_document_edit(document=document, instruction=instruction)
-
-
+# @tool 데코레이터는 editor_tool.py에 이미 적용되어 있으므로 여기서는 tools 리스트만 정의
 tools = [run_document_edit, replace_text_in_document, read_document_content, request_frontend_document_content]
 
 
@@ -33,20 +28,21 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     user_command = state.get("user_command")
     document_content = state.get("document_content")
 
-    if not user_command or not document_content:
-        return {"messages": [HumanMessage(content="문서 편집에 필요한 정보가 부족합니다.")]}
+    # DocumentSearchAgent의 agent_node와 유사하게 메시지 구성
+    messages = state["messages"]
+    if not any(isinstance(msg, SystemMessage) for msg in messages):
+        system_prompt_content = (
+            "You are a document editor assistant. "
+            "You receive a document and an edit request from the user. "
+            "If the edit request requires modifying the document, "
+            "use the 'run_document_edit' tool to perform the edit. "
+            "Return the updated document content after applying the changes."
+        )
+        messages = [SystemMessage(content=system_prompt_content)] + messages
 
-    messages = [
-        SystemMessage(
-            content=(
-                "You are a document editor assistant. "
-                "You receive a document and an edit request from the user. "
-                "If the edit request requires modifying the document, "
-                "use the 'document_edit_tool' to perform the edit. "
-                "Return the updated document content after applying the changes."
-            )
-        ),
-        HumanMessage(
+    # 사용자 명령과 문서 내용을 HumanMessage로 추가
+    if user_command and document_content:
+        messages.append(HumanMessage(
             content=f"""
 DOCUMENT CONTENT:
 ---
@@ -56,58 +52,15 @@ DOCUMENT CONTENT:
 EDIT REQUEST:
 {user_command}
             """
-        )
-    ]
+        ))
+    elif user_command:
+        messages.append(HumanMessage(content=user_command))
+    elif document_content:
+        messages.append(HumanMessage(content=f"Current document content: {document_content}"))
 
-    # Tool Calling 수행
+
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
-
-
-# -------------------------------
-# 사용자 명령어 클리어 노드
-# -------------------------------
-def clear_user_command_node(state: AgentState) -> dict:
-    print("--- Clearing User Command ---")
-    return {"user_command": None}
-
-
-# -------------------------------
-# 문서 상태 업데이트 노드
-# -------------------------------
-def update_document_state_node(state: AgentState) -> dict:
-    print("--- Updating Document State with Tool Output ---")
-    tool_outputs = [msg for msg in state['messages'] if isinstance(msg, ToolMessage)]
-    if tool_outputs:
-        last_tool_output = tool_outputs[-1].content
-        print(f"--- Updated Document Snippet ---\n{last_tool_output[:100]}...\n")
-        return {"document_content": last_tool_output}
-    return {}
-
-
-# -------------------------------
-# 다음 단계 결정 로직
-# -------------------------------
-def decide_next_step(state: AgentState) -> str:
-    print("--- Deciding Next Step ---")
-    user_command = state.get("user_command")
-
-    if user_command is None:
-        return "finalize"
-
-    user_command_lower = user_command.lower()
-    if any(kw in user_command_lower for kw in ["완료", "끝", "종료"]):
-        return "finalize"
-    return "continue"
-
-
-# -------------------------------
-# 최종 답변 노드
-# -------------------------------
-def final_node(state: AgentState) -> dict:
-    print("--- Finalizing DocumentEditAgent ---")
-    final_doc_content = state.get("document_content", "문서 편집이 완료되었습니다.")
-    return {"final_answer": final_doc_content}
 
 
 # -------------------------------
@@ -123,21 +76,20 @@ def DocumentEditorAgent() -> Any:
     graph = StateGraph(AgentState)
 
     graph.add_node("agent", runnable_agent_node)
-    graph.add_node("clear_command", clear_user_command_node)
-    graph.add_node("update_document_state", update_document_state_node)
-    graph.add_node("final_answer_node", final_node)
+    graph.add_node("tools", ToolNode(tools)) # ToolNode 추가
 
     graph.set_entry_point("agent")
-    graph.add_edge("agent", "clear_command")
-    graph.add_edge("clear_command", "update_document_state")
+
+    # tools_condition을 사용하여 조건부 엣지 추가
     graph.add_conditional_edges(
-        "update_document_state",
-        decide_next_step,
-        {
-            "continue": "agent",
-            "finalize": "final_answer_node",
-        },
+        "agent",
+        tools_condition,
+        # tools_condition은 자동으로 "tools"와 END를 반환
     )
-    graph.add_edge("final_answer_node", END)
+    graph.add_edge("tools", "agent") # 도구 실행 후 다시 agent 노드로 돌아옴
+
+    # DocumentSearchAgent와 유사하게 최종 답변을 처리하는 노드 추가 (필요시)
+    # 현재는 tools_condition이 END로 바로 갈 수 있으므로, 최종 답변 노드는 필요 없을 수도 있음.
+    # 만약 최종 답변을 위한 별도의 로직이 필요하다면, summarize_tool과 유사한 노드를 추가해야 함.
 
     return graph.compile()
