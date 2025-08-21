@@ -597,14 +597,14 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 # if it's associated with a specific document ID.
                 # This would require passing the document ID through the state or session.
                 # For now, just streaming it.
+            
+            yield "data: [DONE]\n\n" # Moved this line here
 
     if full_response_content:
         new_message = ChatMessage(session_id=session_id, role="assistant", content=full_response_content)
         db.add(new_message)
         db.commit()
         db.refresh(new_message)
-        
-    yield "data: [DONE]\n\n"
 
 @api_router.get("/open")
 async def open_document(url):
