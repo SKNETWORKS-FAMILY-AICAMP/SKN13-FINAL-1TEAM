@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Generator, Optional, Any, Dict
+from typing import List, Generator, Optional, Any
 import json, uuid, shutil, tempfile, os
 from pathlib import Path
 from sqlalchemy.orm import Session
@@ -13,7 +13,6 @@ from docx import Document as DocxDocument # python-docx
 from langchain_core.messages.tool import ToolMessage
 
 from .RoutingAgent import RoutingAgent, generate_config
-from .DocumentEditorAgent import DocumentEditorAgent
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
 from .llm_tools.read_hwpx import read_hwpx # Assuming this function name
 from .llm_tools.html_to_docx import convert_html_to_docx
@@ -521,153 +520,42 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
     messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]}
 
-from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, SystemMessage, BaseMessage
+@api_router.get("/llm/stream")
+async def llm_stream(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
+    config = generate_config(session_id)
+    chat_agent = RoutingAgent()
 
-# GigaChad Added: Serialization/Deserialization helpers
-def _serialize_message(message):
-    if isinstance(message, BaseMessage):
-        return message.dict()
-    return message # Should not happen if logic is correct
+    return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
 
-def _message_from_dict(message_dict: dict) -> BaseMessage:
-    message_type = message_dict.get("type")
-    if message_type == "human":
-        return HumanMessage(**message_dict)
-    elif message_type == "ai":
-        return AIMessage(**message_dict)
-    elif message_type == "system":
-        return SystemMessage(**message_dict)
-    elif message_type == "tool":
-        return ToolMessage(**message_dict)
-    else:
-        raise ValueError(f"Unknown message type: {message_type}")
-
-
-# ... (other models)
-
-class ChatRequest(BaseModel):
-    message: str
-    session_id: str
-    document_content: Optional[str] = None
-    is_tool_response: Optional[bool] = False
-    tool_result: Optional[Dict[str, Any]] = None
-    agent_context: Optional[Dict[str, Any]] = None
-
-# ... (other code)
-
-@api_router.post("/llm/stream")
-async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
-    config = generate_config(request.session_id)
-
-    if request.is_tool_response and request.tool_result:
-        agent_context = request.agent_context
-        
-        message_dicts = agent_context.get("messages", [])
-        messages = [_message_from_dict(m) for m in message_dicts]
-        
-        assistant_message = AIMessage(
-            content="",
-            tool_calls=[
-                {
-                    "id": request.tool_result["tool_call_id"],
-                    "name": "read_document_content",
-                    "args": {}
-                }
-            ]
-        )
-
-        tool_message = ToolMessage(
-            content=request.tool_result["result"],
-            tool_call_id=request.tool_result["tool_call_id"]
-        )
-
-        messages.append(assistant_message)
-        messages.append(tool_message)
-        
-        input_data = {
-            "messages": messages,
-            "document_content": request.tool_result["result"], # Add content to state
-            "user_command": agent_context.get("original_user_command") # Add command to state
-        }
-        
-        agent = DocumentEditorAgent()
-        return StreamingResponse(_stream_llm_response_v2(input_data, agent, config, db, request.session_id), media_type="text/event-stream")
-
-    else:
-        chat_agent = RoutingAgent()
-        
-        history_from_db = db.query(ChatMessage).filter(ChatMessage.session_id == request.session_id).order_by(ChatMessage.timestamp).all()
-        
-        messages = []
-        for msg in history_from_db:
-            if msg.role == "user":
-                messages.append(HumanMessage(content=msg.content))
-            elif msg.role == "assistant":
-                messages.append(AIMessage(content=msg.content))
-        
-        current_user_message = HumanMessage(content=request.message)
-        if not messages or messages[-1].content != current_user_message.content:
-            messages.append(current_user_message)
-
-        input_data = {
-            "messages": messages,
-            "user_command": request.message # Set user_command for the first run
-        }
-        if request.document_content:
-            input_data["document_content"] = request.document_content
-
-        return StreamingResponse(_stream_llm_response_v2(input_data, chat_agent, config, db, request.session_id), media_type="text/event-stream")
-
-
-async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db: Session, session_id: str) -> Generator:
+async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
     full_response_content = ""
-    last_tool_call_id = None
     
-    async for event in agent.astream_events(input_data, config=config):
+    history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
+    
+    messages = []
+    for msg in history_messages:
+        if msg.role == "tool":
+            continue
+        role = "ai" if msg.role == "assistant" else msg.role
+        messages.append((role, msg.content))
+    
+    if not messages or messages[-1] != ("user", prompt):
+        messages.append(("user", prompt))
+
+    input_data = {"messages": messages}
+    # Add document_content to input_data if provided
+    if document_content:
+        input_data["document_content"] = document_content
+
+    async for event in chat_agent.astream_events(input_data, config=config):
         kind = event["event"]
-
         if kind == "on_chat_model_stream":
-            chunk = event["data"]["chunk"]
-            if chunk.tool_call_chunks:
-                for tool_chunk in chunk.tool_call_chunks:
-                    if tool_chunk.get("id"):
-                        last_tool_call_id = tool_chunk.get("id")
-                        print(f"--- Captured tool_call_id: {last_tool_call_id} ---")
-            
-            content = chunk.content
+            content = event["data"]["chunk"].content
             if content:
-                yield f"data: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'content': content})}\n\n"
                 full_response_content += content
-
+                
         elif kind == "on_tool_start":
-            print(f"--- RAW TOOL START EVENT ---")
-            print(event)
-            print(f"--- END RAW TOOL START EVENT ---")
-            if event["name"] == "read_document_content":
-                tool_call_id = last_tool_call_id
-                
-                if not tool_call_id:
-                    print("ERROR: tool_call_id was not captured from the stream before on_tool_start.")
-                    yield f"data: {json.dumps({'error': 'Could not determine tool_call_id.'})}\n\n"
-                    return
-
-                serializable_messages = [_serialize_message(m) for m in input_data["messages"]]
-
-                agent_context = {
-                    "agent_type": "DocumentEditorAgent",
-                    "messages": serializable_messages,
-                    "tool_call_id": tool_call_id,
-                    "original_user_command": input_data.get("user_command") # Pass command to context
-                }
-                
-                response_data = {
-                    "needs_document_content": True,
-                    "agent_context": agent_context
-                }
-                yield f"data: {json.dumps(response_data, ensure_ascii=False)}\n\n"
-                return
-
-            # For other tools, use the original handler
             async for chunk in _handle_tool_start(event, session_id, db):
                 yield chunk
         
@@ -675,18 +563,48 @@ async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db
             async for chunk in _handle_tool_end(event, session_id, db):
                 yield chunk
         
-        elif kind == "on_end":
-            # ... (omitting the complex final_state logic for brevity, can be added back if needed)
-            yield "data: [DONE]\n\n"
+        elif kind == "on_end": # New block to capture final state
+            final_state = event.get("data", {}).get("output", {})
+            print(f"--- Final State (on_end): {final_state}") # More specific log
+
+            # Try to find the final_answer from the messages in the final state
+            # This is a more robust way to get the agent's final output
+            final_answer_content = None
+            if "messages" in final_state:
+                for msg in reversed(final_state["messages"]): # Check messages in reverse order
+                    if isinstance(msg, dict) and msg.get("final_answer"):
+                        final_answer_content = msg["final_answer"]
+                        break
+                    elif isinstance(msg, ToolMessage) and msg.content: # Check if it's a ToolMessage with content
+                        # This might be the output of run_document_edit
+                        final_answer_content = msg.content
+                        break
+                    elif isinstance(msg, str) and "final_answer" in msg: # Simple string check
+                        try:
+                            parsed_msg = json.loads(msg)
+                            if parsed_msg.get("final_answer"):
+                                final_answer_content = parsed_msg["final_answer"]
+                                break
+                        except json.JSONDecodeError:
+                            pass # Not a JSON string
+
+            if final_answer_content:
+                print(f"--- Updated Document Content (from final_answer_content): {final_answer_content[:100]}...")
+                yield f"data: {json.dumps({'document_update': final_answer_content}, ensure_ascii=False)}\n\n"
+            else:
+                print("--- No final_answer_content found in final_state messages. ---")
+                # We might also want to save this updated document content to the database
+                # if it's associated with a specific document ID.
+                # This would require passing the document ID through the state or session.
+                # For now, just streaming it.
+            
+            yield "data: [DONE]\n\n" # Moved this line here
 
     if full_response_content:
-        _create_chat_message(db, session_id, "assistant", full_response_content)
-
-async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
-    # This is the original function, kept for reference but now unused by the new endpoint
-    full_response_content = ""
-    # ... (original implementation)
-
+        new_message = ChatMessage(session_id=session_id, role="assistant", content=full_response_content)
+        db.add(new_message)
+        db.commit()
+        db.refresh(new_message)
 
 @api_router.get("/open")
 async def open_document(url):
