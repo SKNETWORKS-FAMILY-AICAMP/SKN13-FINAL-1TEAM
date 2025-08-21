@@ -71,7 +71,9 @@ class AgentTools:
         """
         후속 질문 처리, 상태 변경 없이 기존 retrieved_docs 사용. (의도적인 No-Op)
         """
-        return {}
+        # Instead of a No-Op, we now explicitly finish the conversation.
+        # This prevents the agent from looping back when a follow-up is detected.
+        return self.finish_conversation_tool.invoke({"final_answer": "후속 질문이 처리되었습니다.", "sources": []})
 
     @tool
     def summarize_tool(self, query: str, retrieved_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -114,3 +116,10 @@ class AgentTools:
             "final_answer": response.content.strip(),
             "sources": unique_sources
         }
+
+    @tool
+    def finish_conversation_tool(self, final_answer: str, sources: List[str] = None) -> Dict[str, Any]:
+        """
+        대화를 종료하고 최종 답변을 사용자에게 전달합니다.
+        """
+        return {"final_answer": final_answer, "sources": sources or []}
