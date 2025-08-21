@@ -95,6 +95,15 @@ def RoutingAgent():
     workflow.add_edge("general_chat", END)
     workflow.add_edge("document_edit", END)
 
+    # Define the output mapping for the graph
+    # This ensures that the final_answer from document_edit is the graph's output
+    workflow.set_return_mapping(
+        lambda state: state["final_answer"] if "final_answer" in state else state["messages"][-1].content,
+        # This is a simplified example. A more robust solution might check which agent was called
+        # and extract its specific output. For now, we assume final_answer is the key.
+        # If final_answer is not present, it defaults to the last message content.
+    )
+
     # Compile the master agent
     return workflow.compile()
 
