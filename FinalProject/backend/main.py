@@ -584,9 +584,11 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
         messages.append(assistant_message)
         messages.append(tool_message)
         
-        input_data = {"messages": messages}
-        # Force the document content into the state for the next turn
-        input_data["document_content"] = request.tool_result["result"]
+        input_data = {
+            "messages": messages,
+            "document_content": request.tool_result["result"], # Add content to state
+            "user_command": agent_context.get("original_user_command") # Add command to state
+        }
         
         agent = DocumentEditorAgent()
         return StreamingResponse(_stream_llm_response_v2(input_data, agent, config, db, request.session_id), media_type="text/event-stream")
@@ -603,10 +605,14 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
             elif msg.role == "assistant":
                 messages.append(AIMessage(content=msg.content))
         
-        if not messages or messages[-1].content != request.message:
-            messages.append(HumanMessage(content=request.message))
+        current_user_message = HumanMessage(content=request.message)
+        if not messages or messages[-1].content != current_user_message.content:
+            messages.append(current_user_message)
 
-        input_data = {"messages": messages}
+        input_data = {
+            "messages": messages,
+            "user_command": request.message # Set user_command for the first run
+        }
         if request.document_content:
             input_data["document_content"] = request.document_content
 
@@ -651,6 +657,7 @@ async def _stream_llm_response_v2(input_data: dict, agent: Any, config: dict, db
                     "agent_type": "DocumentEditorAgent",
                     "messages": serializable_messages,
                     "tool_call_id": tool_call_id,
+                    "original_user_command": input_data.get("user_command") # Pass command to context
                 }
                 
                 response_data = {
