@@ -1,4 +1,4 @@
-from html2docx import HTML2DOCX
+from html2docx import HTML2Docx
 import os
 
 def convert_html_to_docx(html_content: str, output_path: str) -> bool:
@@ -22,7 +22,7 @@ def convert_html_to_docx(html_content: str, output_path: str) -> bool:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        parser = HTML2DOCX()
+        parser = HTML2Docx()
         parser.add_html(html_content)
         parser.save(output_path)
         
