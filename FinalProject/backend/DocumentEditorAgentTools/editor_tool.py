@@ -1,8 +1,9 @@
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from backend.document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
-from bs4 import BeautifulSoup # BeautifulSoup 임포트 추가
-import re # re 모듈 임포트 추가
+from bs4 import BeautifulSoup
+import re
+import requests # requests 임포트 추가
 
 @tool
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
@@ -63,6 +64,35 @@ def edit_html_document(document_content: str, instruction: str) -> str:
     return str(soup)
 
 @tool
+def read_document_content(document_content: str) -> str:
+    """
+    현재 편집 중인 문서의 전체 내용을 읽어서 반환합니다.
+    GPT가 문서의 현재 상태를 파악해야 할 때 사용합니다.
+    """
+    print("--- Running read_document_content Tool ---")
+    return document_content
+
+@tool
+def request_frontend_document_content() -> str:
+    """
+    프론트엔드(Electron)에서 현재 편집 중인 문서의 content를 요청하여 반환합니다.
+    이 툴은 백엔드에서 프론트엔드의 최신 문서 내용을 가져와야 할 때 사용합니다.
+    """
+    print("--- Running request_frontend_document_content Tool ---")
+    try:
+        # Electron 메인 프로세스의 HTTP 서버 주소
+        # Electron 앱이 실행되는 로컬 환경의 IP 주소와 포트를 사용해야 합니다.
+        # 여기서는 예시로 localhost:8080을 사용합니다.
+        # 실제 배포 환경에서는 Electron 앱이 실행되는 머신의 IP 주소를 사용해야 합니다.
+        response = requests.get("http://localhost:8080/get-document-content")
+        response.raise_for_status() # HTTP 오류 발생 시 예외 발생
+        data = response.json()
+        return data.get("content", "")
+    except requests.exceptions.RequestException as e:
+        print(f"Error requesting content from frontend: {e}")
+        return f"Error: Could not retrieve content from frontend. {e}"
+
+@tool
 def run_document_edit(user_command: str, document_content: str) -> str:
     """
     사용자의 편집 요청에 따라 문서를 수정하는 툴.
@@ -73,7 +103,7 @@ def run_document_edit(user_command: str, document_content: str) -> str:
 
     llm_client = ChatOpenAI(model_name='gpt-4o', temperature=0)
 
-    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document])
+    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document, read_document_content, request_frontend_document_content]) # 새로운 툴 추가
 
     user_prompt_content = f"""
     **현재 HTML 문서 내용:**
@@ -85,6 +115,8 @@ def run_document_edit(user_command: str, document_content: str) -> str:
     당신은 HTML 문서를 편집하는 전문가입니다. 사용자의 편집 요청을 분석하여 HTML 문서를 수정해야 합니다.
     HTML 문서의 특정 부분을 수정해야 한다면 `edit_html_document` 툴을 사용하십시오.
     단순 텍스트 치환이 필요하다면 `replace_text_in_document` 툴을 사용하십시오.
+    문서의 현재 내용을 확인해야 한다면 `read_document_content` 툴을 사용하십시오.
+    만약 현재 가지고 있는 `document_content`가 최신이 아니라고 판단되거나, 프론트엔드에서 최신 내용을 가져와야 한다면 `request_frontend_document_content` 툴을 사용하십시오.
     최종적으로 수정된 HTML 문서 내용을 반환해야 합니다.
     """
 
@@ -108,5 +140,18 @@ def run_document_edit(user_command: str, document_content: str) -> str:
                     old_text=tool_call.function.args["old_text"],
                     new_text=tool_call.function.args["new_text"]
                 )
+            elif tool_call.function.name == "read_document_content":
+                return read_document_content(
+                    document_content=document_content
+                )
+            elif tool_call.function.name == "request_frontend_document_content":
+                # 프론트엔드에서 content를 가져온 후, 그 content를 사용하여 다시 GPT에게 요청을 보내거나
+                # 해당 content를 기반으로 다른 툴을 호출하도록 로직을 추가해야 합니다.
+                # 여기서는 일단 가져온 content를 반환합니다.
+                fetched_content = request_frontend_document_content()
+                # 가져온 content를 사용하여 다시 run_document_edit을 호출하거나,
+                # GPT에게 다시 판단을 맡길 수 있습니다.
+                # 여기서는 간단하게 가져온 content를 반환하도록 하겠습니다.
+                return fetched_content
     
     return response.content

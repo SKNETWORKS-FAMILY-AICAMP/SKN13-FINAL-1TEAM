@@ -6,7 +6,7 @@ from langgraph.graph import StateGraph, END
 
 # 상태 타입
 from .DocumentSearchAgentTools.AgentState import AgentState
-from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document
+from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document, read_document_content, request_frontend_document_content
 
 
 # -------------------------------
@@ -18,7 +18,7 @@ def document_edit_tool(document: str, instruction: str) -> str:
     return run_document_edit(document=document, instruction=instruction)
 
 
-tools = [run_document_edit, replace_text_in_document]
+tools = [run_document_edit, replace_text_in_document, read_document_content, request_frontend_document_content]
 
 
 # -------------------------------
