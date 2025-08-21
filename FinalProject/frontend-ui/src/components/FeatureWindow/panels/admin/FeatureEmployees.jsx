@@ -1,17 +1,19 @@
 import React, { useMemo, useState, useEffect } from "react";
-import HeaderBar from "../components/shared/HeaderBar";
-import MainSidebar from "../components/Sidebar/MainSidebar";
-import Logo from "../assets/sample_logo.svg";
-import EmployeeCreateModal from "../components/Modal/EmployeeCreateModal";
-import EmployeeEditModal from "../components/Modal/EmployeeEditModal";
+// import HeaderBar from "../components/shared/HeaderBar";
+// import MainSidebar from "../components/Sidebar/MainSidebar";
+// import Logo from "../assets/sample_logo.svg";
+import EmployeeCreateModal from "../../../Modal/EmployeeCreateModal";
+import EmployeeEditModal from "../../../Modal/EmployeeEditModal";
 // 아이콘
-import { FiMenu } from "react-icons/fi";    // 메뉴 열기 버튼
+// import { FiMenu } from "react-icons/fi";    // 메뉴 열기 버튼
 import { FaSearch } from "react-icons/fa";  // 검색 아이콘
 
+// 부서 list(임시)
 const DEPT_OPTIONS = ["인사부", "총무부", "개발부"];
+// 직급 list(임시)
 const RANK_OPTIONS = ["사원", "대리", "팀장"];
-
-const DUMMY = [
+// 사원 더미데이터(임시)
+const DUMMY_EMPLOYEE = [
     {
         id: 1,
         name: "홍길동",
@@ -66,10 +68,10 @@ const DUMMY = [
 
 export default function AdminPage() {
     // 사이드바 열림/닫힘
-    const [collapsed, setCollapsed] = useState(true);
+    // const [collapsed, setCollapsed] = useState(true);
 
-    // 사원 리스트 상태 관리(등록 후 즉시 반영)
-    const [employees, setEmployees] = useState(DUMMY);
+    // 사원 리스트 상태 관리(등록 후 즉시 반영)(수정 필요 ??)
+    const [employees, setEmployees] = useState(DUMMY_EMPLOYEE);
 
     // 상단 필터/검색
     const [dept, setDept] = useState("");
@@ -126,19 +128,6 @@ export default function AdminPage() {
             password: (payload.password || "").trim(),
             email: (payload.email || "").trim(),
         };
-
-        // 필수값 검증 (모달에서도 막히지만 안전하게 한 번 더 체크)
-        if (
-            !clean.name ||
-            !clean.dept ||
-            !clean.rank ||
-            !clean.accountId ||
-            !clean.password
-        ) {
-            console.warn("[사원 등록] 필수값 누락:", clean);
-            alert("입력값을 확인해 주세요.");
-            return;
-        }
 
         // employees 상태 업데이트
         setEmployees((prev) => {
@@ -210,15 +199,15 @@ export default function AdminPage() {
             prev.map((e) =>
                 e.id === payload.id
                     ? {
-                          ...e,
-                          name: payload.name,
-                          dept: payload.department,
-                          rank: payload.position,
-                          isAdmin: payload.isAdmin,
-                          accountId: payload.userId,
-                          password: payload.password,
-                          // email은 읽기전용이므로 유지 (payload.email 사용해도 같음)
-                      }
+                        ...e,
+                        name: payload.name,
+                        dept: payload.department,
+                        rank: payload.position,
+                        isAdmin: payload.isAdmin,
+                        accountId: payload.userId,
+                        password: payload.password,
+                        // email은 읽기전용이므로 유지 (payload.email 사용해도 같음)
+                    }
                     : e
             )
         );
@@ -226,25 +215,28 @@ export default function AdminPage() {
     };
 
     return (
-        <div className="w-screen h-screen">
-            <HeaderBar />
-            <div className="flex w-full h-[calc(100vh-40px)]">
-                <MainSidebar
-                    collapsed={collapsed}
-                    onCollapse={() => {
-                        setCollapsed(true);
-                    }}
-                    pageType="admin"
-                    logoSrc={Logo}
-                />
+        // <div className="w-screen h-screen">
+        //     <div className="flex w-full h-[calc(100vh-40px)]">
+        //         {/* <MainSidebar
+        //             collapsed={collapsed}
+        //             onCollapse={() => {
+        //                 setCollapsed(true);
+        //             }}
+        //             pageType="admin"
+        //             logoSrc={Logo}
+        //         /> */}
 
-                <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
-                    {/* 제목 */}
-                    {collapsed && (
+                
+        //     </div>
+        // </div>
+        <section>
+            <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
+                    {/* {collapsed && (
                         <div onClick={() => setCollapsed(false)}>
                             <FiMenu />
                         </div>
-                    )}
+                    )} */}
+                    {/* 제목 */}
                     <div className="flex items-center justify-between">
                         <h1 className="text-2xl font-bold">사원 목록</h1>
                         <button
@@ -465,7 +457,6 @@ export default function AdminPage() {
                         rankOptions={RANK_OPTIONS}
                     />
                 </div>
-            </div>
-        </div>
+        </section>
     );
 }

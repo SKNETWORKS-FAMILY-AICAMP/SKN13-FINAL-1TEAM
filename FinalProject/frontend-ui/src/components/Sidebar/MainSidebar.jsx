@@ -1,12 +1,17 @@
 // components/Sidebar/MainSidebar.jsx
-import React, { useMemo } from "react";
+import React, { useRef } from "react";
+
+//이미지
+import Logo from "../../assets/sample_logo.svg";
+
+// 아이콘
 import {
     BsPersonVcard,
     BsPersonCircle,
     BsBoxArrowRight,
     BsChevronLeft,
 } from "react-icons/bs";
-import { IoDocumentText } from "react-icons/io5";
+import { IoDocumentText, IoBan } from "react-icons/io5";
 import { FiCalendar } from "react-icons/fi";
 
 // key → 기본 아이콘 매핑 (items에서 Icon을 넘기면 그걸 우선 사용)
@@ -19,23 +24,23 @@ const iconMap = {
 };
 
 export default function MainSidebar({
-  collapsed = true,
-  onCollapse = () => {},
-  companyName = "ClickA",
-  logoSrc,
-  // ▼ 라우팅 제거 후, config/상태 기반으로 사용
-  sections = [],
-  footer = [],
-  activeKey,
-  onSelect = () => {},
+    collapsed = false,  // 접힘/닫힘 상태(boolean)(default = 열림(false))
+    onCollapse = () => {},  // 접힘/닫힘 동작 함수
+    companyName = "ClickA",  // 회사명(default = "ClickA")
+    logoSrc = Logo,  // 회사 로고
+    sections = [],
+    footer = [],
+    activeKey,
+    onSelect = () => {},
 }) {
+  // 사이드바 열림/닫힘 상태별 ui 변화
   const widthClass = collapsed ? "w-16" : "w-72";
   const show = !collapsed;
-  const sidePad = collapsed ? "px-2" : "px-4";
-  const logoBox = collapsed ? "w-8 h-8" : "w-9 h-9";
+  const sidePad = "px-4"; // collapsed ? "px-2" : "px-4";
+  const logoBox = "w-9 h-9"; // collapsed ? "w-8 h-8" : "w-9 h-9";
 
-  const Item = ({ it }) => {
-    const Icon = it.Icon || iconMap[it.key] || IoDocumentText;
+  const MenuItem = ({ it }) => {
+    const Icon = it.Icon || iconMap[it.key] || BsPersonVcard;
     const isActive = it.key === activeKey;
     return (
       <button
@@ -52,6 +57,13 @@ export default function MainSidebar({
     );
   };
 
+  // 로그아웃 기능
+  const handleLogout = useCallback(() => {
+      if (busyRef.current) return;
+      busyRef.current = true;
+      try { onLogout?.(); } finally { busyRef.current = false; }
+    }, [onLogout]);
+
   return (
     <aside
       className={[
@@ -63,7 +75,8 @@ export default function MainSidebar({
     >
       {/* 로고 + 회사명 */}
       <div className={`flex items-center ${sidePad} pt-4 pb-2`}>
-        <div
+        <div 
+          onClick={() => onCollapse()}
           className={`${logoBox} shrink-0 rounded-full bg-white shadow overflow-hidden flex items-center justify-center`}
         >
           {logoSrc ? (
@@ -95,7 +108,7 @@ export default function MainSidebar({
                 {sec.title}
               </h6>
             ) : null}
-            {sec.items?.map((it) => <Item key={it.key} it={it} />)}
+            {sec.items?.map((it) => <MenuItem key={it.key} it={it} />)}
           </section>
         ))}
       </nav>

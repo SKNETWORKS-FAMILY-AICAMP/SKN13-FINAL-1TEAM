@@ -78,6 +78,8 @@ function createMainWindow() {
   if (isDev) mainWindow.loadURL(DEV_URL);
   else mainWindow.loadFile(PROD_INDEX);
 
+  if (isDev) mainWindow.webContents.openDevTools({ mode: "detach" });
+
   Menu.setApplicationMenu(null);
 
   mainWindow.on("resize", () => {

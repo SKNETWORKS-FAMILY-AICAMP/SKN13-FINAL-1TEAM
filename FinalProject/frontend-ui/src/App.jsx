@@ -44,10 +44,11 @@ export default function App() {
       const raw = localStorage.getItem(USER_KEY);
       if (raw) {
         const user = JSON.parse(raw);
+        console.log("user값: ", user)
         role = user?.role || role; // ex) 'admin' | 'user'
       }
     } catch {}
-    return <FeatureShell role={role} />;
+    return <FeatureShell userType={role} />;
   }
 
   /** 이하: 기존 "챗봇 메인 창" 흐름 완전 보존 */

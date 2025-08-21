@@ -17,13 +17,13 @@ export const featureFooter = [
 //  - 기존 기능부(UI 컴포넌트 스위치) 키와 호환 유지
 //  - "문서 작성"은 기존 key(forms)를 유지하고 label만 변경
 // ──────────────────────────────────────────────────────────────
-export const userSections = [
+export const employeeSections = [
   {
     title: null,
     items: [
       { key: "docs",     label: "문서 목록" },   // FeatureWindow: defaultTab="docs"
       { key: "calendar", label: "캘린더" },     // FeatureWindow: defaultTab="calendar"
-      { key: "forms",    label: "문서 작성" },  // FeatureWindow: defaultTab="forms" (label만 변경)
+      // { key: "forms",    label: "문서 작성" },  // FeatureWindow: defaultTab="forms" (label만 변경)
       { key: "mypage",   label: "마이페이지" }, // 공용
     ],
   },
@@ -37,7 +37,7 @@ export const adminSections = [
   {
     title: "관리자",
     items: [
-      { key: "employee", label: "사원 관리" },  // Admin 라우트: /admin/employee 등으로 매핑
+      { key: "employees", label: "사원 관리" },  // Admin 라우트: /admin/employee 등으로 매핑
       { key: "mypage",   label: "마이페이지" }, // 공용
     ],
   },
@@ -47,8 +47,8 @@ export const adminSections = [
 // 헬퍼: 역할 문자열로 섹션 선택 (선택적 사용)
 // ──────────────────────────────────────────────────────────────
 export function getSectionsByRole(role) {
-  return role === "admin" ? adminSections : userSections;
+  return role === "admin" ? adminSections : employeeSections;
 }
 
 // (선택) 기본 내보내기: 헬퍼
-export default { getSectionsByRole, adminSections, userSections, featureFooter };
+export default { getSectionsByRole, adminSections, employeeSections, featureFooter };

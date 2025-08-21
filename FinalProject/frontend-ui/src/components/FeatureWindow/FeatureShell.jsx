@@ -27,30 +27,32 @@
 import React, { useMemo, useState } from "react";
 import HeaderBar from "../shared/HeaderBar.jsx";
 import MainSidebar from "../Sidebar/MainSidebar.jsx";
+// 이미지
+import Logo from "../../assets/sample_logo.svg";  // 회사 로고(임시)
 
 /** navconfig.js
  *  - adminSections: 관리자용 섹션(사원 관리, 마이페이지)
  *  - userSections : 사원용 섹션(문서 목록, 캘린더, 문서 작성, 마이페이지)
  *  - featureFooter: 공용 하단(로그아웃)
  */
-import { adminSections, userSections, featureFooter } from "../Sidebar/featureNavConfig.jsx";
+import { adminSections, employeeSections, featureFooter } from "../Sidebar/featureNavConfig.jsx";
 
 import RoleRouter from "./RoleRouter.jsx";
 
-export default function FeatureShell({ role = "user" }) {
-  /** 역할별 사이드바 섹션 선택
+export default function FeatureShell({ userType = "user" }) {
+  /** userType별 사이드바 섹션 선택
    *  - 같은 MainSidebar 컴포넌트를 공유하되, 주입 데이터만 차이.
    */
   const sections = useMemo(
-    () => (role === "admin" ? adminSections : userSections),
-    [role]
+    () => (userType === "admin" ? adminSections : employeeSections),
+    [userType]
   );
 
   /** 초기 활성 메뉴
    *  - 관리자: "사원 관리"부터 시작하는 것이 자연스러움
    *  - 사원  : "문서 목록"부터
    */
-  const [activeKey, setActiveKey] = useState(role === "admin" ? "employee" : "docs");
+  const [activeKey, setActiveKey] = useState(userType === "admin" ? "employees" : "docs");
 
   /** 사이드바 선택 핸들러
    *  - 로그아웃 등 footer 액션은 여기에서 처리.
@@ -67,6 +69,12 @@ export default function FeatureShell({ role = "user" }) {
     setActiveKey(key);
   };
 
+  // 사이드바 열림/닫힘
+      const [collapsed, setCollapsed] = useState(true);
+
+  // 로그아웃 처리
+  
+
   return (
     <div className="w-screen h-screen bg-white">
       {/* 상단 바: 필요 시 사이드바 토글, 타이틀, 사용자 정보 등 배치 */}
@@ -76,18 +84,21 @@ export default function FeatureShell({ role = "user" }) {
       <div className="flex h-[calc(100vh-40px)]">
         {/* 공용 사이드바(역할별 섹션만 주입) */}
         <MainSidebar
+          collapsed={collapsed}
+          onCollapse={() => {
+            setCollapsed(!collapsed);
+          }}
+          logoSrc={Logo}
           sections={sections}
           footer={featureFooter}
           activeKey={activeKey}
           onSelect={handleSelect}
-          collapsed={false}
-          header={null}
         />
 
         {/* 컨텐츠 스테이지: 역할/키 조합으로 하나의 스위치(RoleRouter)에서 화면 결정 */}
         <main className="flex-1 overflow-auto p-6">
           <div className="max-w-[1200px] mx-auto">
-            <RoleRouter role={role} activeKey={activeKey} />
+            <RoleRouter userType={userType} activeKey={activeKey} />
           </div>
         </main>
       </div>
