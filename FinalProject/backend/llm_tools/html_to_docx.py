@@ -1,9 +1,9 @@
-from html4docx import HtmlToDocx
+from html2docx import HTML2DOCX
 import os
 
 def convert_html_to_docx(html_content: str, output_path: str) -> bool:
     """
-    Converts an HTML string to a .docx file.
+    Converts an HTML string to a .docx file using the html2docx library.
 
     Args:
         html_content: The HTML content as a string.
@@ -22,8 +22,8 @@ def convert_html_to_docx(html_content: str, output_path: str) -> bool:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        parser = HtmlToDocx()
-        parser.parse_html_string(html_content)
+        parser = HTML2DOCX()
+        parser.add_html(html_content)
         parser.save(output_path)
         
         print(f"Successfully converted HTML to {output_path}")
@@ -44,7 +44,7 @@ if __name__ == '__main__':
     </ul>
     """
     desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-    test_output_path = os.path.join(desktop_path, "test_document.docx")
+    test_output_path = os.path.join(desktop_path, "test_document_from_html2docx.docx")
     
     success = convert_html_to_docx(sample_html, test_output_path)
     
@@ -52,4 +52,3 @@ if __name__ == '__main__':
         print(f"Test file created at: {test_output_path}")
     else:
         print("Test file creation failed.")
-
