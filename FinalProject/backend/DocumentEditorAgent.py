@@ -28,39 +28,38 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     user_command = state.get("user_command")
     document_content = state.get("document_content")
 
-    # DocumentSearchAgent의 agent_node와 유사하게 메시지 구성
-    messages = state["messages"]
-    if not any(isinstance(msg, SystemMessage) for msg in messages):
-        system_prompt_content = (
-            "You are an expert document editor assistant.\n"
-            "Your primary goal is to assist users with editing a document.\n"
-            "1. First, you MUST know the content of the document you are editing.\n"
-            "2. If the document content is not provided in the user's message, you MUST use the `read_document_content` tool to request it. This tool requires no parameters.\n"
-            "3. The result of this tool will be provided to you in a subsequent message with the role 'tool'. You MUST read this message to get the document content.\n"
-            "4. Once you have the document content from the 'tool' message, you can proceed with the user's edit request.\n"
-            "5. Use the `run_document_edit` or `replace_text_in_document` tools to perform the actual edits.\n"
-            "6. Return the final, updated document content to the user."
-        )
-        messages = [SystemMessage(content=system_prompt_content)] + messages
+    system_prompt_content = (
+        "You are an expert document editor assistant.\n"
+        "Your primary goal is to assist users with editing a document.\n"
+        "1. First, you MUST know the content of the document you are editing.\n"
+        "2. If the document content is not provided in the user's message, you MUST use the `read_document_content` tool to request it. This tool requires no parameters.\n"
+        "3. The result of this tool will be provided to you in a subsequent message with the role 'tool'. You MUST read this message to get the document content.\n"
+        "4. Once you have the document content from the 'tool' message, you can proceed with the user's edit request.\n"
+        "5. Use the `run_document_edit` or `replace_text_in_document` tools to perform the actual edits.\n"
+        "6. Return the final, updated document content to the user."
+    )
 
-    # 사용자 명령과 문서 내용을 HumanMessage로 추가
-    if user_command and document_content:
-        messages.append(HumanMessage(
-            content=f"""
+    # If we have the document content, this is the second turn. Nuke the history.
+    if document_content and user_command:
+        print("--- Content and command found. Building clean prompt for second turn. ---")
+        clean_prompt = f"""
 DOCUMENT CONTENT:
 ---
 {document_content}
 ---
 
-EDIT REQUEST:
-{user_command}
-            """
-        ))
-    elif user_command:
-        messages.append(HumanMessage(content=user_command))
-    elif document_content:
-        messages.append(HumanMessage(content=f"Current document content: {document_content}"))
-
+Based on the document content above, please fulfill the original request: "{user_command}"
+        """
+        messages = [
+            SystemMessage(content=system_prompt_content),
+            HumanMessage(content=clean_prompt)
+        ]
+    else:
+        # First turn, use the history as is.
+        print("--- First turn. Using message history. ---")
+        messages = state["messages"]
+        if not any(isinstance(msg, SystemMessage) for msg in messages):
+            messages = [SystemMessage(content=system_prompt_content)] + messages
 
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
