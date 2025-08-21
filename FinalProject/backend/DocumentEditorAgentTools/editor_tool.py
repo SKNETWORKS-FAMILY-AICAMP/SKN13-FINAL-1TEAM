@@ -60,8 +60,6 @@ def edit_html_document(document_content: str, instruction: str) -> str:
 
     return str(soup)
 
-
-
 @tool
 def run_document_edit(user_command: str, document_content: str) -> str:
     """
@@ -73,7 +71,7 @@ def run_document_edit(user_command: str, document_content: str) -> str:
 
     llm_client = ChatOpenAI(model_name='gpt-4o', temperature=0)
 
-    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document, read_document_content])
+    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document])
 
     user_prompt_content = f"""
     **현재 HTML 문서 내용:**
@@ -85,7 +83,6 @@ def run_document_edit(user_command: str, document_content: str) -> str:
     당신은 HTML 문서를 편집하는 전문가입니다. 사용자의 편집 요청을 분석하여 HTML 문서를 수정해야 합니다.
     HTML 문서의 특정 부분을 수정해야 한다면 `edit_html_document` 툴을 사용하십시오.
     단순 텍스트 치환이 필요하다면 `replace_text_in_document` 툴을 사용하십시오.
-    문서의 현재 내용을 확인해야 한다면 `read_document_content` 툴을 사용하십시오.
     최종적으로 수정된 HTML 문서 내용을 반환해야 합니다.
     """
 
@@ -99,21 +96,32 @@ def run_document_edit(user_command: str, document_content: str) -> str:
     # GPT의 응답이 Tool Call이면 Tool을 실행하고 결과를 반환
     if response.tool_calls:
         for tool_call in response.tool_calls:
-            if tool_call.function.name == "edit_html_document":
+            if tool_call["name"] == "edit_html_document":
                 return edit_html_document(
                     document_content=document_content,
-                    instruction=tool_call.function.args["instruction"]
+                    instruction=tool_call["args"]["instruction"]
                 )
-            elif tool_call.function.name == "replace_text_in_document":
+            elif tool_call["name"] == "replace_text_in_document":
                 return replace_text_in_document(
                     document_content=document_content,
-                    old_text=tool_call.function.args["old_text"],
-                    new_text=tool_call.function.args["new_text"]
-                )
-            elif tool_call.function.name == "read_document_content":
-                return read_document_content(
-                    document_content=document_content
+                    old_text=tool_call["args"]["old_text"],
+                    new_text=tool_call["args"]["new_text"]
                 )
     
     # Tool Call이 아니면 GPT의 직접 응답 (수정된 HTML)을 반환
     return response.content
+
+# GigaChad Added: Helper function for prompt construction
+def create_final_prompt(user_command: str, document_content: str) -> str:
+    """
+    Constructs a final, clean prompt for the LLM by combining the document content
+    and the user's command.
+    """
+    return f"""
+DOCUMENT CONTENT:
+---
+{document_content}
+---
+
+Based on the document content above, please fulfill the original request: "{user_command}"
+    """
