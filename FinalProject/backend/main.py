@@ -551,11 +551,8 @@ async def llm_stream(request: ChatRequest, db: Session = Depends(get_db)):
             tool_calls=[
                 {
                     "id": request.tool_result["tool_call_id"],
-                    "type": "function",
-                    "function": {
-                        "name": "read_document_content",
-                        "arguments": "{}" # No arguments
-                    }
+                    "name": "read_document_content",
+                    "args": {}
                 }
             ]
         )
