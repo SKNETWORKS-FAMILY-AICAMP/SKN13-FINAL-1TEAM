@@ -2,6 +2,7 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from backend.document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
 from bs4 import BeautifulSoup # BeautifulSoup 임포트 추가
+import re # re 모듈 임포트 추가
 
 @tool
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
@@ -25,30 +26,30 @@ def edit_html_document(document_content: str, instruction: str) -> str:
     print(f"--- Running edit_html_document Tool with instruction: '{instruction}' ---")
     soup = BeautifulSoup(document_content, 'html.parser')
 
-    # 여기에 instruction에 따른 HTML 수정 로직을 구현해야 합니다.
-    # 이 부분은 GPT가 instruction을 해석하여 어떤 HTML 조작을 할지 결정해야 합니다.
-    # 현재는 GPT가 직접 HTML을 수정하는 것이 아니라, GPT가 이 툴을 호출하고,
-    # 이 툴 내부에서 instruction을 파싱하여 HTML을 조작하는 방식입니다.
-    # 이 툴은 GPT가 HTML을 직접 조작하는 대신, 구조화된 방식으로 HTML을 수정할 수 있도록 돕습니다.
-
-    # 예시: instruction에 '제목'이라는 단어가 포함되어 있으면 h1 태그를 수정
+    # instruction에 따른 HTML 수정 로직
     if "제목" in instruction:
         new_title = instruction.split("'")[1] if "'" in instruction else "새로운 제목"
         h1_tag = soup.find('h1')
         if h1_tag:
             h1_tag.string = new_title
         else:
-            # h1 태그가 없으면 body에 추가
             new_h1 = soup.new_tag("h1")
             new_h1.string = new_title
             if soup.body:
                 soup.body.insert(0, new_h1)
             else:
                 soup.append(new_h1)
-    elif "문단 추가" in instruction:
-        new_paragraph_text = instruction.split("'")[1] if "'" in instruction else "새로운 문단입니다."
+    elif "문단 추가" in instruction or "추가해줘" in instruction:
+        # "문서에 '새로운 문단입니다.' 문단을 추가해줘" 또는 "문서에 '재미있는 농담'을 추가해줘"
+        # instruction에서 추가할 내용을 추출
+        match = re.search(r"'(.*?)'", instruction)
+        if match:
+            text_to_add = match.group(1)
+        else:
+            text_to_add = "새로운 내용이 추가되었습니다." # 기본값
+
         new_p = soup.new_tag("p")
-        new_p.string = new_paragraph_text
+        new_p.string = text_to_add
         if soup.body:
             soup.body.append(new_p)
         else:
@@ -58,8 +59,6 @@ def edit_html_document(document_content: str, instruction: str) -> str:
         if img_tag:
             img_tag.decompose()
     # TODO: 더 많은 HTML 편집 시나리오를 여기에 추가해야 합니다.
-    # 이 부분은 GPT가 instruction을 기반으로 어떤 HTML 조작을 할지 결정하는 로직이 필요합니다.
-    # 현재는 매우 기본적인 예시만 포함되어 있습니다.
 
     return str(soup)
 
@@ -74,10 +73,7 @@ def run_document_edit(user_command: str, document_content: str) -> str:
 
     llm_client = ChatOpenAI(model_name='gpt-4o', temperature=0)
 
-    # GPT가 edit_html_document 툴을 사용하도록 유도
-    # GPT에게 HTML 문서와 편집 요청을 주고, edit_html_document 툴을 사용하도록 지시합니다.
-    # GPT는 instruction을 기반으로 edit_html_document 툴의 인자를 결정해야 합니다.
-    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document]) # 새로운 툴 추가
+    llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document])
 
     user_prompt_content = f"""
     **현재 HTML 문서 내용:**
@@ -99,7 +95,6 @@ def run_document_edit(user_command: str, document_content: str) -> str:
         ]
     )
 
-    # GPT의 응답이 Tool Call이면 Tool을 실행하고 결과를 반환
     if response.tool_calls:
         for tool_call in response.tool_calls:
             if tool_call.function.name == "edit_html_document":
@@ -114,5 +109,4 @@ def run_document_edit(user_command: str, document_content: str) -> str:
                     new_text=tool_call.function.args["new_text"]
                 )
     
-    # Tool Call이 아니면 GPT의 직접 응답 (수정된 HTML)을 반환
     return response.content
