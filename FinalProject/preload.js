@@ -92,23 +92,26 @@ function toName(arg) {
 
 const fsBridge = {
   listDocs: () => ipcRenderer.invoke("fs:listDocs"),
-  readDoc: (arg) => ipcRenderer.invoke("fs:readDoc", { name: toName(arg) }),
+  readDoc: (arg) => ipcRenderer.invoke("fs:readDoc", { filePath: arg }), // name 대신 filePath 사용
   deleteDoc: (arg) => ipcRenderer.invoke("fs:deleteDoc", { name: toName(arg) }),
   open: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
   saveDoc: (nameOrObj, maybeContent) => {
-    let name = "";
+    let filePath = ""; // name 대신 filePath 사용
     let content = "";
     if (typeof nameOrObj === "object") {
-      name = toName(nameOrObj);
+      filePath = nameOrObj?.filePath ?? ""; // filePath 속성 사용
       content = nameOrObj?.content ?? "";
     } else {
-      name = toName(nameOrObj);
+      // 이 경우는 사용하지 않을 것이므로 그대로 둠
+      filePath = toName(nameOrObj); // 기존 name 처리 로직
       content = maybeContent ?? "";
     }
-    return ipcRenderer.invoke("fs:saveDoc", { name, content });
+    return ipcRenderer.invoke("fs:saveDoc", { filePath, content }); // name 대신 filePath 전달
   },
   /** 하위호환: 예전 코드에서 openDoc을 호출하는 경우 지원 */
   openDoc: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
+  showSaveDialog: (options) => ipcRenderer.invoke("fs:showSaveDialog", options),
+  showOpenDialog: (options) => ipcRenderer.invoke("fs:showOpenDialog", options), // 추가
 };
 
 /* ────────────────────────────────────────────────────────────

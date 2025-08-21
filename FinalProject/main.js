@@ -21,7 +21,7 @@
 
 require("dotenv").config();
 
-const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -355,24 +355,38 @@ ipcMain.handle("fs:listDocs", async () => {
   return list;
 });
 
-ipcMain.handle("fs:readDoc", async (_evt, { name }) => {
-  if (!name) throw new Error("filename required");
-  const base = resolveBaseDir();
-  const full = safeJoin(base, name);
+ipcMain.handle("fs:readDoc", async (_evt, { filePath }) => {
+  if (!filePath) throw new Error("filePath required");
+  const full = filePath;
   if (!fs.existsSync(full)) return { ok: false, reason: "not_found" };
   const content = await fs.promises.readFile(full, "utf-8");
-  await upsertOpened({ path: full, name });
-  return { ok: true, content, mime: extToMime(path.extname(name).slice(1)) };
+  await upsertOpened({ path: full, name: path.basename(full) });
+  return { ok: true, content, mime: extToMime(path.extname(full).slice(1)) };
 });
 
-ipcMain.handle("fs:saveDoc", async (_evt, { name, content }) => {
-  if (!name) throw new Error("filename required");
-  const base = resolveBaseDir();
-  const full = safeJoin(base, name);
-  await fs.promises.writeFile(full, content ?? "", "utf-8");
-  await upsertOpened({ path: full, name });
-  return { ok: true };
-});
+  ipcMain.handle('fs:saveDoc', async (event, { filePath, content }) => {
+    try {
+      console.log(`[fs:saveDoc] Attempting to save: ${filePath}`);
+      console.log(`[fs:saveDoc] Content length: ${content ? content.length : 0}`);
+
+      if (!filePath) throw new Error('filePath required');
+
+      let contentToSave = content ?? "";
+      const ext = path.extname(filePath).toLowerCase();
+
+      await fs.promises.writeFile(filePath, contentToSave, "utf-8");
+      console.log(`[fs:saveDoc] Successfully wrote file: ${filePath}`);
+
+      const name = path.basename(filePath); // Extract filename for upsertOpened
+      await upsertOpened({ path: filePath, name });
+      console.log(`[fs:saveDoc] Successfully updated opened index for: ${name}`);
+
+      return { ok: true };
+    } catch (error) {
+      console.error('Error occurred in handler for \'fs:saveDoc\':', error);
+      return { success: false, error: error.message };
+    }
+  });
 
 ipcMain.handle("fs:deleteDoc", async (_evt, { name }) => {
   if (!name) throw new Error("filename required");
@@ -393,6 +407,29 @@ ipcMain.handle("fs:open", async (_evt, { name }) => {
   return { ok: !r, reason: r || undefined };
 });
 
+// --- 파일 저장 대화 상자 추가 ---
+ipcMain.handle("fs:showSaveDialog", async (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  try {
+    const result = await dialog.showSaveDialog(win, options);
+    return result;
+  } catch (err) {
+    console.error("Error occurred in handler for 'fs:showSaveDialog':", err);
+    return { canceled: true, error: err.message };
+  }
+});
+
+// --- 파일 열기 대화 상자 추가 ---
+ipcMain.handle("fs:showOpenDialog", async (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  try {
+    const result = await dialog.showOpenDialog(win, options);
+    return result;
+  } catch (err) {
+    console.error("Error occurred in handler for 'fs:showOpenDialog':", err);
+    return { canceled: true, error: err.message };
+  }
+});
 /* ────────────────────────────────────────────────────────────
  * ✅ 변경: 로그인 성공 → 역할별 창 오픈
  *   - renderer(LoginPage.jsx)에서 auth:success 전송
@@ -424,6 +461,10 @@ ipcMain.on("auth:success", (_evt, payload) => {
  *    - 브라우저 환경 등에서 테스트할 때도 사용 가능
  * ──────────────────────────────────────────────────────────── */
 ipcMain.handle("open-feature-window", (_evt, role = "employee") => {
-  if (role === "admin") return createAdminWindow();
-  return createFeatureWindow(role);
+  if (role === "admin") {
+    createAdminWindow();
+  } else {
+    createFeatureWindow(role);
+  }
+  return true; // 성공했다는 의미로 간단한 값을 반환
 });

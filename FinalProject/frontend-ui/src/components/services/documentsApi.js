@@ -55,6 +55,36 @@ async function request(path, { method = "GET", headers = {}, body, timeout = 800
   }
 }
 
+// --- DOCX EXPORT FUNCTION ---
+export async function exportToDocx(htmlContent, filename = "document.docx") {
+  const url = `${BASE_URL}/documents/export/docx`;
+  const label = `[API] POST /documents/export/docx`;
+  console.time(label);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html_content: htmlContent, filename }),
+    });
+
+    console.log(`${label} → ${response.status}`, url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    console.debug(`${label} ✓ BLOB (${blob.size} bytes)`);
+    return blob;
+  } catch (e) {
+    console.error(`${label} ✖`, e);
+    throw e;
+  } finally {
+    console.timeEnd(label);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // 기존 API들 (그대로 유지)
 // ─────────────────────────────────────────────────────────────
