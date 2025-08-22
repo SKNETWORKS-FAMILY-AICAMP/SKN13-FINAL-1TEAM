@@ -14,7 +14,7 @@
  *    역할에 따라 "상속 받은 메뉴 세트"만 다르게 보여주고, 여기서 화면을 결정.
  *
  * props:
- *  - role: "admin" | "user"
+ *  - role: "admin" | "employee"
  *  - activeKey: 사이드바에서 선택된 key 값 (navconfig.js의 key와 1:1로 맞아야 함)
  *
  * 확장법:
@@ -32,35 +32,37 @@ import React from "react";
  *  - 내부에서 defaultTab에 따라 "문서 목록 / 캘린더 / 문서 작성(forms) / 마이페이지"를 출력.
  *  - 즉, 사원 쪽은 라우팅 없이도 탭 전환으로 UI를 구성하는 컴포넌트 구조.
  */
-import FeatureWindow from "../FeatureWindow/FeatureApp.jsx";
+import FeatureFrame from "../FeatureWindow/FeatureFrame.jsx";
 
 /** [관리자 전용] 사원관리 페이지
  *  - 팀원 구현 파일 위치에 맞춰 경로 조정 필요.
  *  - 예: ../../components/Admin/AdminEmployeePage.jsx 라면 아래 import 경로 수정.
  */
-import AdminPage from "../../pages/AdminPage.jsx";
+import AdminPage from "./panels/admin/FeatureEmployees.jsx";
 
-export default function RoleRouter({ role, activeKey }) {
+export default function RoleRouter({ userType, activeKey }) {
   /** 관리자(Admin) 분기
-   *  - 현재 요구사항: "사원 관리(employee)"와 "마이페이지(mypage)" 두 개만 노출.
-   *  - employee → AdminEmployeePage (라우팅 대상)
+   *  - 현재 요구사항: "사원 관리(employees)"와 "마이페이지(mypage)" 두 개만 노출.
+   *  - employees → AdminEmployeePage (라우팅 대상)
    *  - mypage   → 공용 FeatureWindow의 mypage 탭 재사용
    */
-  if (role === "admin") {
-    if (activeKey === "employee") return <AdminPage />;
-    if (activeKey === "mypage")   return <FeatureWindow defaultTab="mypage" />;
+  if (userType === "admin") {
+    if (activeKey === "employees") return <AdminPage />;
+    if (activeKey === "mypage")   return <FeatureFrame defaultTab="mypage" />;
     return <EmptyHint />;
+  } else if (userType === "user") {
+    if (activeKey === "docs")     return <FeatureFrame defaultTab="docs" />;
+    if (activeKey === "calendar") return <FeatureFrame defaultTab="calendar" />;
+    if (activeKey === "mypage")   return <FeatureFrame defaultTab="mypage" />;
+    // if (activeKey === "forms")    return <FeatureFrame defaultTab="forms" />; // "문서 작성"
   }
 
   /** 사원(User) 분기
    *  - 요구사항: "문서 목록(docs) / 캘린더(calendar) / 문서 작성(forms) / 마이페이지(mypage)"
    *  - key 값은 navconfig.js의 userSections와 1:1 매칭 필수.
    */
-  if (activeKey === "docs")     return <FeatureWindow defaultTab="docs" />;
-  if (activeKey === "calendar") return <FeatureWindow defaultTab="calendar" />;
-  if (activeKey === "forms")    return <FeatureWindow defaultTab="forms" />; // "문서 작성"
-  if (activeKey === "mypage")   return <FeatureWindow defaultTab="mypage" />;
-
+  
+  
   /** 안전망: 연결되지 않은 메뉴 키 */
   return <EmptyHint />;
 }

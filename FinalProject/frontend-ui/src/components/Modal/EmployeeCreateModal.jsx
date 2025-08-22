@@ -1,3 +1,29 @@
+/* 
+  파일: src/components/Modal/EmployeeCreateModal.jsx
+  역할: "사원 계정 등록"용 입력 모달. 부서/직급은 셀렉트 또는 직접입력, 관리자 여부/아이디/랜덤 비밀번호까지 생성해 제출.
+
+  LINKS:
+    - 이 파일을 사용하는 곳:
+      * 상위 "사원 관리" 화면(예: 관리자 페이지)에서 신규 등록 버튼 클릭 시 open=true로 표시
+    - 이 파일이 사용하는 것:
+      * FormModal → 공통 모달 프레임(제목/버튼/레이아웃)
+      * react-icons(FaRandom) → 비밀번호 재생성 아이콘 버튼
+    - 연계(상위 ↔ 하위):
+      * onSubmit(payload) → 상위가 실제 저장(API 호출/상태 반영) 수행
+      * onClose() → 모달 닫기
+
+  데이터 흐름(요약):
+    1) 모달이 열리면(useEffect) 모든 입력 초기화 + generatePassword(10)로 비밀번호 자동 생성
+    2) 부서/직급은 SelectWithCustomInline 한 줄 컴포넌트로 선택 또는 직접 입력
+       - value가 "__custom__"이면 우측 input 활성화
+    3) 필수값(name/department/position/userId/password) 검증 → submit 버튼 활성화
+    4) handleSubmit()에서 payload 구성 → onSubmit(payload) → onClose()
+
+  주의:
+    - 실제 배포에서는 콘솔에 payload(특히 password) 로깅 금지
+    - 옵션 목록(deptOptions/rankOptions)은 상위가 서버/설정으로 주입
+*/
+
 import React, { useEffect, useMemo, useState } from "react";
 import FormModal from "./FormModal";
 // 아이콘
@@ -5,7 +31,8 @@ import { FaRandom } from "react-icons/fa";  // 비밀번호 랜덤 생성 아이
 
 const CUSTOM = "__custom__";
 
-// 영대/영소/숫자/특수기호(!,@) 포함 랜덤 비밀번호
+/* 영대/영소/숫자/특수기호(!,&) 포함 랜덤 비밀번호 생성기
+   - 최소 조합 보장: U/L/D/S 각각 1자 이상 포함 후 셔플 */
 const generatePassword = (len = 10) => {
     const U = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const L = "abcdefghijklmnopqrstuvwxyz";
@@ -22,7 +49,8 @@ const generatePassword = (len = 10) => {
         .join("");
 };
 
-// 한 줄에서만 사용하는 셀렉트 + 직접입력 필드
+/* 한 줄 전용: 셀렉트 + 직접입력 필드 (value === CUSTOM일 때 input 활성화)
+   - 상위에서 options(문자열 배열)과 상태 제어 핸들러 주입 */
 const SelectWithCustomInline = ({
     label,
     options,
@@ -83,7 +111,8 @@ const EmployeeCreateModal = ({
     const [userId, setUserId] = useState("");
     const [password, setPassword] = useState("");
 
-    // 모달 열릴 때 초기화 + 비밀번호 자동 생성
+    /* 모달 열릴 때 초기화 + 비밀번호 자동 생성
+       - 닫혔다가 다시 열리면 clean state로 시작 */
     useEffect(() => {
         if (isOpen) {
             setName("");
@@ -97,6 +126,7 @@ const EmployeeCreateModal = ({
         }
     }, [isOpen]);
 
+    // 최종 선택값 계산: CUSTOM이면 입력값 사용, 아니면 select 값 사용
     const chosenDept = useMemo(
         () => (deptSel === CUSTOM ? deptCustom.trim() : deptSel),
         [deptSel, deptCustom]
@@ -106,6 +136,7 @@ const EmployeeCreateModal = ({
         [rankSel, rankCustom]
     );
 
+    // 필수값 모두 존재해야 제출 가능
     const isFormValid =
         name.trim() &&
         chosenDept &&

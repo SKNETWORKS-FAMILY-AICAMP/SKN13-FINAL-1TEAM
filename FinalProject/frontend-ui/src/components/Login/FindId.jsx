@@ -1,3 +1,23 @@
+/* 
+  파일: src/components/Login/FindId.jsx
+  역할: 이메일 인증 코드를 통해 사용자 아이디(또는 표시명)를 확인/변경하는 화면.
+
+  LINKS:
+    - 이 파일을 사용하는 곳:
+      * LoginPage.jsx에서 “아이디 찾기” 클릭 시 이 컴포넌트로 전환(상위 라우팅에서 처리)
+    - 이 파일이 사용하는 것:
+      * ../services/authApi → requestEmailCode, verifyEmailCode, updateUsername
+
+  데이터 흐름(요약):
+    1) handleSendCode: 이메일 입력값을 사용해 인증 코드 발송 요청
+    2) handleVerify: 사용자가 입력한 코드 검증 → ok면 isVerified=true
+    3) handleSubmit: 새 아이디(newUsername)로 업데이트 후 상위 onBack 호출로 로그인 화면 복귀
+
+  주의:
+    - 이메일/코드/새아이디 입력 유효성은 기본 버튼 disabled로 1차 방어
+    - 오류 메시지는 msg state로 사용자에게 안내
+*/
+
 // ✅ src/components/Login/FindId.jsx
 import React, { useState } from "react";
 import { requestEmailCode, verifyEmailCode, updateUsername } from "../services/authApi";

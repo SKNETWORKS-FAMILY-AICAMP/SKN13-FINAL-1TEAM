@@ -1,3 +1,34 @@
+/* 
+  파일: src/components/ChatWindow/ChatWindow.jsx
+  역할: 채팅창 본체. 메시지 목록 렌더링, 입력/전송, 파일 업로드(프리사인드), LLM 스트리밍(SSE) 수신,
+       오토스크롤 및 스트림 중지/정리까지 전체 채팅 플로우를 관리한다.
+
+  LINKS:
+    - 이 파일을 사용하는 곳:
+      * App.jsx (현재 세션/창 크기 상태를 props로 내려 렌더)
+    - 이 파일이 사용하는 것:
+      * MessageBubble.jsx → 개별 메시지(텍스트/첨부/이미지 라이트박스) 렌더
+      * ChatInput.jsx → 하단 입력/첨부/전송/중지 UI
+      * services/chatApi.js → getMessages(sessionId), saveMessage(payload)
+      * services/uploadPresigned.js → uploadChatbotFilePresigned(file, { sessionId })
+      * services/env.js(BASE_URL) → SSE /llm/stream 엔드포인트 구성
+
+  전체 플로우(요약):
+    1) 세션 변경 시 getMessages로 과거 대화 불러오기 → messages state 세팅
+    2) 사용자가 입력/첨부 → ChatInput에서 onSend() 호출 → 여기 handleSend 실행
+    3) (첨부가 있으면) 백그라운드로 presigned 업로드 진행(화면은 즉시 미리보기 유지)
+    4) 사용자 메시지 DB 저장(saveMessage)
+    5) SSE 연결(/llm/stream) → 토큰 수신시 updateLastMessage로 AI 답변 누적
+       - data.attachments가 오면 normalizeAttachments 후 attachToLastAI로 말풍선에 첨부 연결
+       - data.done 또는 [DONE] 수신 시 endStream()으로 정리
+    6) 중지 버튼 클릭 시 handleAbort() → SSE 종료 + 재입력 가능
+    7) 언마운트/재스트림 시작 전에는 항상 closeEventSource()로 기존 SSE 정리
+
+  주의사항:
+    - 이벤트 소스(eventSourceRef) 누수 방지: endStream/Abort/언마운트에서 모두 close 처리
+    - 메시지 배열 조작(setMessages)은 항상 불변성 유지하여 렌더링 일관성 보장
+*/
+
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
@@ -14,11 +45,13 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
 
+  // SSE 핸들 정리(이미 열려있으면 종료)
   const closeEventSource = useCallback(() => {
     eventSourceRef.current?.close?.();
     eventSourceRef.current = null;
   }, []);
 
+  // 서버에서 온 첨부 배열을 화면용 형태로 표준화
   const normalizeAttachments = useCallback((arr) => {
     if (!Array.isArray(arr)) return [];
     return arr.map((a) => ({
@@ -28,6 +61,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     }));
   }, []);
 
+  // 세션 변경 시 과거 메시지 로드
   useEffect(() => {
     if (!currentSession?.id) { setMessages([]); return; }
     (async () => {
@@ -40,16 +74,20 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     })();
   }, [currentSession]);
 
+  // 새 메시지 도착 때 오토스크롤
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // 언마운트 시 SSE 정리
   useEffect(() => () => closeEventSource(), [closeEventSource]);
 
+  // 말풍선 끝에 메시지 추가
   const appendMessage = useCallback((msg) => {
     setMessages(prev => [...prev, msg]);
   }, []);
 
+  // 마지막 AI 메시지에 토큰 덧붙이기(없으면 새로 추가)
   const updateLastMessage = useCallback((delta) => {
     setMessages(prev => {
       const arr = [...prev];
@@ -63,6 +101,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     });
   }, []);
 
+  // 마지막 AI 메시지에 첨부 결합(없으면 AI 메시지 생성)
   const attachToLastAI = useCallback((atts) => {
     setMessages(prev => {
       const arr = [...prev];
@@ -78,6 +117,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     });
   }, []);
 
+  // 스트림 종료 공통 처리: SSE 정리 + 상태 갱신 + 세션 목록 새로고침 신호
   const endStream = useCallback(() => {
     closeEventSource();
     setIsStreaming(false);
@@ -90,6 +130,9 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     setIsStreaming(false);
   }, [closeEventSource]);
 
+  /* 메시지 전송: 파일 업로드(프리사인드) + 메시지 저장 + SSE 스트림 수신
+     - UX 원칙: 화면에는 즉시 미리보기(파일/이미지) → 업로드는 비동기로 진행
+     - 에러는 콘솔 로깅(필요 시 토스트 등 UI 처리 확장 가능) */
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
     const sessionId = currentSession?.id;
@@ -104,7 +147,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
     setIsStreaming(true);
 
-    // ✅ 기존과 동일: 사용자에게는 즉시 미리보기(이미지면 objectURL)로 보임
+    // 사용자 말풍선에 즉시 미리보기 첨부(이미지는 objectURL)
     const attachmentsForPreview = (files || []).map(f => ({
       name: f.name,
       type: f.type || 'application/octet-stream',
@@ -115,34 +158,32 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
       ? { role: 'user', content: prompt, attachments: attachmentsForPreview }
       : { role: 'user', content: prompt });
 
-    // 입력/첨부 초기화 (기존과 동일 타이밍)
+    // 입력/첨부 초기화: UX 상 즉시 비움
     setInput('');
     setFiles([]);
 
-    // ✅ (신규) 프리사인드 업로드는 "백그라운드"로 진행 → UX 동일
+    // (신규) 프리사인드 업로드를 비동기 병렬 수행(UX 방해 없음)
     if (hasFiles) {
       (async () => {
         try {
           await Promise.all(
             (files || []).map(f => uploadChatbotFilePresigned(f, { sessionId }))
           );
-          // 백엔드 DB(attachments 테이블 등)에 메타 저장 완료.
-          // 필요하면 여기서 사용자 메시지의 첨부 URL을 실제 fileUrl로 업데이트하는 로직을 추가할 수 있으나,
-          // "기능/흐름 유지" 요구에 따라 화면상 즉시 미리보기만 유지하고 갱신은 생략합니다.
+          // 필요 시: 업로드 완료 후 attachments의 실제 URL로 UI 갱신 로직 추가 가능
         } catch (err) {
           console.error('[ERROR] 파일 업로드 실패:', err);
         }
       })();
     }
 
-    // 기존과 동일: 사용자 메시지 저장(첨부는 별도 /attachments 로 이미 저장됨)
+    // 사용자 메시지 저장(첨부 메타는 별도 업로드 경로에서 처리됨)
     try {
       await saveMessage({ sessionId, role: 'user', content: prompt });
     } catch (err) {
       console.error('[ERROR] 메시지 저장 실패:', err);
     }
 
-    // 기존과 동일: SSE 시작
+    // SSE 연결 시작: /llm/stream
     const url = new URL(`${BASE_URL}/llm/stream`, window.location.origin);
     url.searchParams.append('session_id', sessionId);
     url.searchParams.append('prompt', prompt);
@@ -150,11 +191,12 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
+    // AI 말풍선 프레임 추가(토큰 누적용)
     appendMessage({ role: 'ai', content: '' });
 
     es.onmessage = (event) => {
       try {
-        // ✅ 스트림 종료 신호 처리
+        // 스트림 종료 신호
         if (event.data === '[DONE]') {
           endStream();
           return;
@@ -162,6 +204,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
         const data = JSON.parse(event.data);
 
+        // 첨부 수신 시 마지막 AI 메시지에 결합
         if (Array.isArray(data.attachments) && data.attachments.length > 0) {
           attachToLastAI(normalizeAttachments(data.attachments));
         }
@@ -175,7 +218,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         else if (data.thinking_message) appendMessage({ role: 'thinking', content: data.thinking_message });
         else if (data.tool_message) appendMessage({ role: 'tool', content: data.tool_message });
       } catch (e) {
-        // JSON이 아니면 토큰일 수도 있으니 무시
+        // JSON 파싱 실패(일부 토큰이 생으로 오는 경우)는 무시
         // console.log('raw event', event.data);
       }
     };

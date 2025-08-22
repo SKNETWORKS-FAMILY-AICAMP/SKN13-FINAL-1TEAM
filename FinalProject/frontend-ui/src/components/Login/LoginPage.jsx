@@ -1,3 +1,31 @@
+/* 
+  파일: src/components/Login/LoginPage.jsx
+  역할: 로그인 메인 화면(사원/관리자 역할 선택, 아이디 저장, 성공 시 창 전환 및 상태 반영).
+
+  LINKS:
+    - 이 파일을 사용하는 곳:
+      * App.jsx → 최초 진입 시 로그인 화면으로 렌더, onLoginSuccess로 상위 상태 갱신
+    - 이 파일이 사용하는 것:
+      * ../shared/HeaderBar → 상단 창 제어/타이틀 바 UI
+      * window.electron.ipcRenderer.send('auth:success', { role, userId }) → 메인 프로세스 통지
+      * window.electron.openFeatureWindow(role) → 기능부(Electron BrowserWindow) 오픈
+
+  데이터 흐름(요약):
+    1) 역할 토글(employee/admin) → 역할별 저장된 아이디 로딩(localStorage)
+    2) handleLogin():
+       - (현재 mock) 아이디/비밀번호/역할 검증
+       - 역할별 아이디 저장 옵션(saveId) 반영
+       - TOKEN/USER_ID 저장
+       - 메인 프로세스에 auth:success IPC 송신(+ role)
+       - preload 브릿지 openFeatureWindow(role) 호출로 기능부 창 오픈
+       - onLoginSuccess 콜백으로 React 상위(App) 상태 갱신
+    3) “아이디 찾기/비번 찾기” 버튼 → 상위 라우팅으로 FindId/ResetPassword 전환
+
+  주의:
+    - 실제 배포 시 mock 인증부는 반드시 백엔드 로그인 API 연동으로 교체
+    - openFeatureWindow, IPC 송신은 Electron 환경(preload 설정) 필요. 웹 단독 실행 시 무시될 수 있음.
+*/
+
 /**
  * components/Login/LoginPage.jsx
  * ------------------------------------------------------------------
