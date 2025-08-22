@@ -3,6 +3,7 @@
 from typing import Any
 from dotenv import load_dotenv
 
+from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableConfig
 
@@ -33,22 +34,27 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """
     print("--- DocumentEditAgent 노드 실행 중 ---")
     
-    messages = state["messages"]
+    # IMPORTANT: Make a copy so we don't modify the original state list
+    messages = state["messages"].copy()
     document_content = state.get("document_content")
-    
-    # 시스템 메시지가 없는 경우 문서 편집용 시스템 프롬프트 추가
-    """if not any(isinstance(msg, SystemMessage) for msg in messages):
-        print("--- 시스템 프롬프트 추가 ---")
-        system_prompt_content = get_document_edit_system_prompt()
-        messages = [SystemMessage(content=system_prompt_content)] + messages
-    """
-    # 문서 내용이 있는 경우 컨텍스트에 포함
+
+    # Inject the document content as a system message for the LLM to see
     if document_content:
         print("--- 문서 내용 포함하여 처리 ---")
-        # 마지막 사용자 메시지에 문서 컨텍스트 추가 (필요시)
-        # 현재는 시스템 프롬프트에서 document_content 처리를 담당
-    else:
-        print("--- 문서 내용 없음, 요청 필요 ---")
+        context_message = SystemMessage(
+            content=f"""당신은 다음 문서 내용을 바탕으로 사용자의 편집 요청을 처리해야 합니다. 
+사용자가 문서의 일부를 언급하면, 이 내용에서 찾아야 합니다. 
+사용자가 내용을 추가하거나 요약하라고 하면, 이 내용을 기준으로 작업해야 합니다.
+
+--- 문서 시작 ---
+{document_content}
+--- 문서 끝 ---"""
+        )
+        # Insert it before the last user message
+        if len(messages) > 1:
+            messages.insert(-1, context_message)
+        else:
+            messages.append(context_message)
 
     # LLM 호출 및 응답 반환
     response = llm_with_tools.invoke(messages)
