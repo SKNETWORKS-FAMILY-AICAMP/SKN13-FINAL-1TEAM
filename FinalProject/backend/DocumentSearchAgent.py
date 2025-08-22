@@ -27,11 +27,6 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
         system_prompt_content = get_document_search_system_prompt()
         messages = [SystemMessage(content=system_prompt_content)] + messages
 
-    # Add document_content to messages if it exists in the state
-    if state.get("document_content"):
-        document_context_message = SystemMessage(content=f"사용자가 현재 보고 있는 문서의 내용입니다:\n\n{state["document_content"]}")
-        messages.insert(0, document_context_message) # Insert at the beginning for context
-
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 

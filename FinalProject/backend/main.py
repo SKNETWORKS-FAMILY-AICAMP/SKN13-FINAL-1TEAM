@@ -550,6 +550,12 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         kind = event["event"]
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
+            
+            # GigaChad's Update: Check for the content request signal
+            if content == "NEEDS_DOCUMENT_CONTENT":
+                yield f"data: {json.dumps({'needs_document_content': True})}\n\n"
+                continue # Stop processing this chunk and don't send the magic string to the user
+
             if content:
                 yield f"data: {json.dumps({'content': content})}\n\n"
                 full_response_content += content
