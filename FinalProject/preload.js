@@ -70,6 +70,12 @@ const electronAPI = {
     maximize: () => ipcRenderer.invoke("window:maximize"),
     unmaximize: () => ipcRenderer.invoke("window:unmaximize"),
   },
+
+  /** ✅ 추가: 에디터 content 요청 (메인 프로세스에서 호출) */
+  getEditorContent: () => ipcRenderer.invoke("get-editor-content"), // 이 부분을 추가
+
+  /** GigaChad's Update: Listen for editor updates from the main process */
+  onEditorUpdate: (callback) => ipcRenderer.on('apply-editor-update', (event, ...args) => callback(...args)),
 };
 
 /* ────────────────────────────────────────────────────────────
@@ -92,7 +98,7 @@ function toName(arg) {
 
 const fsBridge = {
   listDocs: () => ipcRenderer.invoke("fs:listDocs"),
-  readDoc: (arg) => ipcRenderer.invoke("fs:readDoc", { filePath: arg }), // name 대신 filePath 사용
+  readDoc: (arg) => ipcRenderer.invoke("fs:readDoc", { name: toName(arg)  }), // name 대신 filePath 사용
   deleteDoc: (arg) => ipcRenderer.invoke("fs:deleteDoc", { name: toName(arg) }),
   open: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
   saveDoc: (nameOrObj, maybeContent) => {

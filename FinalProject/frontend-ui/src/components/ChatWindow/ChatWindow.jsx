@@ -90,6 +90,95 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     setIsStreaming(false);
   }, [closeEventSource]);
 
+  const handleStream = useCallback(async (response) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep the last partial line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const jsonStr = line.substring(6);
+          if (jsonStr === '[DONE]') {
+            endStream();
+            return;
+          }
+          const data = JSON.parse(jsonStr);
+          if (data.needs_document_content) {
+            await handleToolRequest(data);
+            return; // Stop processing this stream
+          }
+          if (Array.isArray(data.attachments) && data.attachments.length > 0) {
+            attachToLastAI(normalizeAttachments(data.attachments));
+          }
+          if (data.content) updateLastMessage(data.content);
+          else if (data.thinking_message) appendMessage({ role: 'thinking', content: data.thinking_message });
+          else if (data.tool_message) appendMessage({ role: 'tool', content: data.tool_message });
+        } catch (e) {
+          console.error('Error processing stream chunk:', line, e);
+        }
+      }
+    }
+  }, [endStream, attachToLastAI, updateLastMessage, appendMessage, normalizeAttachments]);
+
+    const handleToolRequest = useCallback(async (toolRequestData) => {
+    appendMessage({ role: 'thinking', content: '문서 내용을 분석하고 있습니다...' });
+
+    let documentContent = '';
+
+    try {
+      // Electron feature window에서 content 가져오기
+      documentContent = await window.ipcRenderer.invoke('get-editor-content-from-feature-window');
+    } catch (e) {
+      console.error('Feature window에서 에디터 내용 가져오기 실패', e);
+      // 기존 fallback
+      if (typeof window.getTiptapEditorContent === 'function') {
+        documentContent = window.getTiptapEditorContent();
+      } else {
+        console.warn('getTiptapEditorContent function not found on window object.');
+      }
+    }
+
+    const toolResult = {
+      tool_call_id: toolRequestData.agent_context.tool_call_id,
+      result: documentContent,
+    };
+
+    try {
+      const response = await fetch(`${BASE_URL}/llm/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: currentSession.id,
+          message: '',
+          is_tool_response: true,
+          tool_result: toolResult,
+          agent_context: toolRequestData.agent_context,
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await handleStream(response);
+    } catch (error) {
+      console.error('Error handling tool request:', error);
+      appendMessage({ role: 'error', content: '문서 처리 중 오류가 발생했습니다.' });
+      endStream();
+    }
+  }, [currentSession?.id, appendMessage, endStream, handleStream]);
+
+
+  const isEditQuery = (prompt) => {
+    const keywords = ['수정', '추가', '삭제', '변경', '제목', '내용', '문서', '편집'];
+    return keywords.some(keyword => prompt.includes(keyword));
+  };
+
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
     const sessionId = currentSession?.id;
@@ -147,6 +236,21 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     url.searchParams.append('session_id', sessionId);
     url.searchParams.append('prompt', prompt);
 
+    if (isEditQuery(prompt)) {
+      try {
+        appendMessage({ role: 'thinking', content: '문서 내용을 가져오는 중...' });
+        const documentContent = await window.electron.getEditorContent();
+        if (documentContent) {
+          url.searchParams.append('document_content', documentContent);
+        }
+      } catch (e) {
+        console.error('Error getting editor content:', e);
+        appendMessage({ role: 'error', content: '에디터 내용을 가져오는 데 실패했습니다.' });
+        endStream();
+        return;
+      }
+    }
+
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -161,6 +265,10 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         }
 
         const data = JSON.parse(event.data);
+
+        if (data.document_update) {
+          window.electron.ipcRenderer.send('update-editor-content', data.document_update);
+        }
 
         if (Array.isArray(data.attachments) && data.attachments.length > 0) {
           attachToLastAI(normalizeAttachments(data.attachments));

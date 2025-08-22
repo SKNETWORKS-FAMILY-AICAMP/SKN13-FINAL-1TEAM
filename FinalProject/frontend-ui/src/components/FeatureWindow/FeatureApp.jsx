@@ -151,7 +151,15 @@ function DocumentEditor({
     if (setEditorRef && editor) {
       setEditorRef(editor);
     }
+    window.getTiptapEditorContent = () => {
+      return editor.getHTML();
+    };
+    return () => {
+      delete window.getTiptapEditorContent;
+    };
   }, [editor, setEditorRef]);
+
+  
 
   const handleEditDocumentWithAI = useCallback(async () => {
     if (!editor) return;

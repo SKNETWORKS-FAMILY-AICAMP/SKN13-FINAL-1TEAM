@@ -24,6 +24,7 @@ require("dotenv").config();
 const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const express = require("express"); // express 임포트 추가
 
 let mainWindow = null;     // 로그인/챗봇 창
 let featureWindow = null;  // 기능부 전용 창(사원)
@@ -171,6 +172,32 @@ function createAdminWindow() {
 }
 
 /* ────────────────────────────────────────────────────────────
+ * HTTP 서버 (백엔드에서 프론트엔드 content 요청용)
+ * ──────────────────────────────────────────────────────────── */
+const expressApp = express();
+const PORT = 8080; // 백엔드에서 이 포트로 요청을 보낼 것임
+
+expressApp.get("/get-document-content", async (req, res) => {
+  try {
+    // FeatureWindow가 열려있고, 웹 콘텐츠가 준비되었는지 확인
+    if (featureWindow && !featureWindow.webContents.isLoading()) {
+      // 렌더러 프로세스에 content 요청
+      const content = await featureWindow.webContents.invoke("get-editor-content");
+      res.json({ content });
+    } else {
+      res.status(404).json({ error: "Feature window not active or ready." });
+    }
+  } catch (error) {
+    console.error("Error getting document content from renderer:", error);
+    res.status(500).json({ error: "Failed to get document content." });
+  }
+});
+
+expressApp.listen(PORT, () => {
+  console.log(`Electron HTTP server listening on port ${PORT}`);
+});
+
+/* ────────────────────────────────────────────────────────────
  * 앱 라이프사이클
  * ──────────────────────────────────────────────────────────── */
 app.whenReady().then(() => {
@@ -206,9 +233,7 @@ app.on("browser-window-created", (_e, win) => {
 });
 
 /* ────────────────────────────────────────────────────────────
- * ✅ 추가: 창 제어 IPC (프레임리스 타이틀바 버튼용)
- *  - preload의 electron.window.* 가 여기로 invoke
- *  - 또한 레거시 send/on 채널(win:*, window-*)도 호환
+ * IPC: 창 제어 (프레임리스 타이틀바 버튼용)
  * ──────────────────────────────────────────────────────────── */
 const getSenderWindow = (event) => BrowserWindow.fromWebContents(event.sender);
 
@@ -244,6 +269,23 @@ ipcMain.handle("window:close", (event) => {
   const win = getSenderWindow(event);
   win?.close();
   return true;
+});
+
+// ✅ 추가: 에디터 content 요청 (렌더러 프로세스에서 호출)
+ipcMain.handle("get-editor-content", async () => {
+  try {
+    if (featureWindow && !featureWindow.webContents.isLoading()) {
+      // 렌더러 프로세스에서 editor.getHTML() 호출
+      const content = await featureWindow.webContents.executeJavaScript(`
+        window.getTiptapEditorContent ? window.getTiptapEditorContent() : '';
+      `);
+      return content;
+    }
+    return ""; // FeatureWindow가 활성화되지 않았거나 로딩 중이면 빈 문자열 반환
+  } catch (error) {
+    console.error("Error in get-editor-content IPC handler:", error);
+    return "";
+  }
 });
 
 // 🔁 Legacy aliases (send/on) — 옛 채널 호환
@@ -456,6 +498,13 @@ ipcMain.on("auth:success", (_evt, payload) => {
   createFeatureWindow("employee");
 });
 
+// GigaChad's Update: Listen for content updates from the chat window and relay to the feature window.
+ipcMain.on('update-editor-content', (event, content) => {
+  if (featureWindow) {
+    featureWindow.webContents.send('apply-editor-update', content);
+  }
+});
+
 /* ────────────────────────────────────────────────────────────
  * ✅ 변경: preload에서 역할별 기능 창 직접 열기
  *    - 브라우저 환경 등에서 테스트할 때도 사용 가능
@@ -463,7 +512,8 @@ ipcMain.on("auth:success", (_evt, payload) => {
 ipcMain.handle("open-feature-window", (_evt, role = "employee") => {
   if (role === "admin") {
     createAdminWindow();
-  } else {
+  }
+  else {
     createFeatureWindow(role);
   }
   return true; // 성공했다는 의미로 간단한 값을 반환

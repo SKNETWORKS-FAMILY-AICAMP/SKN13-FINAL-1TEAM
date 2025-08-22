@@ -1,8 +1,13 @@
 import { LLM_API_BASE } from './env';
 
 // SSE 스트리밍
-export function streamLLM({ sessionId, prompt, onDelta, onToolMessage, onDone, onError }) {
-  const url = `${LLM_API_BASE}/llm/stream?session_id=${encodeURIComponent(sessionId)}&prompt=${encodeURIComponent(prompt)}`;
+export function streamLLM({ sessionId, prompt, documentContent, onDelta, onToolMessage, onDone, onError }) {
+  const url = new URL(`${LLM_API_BASE}/llm/stream`);
+  url.searchParams.append('session_id', sessionId);
+  url.searchParams.append('prompt', prompt);
+  if (documentContent) {
+    url.searchParams.append('document_content', documentContent);
+  }
   const es = new EventSource(url);
   let full = '';
 
