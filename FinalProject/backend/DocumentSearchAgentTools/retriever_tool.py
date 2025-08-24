@@ -5,7 +5,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_core.tools import tool
 from dotenv import load_dotenv
-
+import time
 load_dotenv()
 
 class DocumentRetriever:
@@ -17,7 +17,7 @@ class DocumentRetriever:
         Initializes the DocumentRetriever.
         """
         # Corrected DB path to point to project root
-        self.db_path = db_path or "../chroma_db"
+        self.db_path = db_path or "../../../chroma_db"
         self.collection_name = os.getenv("CHROMA_COLLECTION_NAME", "kobaco_pdf_collection")
         # Changed embedding function class and model
         self.embedding_function = OpenAIEmbeddings(model=model_name)
@@ -80,6 +80,7 @@ if __name__ == '__main__':
     ]
     
     for query in test_queries:
+        p=time.time()
         print(f"--- Testing query: {query} ---")
         results = RAG_search_tool.invoke({"keywords": [query]})
         retrieved_docs = results.get('retrieved_docs', [])
@@ -88,3 +89,4 @@ if __name__ == '__main__':
             print(f"- 출처: {doc['metadata']['source']}")
             print(f"  내용: {doc['page_content'][:100]}...\n")
         print("-" * 20)
+        print(f"time : {time.time()-p}")
