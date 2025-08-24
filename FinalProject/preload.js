@@ -1,72 +1,98 @@
-// ✅ preload.js (원래 구조 유지 + fsBridge.openDoc 추가)
+/**
+ * preload.js
+ * ------------------------------------------------------------------
+ * 목적:
+ *  - Renderer(React) ↔ Main(Electron) 간 안전한 브릿지 제공.
+ *  - [추가] 로그아웃 전용 브리지(window.auth.*)
+ */
+
 const { contextBridge, ipcRenderer } = require("electron");
 
-// 내부 헬퍼: 리스너 래핑(이벤트 객체 제거)
-const wrap = (cb) =>
-  typeof cb === "function" ? (_e, ...args) => cb(...args) : () => {};
-
-// ────────────────────────────────────────────
-// electron API 래퍼 (기존 그대로)
-// ────────────────────────────────────────────
+/* 공용 electron API (원본 유지) */
 const electronAPI = {
   ipcRenderer: {
-    // 기존 그대로 사용 가능
     send: (channel, ...args) => ipcRenderer.send(channel, ...args),
-    // 기존: invoke(channel, data) → 호환 유지 + 가변 인자 지원
     invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
-
-    // on: 등록 후 해제 함수 반환(선택 사용)
-    on: (channel, callback) => {
-      const fn = wrap(callback);
-      ipcRenderer.on(channel, fn);
-      return () => ipcRenderer.removeListener(channel, fn);
+    on: (channel, cb) => {
+      const handler = (_evt, ...a) => cb?.(...a);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
     },
-    // 한번만
-    once: (channel, callback) => {
-      ipcRenderer.once(channel, wrap(callback));
-    },
-    // off: 특정 콜백만 제거(없으면 전부 제거)
-    off: (channel, callback) => {
-      if (callback) ipcRenderer.removeListener(channel, wrap(callback));
-      else ipcRenderer.removeAllListeners(channel);
-    },
-    // 필요시 전체 제거용
+    once: (channel, cb) => ipcRenderer.once(channel, (_evt, ...a) => cb?.(...a)),
+    off: (channel, cb) =>
+      cb ? ipcRenderer.removeListener(channel, cb) : ipcRenderer.removeAllListeners(channel),
     removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
   },
 
-  // ✅ 기존 노출 유지
   isWindowMaximized: () => ipcRenderer.invoke("check-maximized"),
 
-  // 창 리사이즈 이벤트 (등록 시 언레지스터 함수 반환)
-  onWindowResize: (callback) => {
-    const fn = wrap(callback);
-    ipcRenderer.on("window-resized", fn);
-    return () => ipcRenderer.removeListener("window-resized", fn);
+  onWindowResize: (cb) => {
+    const handler = (_evt, ...a) => cb?.(...a);
+    ipcRenderer.on("window-resized", handler);
+    return () => ipcRenderer.removeListener("window-resized", handler);
   },
-  offWindowResize: (callback) =>
-    ipcRenderer.removeListener("window-resized", callback),
+  offWindowResize: (cb) => ipcRenderer.removeListener("window-resized", cb),
 
-  // 📄 S3 업로드 URL 요청(기존 유지)
   getS3UploadUrl: (fileName) => ipcRenderer.invoke("get-s3-upload-url", fileName),
+
+  openFeatureWindow: (role) => ipcRenderer.invoke("open-feature-window", role),
+
+  window: {
+    minimize: () => ipcRenderer.invoke("window:minimize"),
+    maximizeToggle: () => ipcRenderer.invoke("window:maximize-toggle"),
+    close: () => ipcRenderer.invoke("window:close"),
+    maximize: () => ipcRenderer.invoke("window:maximize"),
+    unmaximize: () => ipcRenderer.invoke("window:unmaximize"),
+  },
 };
 
-// ────────────────────────────────────────────
-/** fsBridge: 로컬 파일 브릿지 (기존 그대로 + openDoc 추가) */
-// ────────────────────────────────────────────
+/* ✅ (추가) 메인 로그인 창 다시 띄우기 */
+electronAPI.showMain = () => ipcRenderer.send("app:show-main");
+
+/* ✅ 로그아웃 전용 브리지 — 기본 스코프 'all' */
+const authAPI = {
+  requestLogout: (scope = "all") => ipcRenderer.send("app:logout-request", scope),
+  onLogout: (cb) => {
+    const handler = (_evt, ...args) => cb?.(...args);
+    ipcRenderer.on("logout", handler);
+    return () => ipcRenderer.removeListener("logout", handler);
+  },
+  offLogout: (cb) => ipcRenderer.removeListener("logout", cb),
+};
+
+/* 파일시스템 Bridge (원본 유지) */
+function toName(arg) {
+  if (!arg) return "";
+  if (typeof arg === "string") {
+    const parts = arg.split(/[\\/]/);
+    return parts[parts.length - 1];
+  }
+  if (typeof arg === "object") {
+    if (arg.name) return toName(arg.name);
+    if (arg.path) return toName(arg.path);
+  }
+  return "";
+}
 const fsBridge = {
-  listDocs: (subdir = "") => ipcRenderer.invoke("fs:listDocs", subdir),
-  readDoc: (path) => ipcRenderer.invoke("fs:readDoc", path),
-  saveDoc: (payload) => ipcRenderer.invoke("fs:saveDoc", payload), // { name, content, subdir? }
-  deleteDoc: (path) => ipcRenderer.invoke("fs:deleteDoc", path),
-  // 👇 새로 추가: OS 기본앱으로 열기
-  openDoc: (path) => ipcRenderer.invoke("fs:open", path),
+  listDocs: () => ipcRenderer.invoke("fs:listDocs"),
+  readDoc: (arg) => ipcRenderer.invoke("fs:readDoc", { name: toName(arg) }),
+  deleteDoc: (arg) => ipcRenderer.invoke("fs:deleteDoc", { name: toName(arg) }),
+  open: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
+  saveDoc: (nameOrObj, maybeContent) => {
+    let name = "", content = "";
+    if (typeof nameOrObj === "object") { name = toName(nameOrObj); content = nameOrObj?.content ?? ""; }
+    else { name = toName(nameOrObj); content = maybeContent ?? ""; }
+    return ipcRenderer.invoke("fs:saveDoc", { name, content });
+  },
+  openDoc: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
 };
 
-// 노출
+/* 전역 노출 */
 contextBridge.exposeInMainWorld("electron", electronAPI);
+contextBridge.exposeInMainWorld("auth", authAPI);
 contextBridge.exposeInMainWorld("fsBridge", fsBridge);
 
-// (선택) 변조 방지
 Object.freeze(electronAPI);
 Object.freeze(electronAPI.ipcRenderer);
+Object.freeze(authAPI);
 Object.freeze(fsBridge);
