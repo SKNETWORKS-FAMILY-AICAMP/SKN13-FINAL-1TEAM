@@ -11,7 +11,7 @@ from datetime import datetime
 import fitz # PyMuPDF
 from docx import Document as DocxDocument # python-docx
 from langchain_core.messages.tool import ToolMessage
-
+import time
 from .RoutingAgent import RoutingAgent, generate_config
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
 from .llm_tools.html_to_docx import convert_html_to_docx
@@ -598,7 +598,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 # For now, just streaming it.
             
             yield "data: [DONE]\n\n" # Moved this line here
-
+    print(f"time : {time.time()}")
     if full_response_content:
         new_message = ChatMessage(session_id=session_id, role="assistant", content=full_response_content)
         db.add(new_message)
