@@ -11,10 +11,10 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-from .DocumentSearchAgentTools.AgentState import AgentState
-from .DocumentSearchAgentTools.retriever_tool import RAG_search_tool
-from .DocumentSearchAgentTools.agent_logic import AgentTools
-from .document_search_system_prompt import get_document_search_system_prompt 
+from ..core.AgentState import AgentState
+from ..tools.retriever_tool import RAG_search_tool
+from ..tools.agent_logic import AgentTools
+from ..prompts.DocumentSearchSystemPrompt import get_document_search_system_prompt 
 
 load_dotenv()
 

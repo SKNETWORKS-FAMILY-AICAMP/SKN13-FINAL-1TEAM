@@ -1,9 +1,9 @@
 # DocumentEditAgent.py
 
-from typing import Any, List
+from typing import Any
 from dotenv import load_dotenv
 
-from langchain_core.messages import SystemMessage, ToolMessage, HumanMessage
+from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableConfig
 from langchain_core.prompts import ChatPromptTemplate
@@ -12,8 +12,8 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-from .DocumentSearchAgentTools.AgentState import AgentState
-from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document
+from ..core.AgentState import AgentState
+from ..tools.editor_tool import run_document_edit, replace_text_in_document
 
 load_dotenv()
 

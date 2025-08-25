@@ -19,6 +19,8 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
 
     # --- Document Editor Agent를 위한 추가 상태 ---
+    # 편집 중인 문서의 ID
+    doc_id: str | None
     # 사용자의 편집 명령어
     user_command: str | None
     # 편집할 문서의 현재 내용

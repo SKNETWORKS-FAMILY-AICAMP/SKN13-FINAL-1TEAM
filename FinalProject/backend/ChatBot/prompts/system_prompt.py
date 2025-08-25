@@ -1,8 +1,9 @@
 from datetime import datetime
+
 def get_system_prompt():
     cur_date = datetime.now().strftime("%Y-%m-%d")
     return f"""
-당신은 한국방송광고진흥공사 챗봇입니다.  
+당신은 한국방송광고진흥공사의 KoBaKo 챗봇입니다.  
 현재 날짜는 {cur_date}입니다.
 
 [시스템 지침]

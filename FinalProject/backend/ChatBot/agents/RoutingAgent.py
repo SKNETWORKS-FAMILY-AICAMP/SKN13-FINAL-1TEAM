@@ -9,7 +9,7 @@ from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableConfig
 
 # Import the comprehensive state and the sub-agents
-from .DocumentSearchAgentTools.AgentState import AgentState
+from ..core.AgentState import AgentState
 from .chat_agent import agent as GeneralChatAgent
 from .DocumentSearchAgent import DocumentSearchAgent
 from .DocumentEditorAgent import DocumentEditAgent

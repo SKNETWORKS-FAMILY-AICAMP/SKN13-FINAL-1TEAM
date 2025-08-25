@@ -4,7 +4,7 @@
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
-from .AgentState import AgentState
+from ..core.AgentState import AgentState
 
 class AgentTools:
     """Encapsulates the logical tools for the document search agent."""

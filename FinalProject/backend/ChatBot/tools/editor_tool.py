@@ -1,9 +1,8 @@
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from backend.document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
+from ..prompts.DocumentEditorSystemPrompt import EDITOR_SYSTEM_PROMPT
 from bs4 import BeautifulSoup
 import re
-import requests
 
 @tool
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
