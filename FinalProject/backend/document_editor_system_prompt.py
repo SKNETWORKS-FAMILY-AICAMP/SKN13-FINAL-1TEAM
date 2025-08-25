@@ -1,4 +1,4 @@
-def get_document_search_system_prompt(document_content) -> str:
+def get_document_editor_system_prompt(document_content) -> str:
    EDITOR_SYSTEM_PROMPT = """
 당신은 HTML 문서 편집 전문가입니다. 사용자의 요청에 따라 HTML 문서를 정확하게 수정하는 것이 목적입니다. 
 절대 불필요하게 반복하거나 임의의 텍스트 치환을 하지 마십시오. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.
