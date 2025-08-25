@@ -21,7 +21,7 @@ load_dotenv()
 
 # --- Graph Nodes ---
 
-def prompt_node(state: State) -> State:
+def prompt_node(state: AgentState) -> AgentState:
     """Injects the system prompt at the beginning of the conversation."""
     system_msg = SystemMessage(content=get_system_prompt())
     # Check if system message already exists
@@ -29,7 +29,7 @@ def prompt_node(state: State) -> State:
         return {"messages": [system_msg] + state["messages"]}
     return state
 
-async def chatbot(state: State) -> dict:
+async def chatbot(state: AgentState) -> dict:
     """Calls the LLM with the current state and returns the AI's response."""
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
     
@@ -51,7 +51,7 @@ memory = MemorySaver()
 
 def agent():
     """Compiles and returns the LangGraph agent."""
-    graph = StateGraph(State)
+    graph = StateGraph(AgentState)
 
     # Add nodes
     graph.add_node("prompt", prompt_node)
