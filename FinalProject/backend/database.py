@@ -25,6 +25,13 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # --- 모델 정의 ---
 
+class Dept(Base):
+    __tablename__ = "dept"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    deptname = Column(String(255),unique=True,ForeignKey=True)
+    dept_hot_Line = Column(String(255),unique=True)
+
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -33,6 +40,9 @@ class User(Base):
     hashed_password = Column(String(255))
     email = Column(String(255), unique=True, index=True)
     created_at = Column(DateTime, default=datetime.now, index=True)
+
+    deptname = relationship("Dept", back_populates="users")
+    position = Column(String(255))
 
     chat_sessions = relationship("ChatSession", back_populates="user")
     calendars = relationship("Calendar", back_populates="user", cascade="all, delete-orphan")
