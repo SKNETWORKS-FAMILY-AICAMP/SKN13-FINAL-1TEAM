@@ -23,43 +23,38 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """
     DocumentEditAgent의 메인 노드
     
-    대화 기록 대신, 상태의 문서 내용과 사용자의 마지막 명령만을 사용하여 LLM을 호출합니다.
-    이것은 LLM이 대화 내용에 혼동되지 않고 편집 작업에만 집중하도록 보장합니다.
+    현재 상태의 메시지를 받아서 LLM을 호출하고 AI의 응답을 반환합니다.
+    시스템 프롬프트가 없는 경우 문서 편집용 시스템 프롬프트를 자동으로 추가합니다.
     """
-    print("--- DocumentEditAgent 노드 실행 중 (상태 기반) ---")
+    print("--- DocumentEditAgent 노드 실행 중 ---")
     
+    # IMPORTANT: Make a copy so we don't modify the original state list
+    messages = state["messages"].copy()
     document_content = state.get("document_content")
-    if not document_content:
-        # 편집할 문서가 없으면 AI가 사용자에게 알려주도록 함
-        return {"messages": [SystemMessage("편집할 문서 내용이 없습니다. 사용자에게 문서가 비어있다고 알려주세요.")]}
 
-    # Get the last user message from the history
-    last_user_message = None
-    for msg in reversed(state["messages"]):
-        if isinstance(msg, HumanMessage):
-            last_user_message = msg
-            break
-    
-    if not last_user_message:
-         return {"messages": [SystemMessage("사용자의 편집 명령을 찾을 수 없습니다.")]}
+    # Inject the document content as a system message for the LLM to see
+    if document_content:
+        print("--- 문서 내용 포함하여 처리 ---")
+        context_message = SystemMessage(
+            content=f"""## 중요 지시사항 ##
+당신은 문서 편집 전문가입니다. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.
+대화 기록은 단지 맥락 파악용이며, 절대 대화 내용을 편집해서는 안 됩니다.
+오직 아래의 '편집할 문서' 내용만을 수정 대상으로 삼아야 합니다.
 
-    # Construct a clean message list for the LLM
-    # LLM이 대화 기록이 아닌 실제 문서와 명령에만 집중하도록 강제
-    messages_for_llm = [
-        SystemMessage(
-            f"""당신은 다음 문서 내용을 바탕으로 사용자의 편집 요청을 처리해야 합니다. 
-사용자가 문서의 일부를 언급하면, 이 내용에서 찾아야 합니다. 
-사용자가 내용을 추가하거나 요약하라고 하면, 이 내용을 기준으로 작업해야 합니다.
-
---- 문서 시작 ---
+--- 편집할 문서 ---
 {document_content}
---- 문서 끝 ---"""
-        ),
-        last_user_message # The user's actual command
-    ]
+--- 문서 끝 ---
+"""
+        )
+        # Insert it before the last user message
+        if len(messages) > 1:
+            messages.insert(-1, context_message)
+        else:
+            messages.append(context_message)
 
     # LLM 호출 및 응답 반환
-    response = llm_with_tools.invoke(messages_for_llm)
+    prompt = ChatPromptTemplate.from_messages(messages)
+    response = llm_with_tools.invoke(prompt.format())
     return {"messages": [response]}
 
 # --- State Update Node ---
