@@ -13,7 +13,6 @@ from docx import Document as DocxDocument # python-docx
 from langchain_core.messages.tool import ToolMessage
 import time
 from .RoutingAgent import RoutingAgent, generate_config
-from .DocumentEditorAgent import DocumentEditAgent
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
 from .llm_tools.html_to_docx import convert_html_to_docx
 
@@ -531,15 +530,6 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
 async def llm_stream(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
     config = generate_config(session_id)
     chat_agent = RoutingAgent()
-
-    return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
-
-
-@api_router.get("/llm/stream/edit")
-async def llm_stream_edit(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
-    config = generate_config(session_id)
-    # Bypassing the router and using the editor agent directly
-    chat_agent = DocumentEditAgent()
 
     return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
 

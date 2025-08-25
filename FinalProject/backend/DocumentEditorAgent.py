@@ -1,9 +1,9 @@
 # DocumentEditAgent.py
 
-from typing import Any
+from typing import Any, List
 from dotenv import load_dotenv
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableConfig
 from langchain_core.prompts import ChatPromptTemplate
@@ -62,6 +62,23 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     response = llm_with_tools.invoke(prompt.format())
     return {"messages": [response]}
 
+# --- State Update Node ---
+
+def update_document_state(state: AgentState) -> dict:
+    """
+    ToolNode 실행 후, 도구의 출력(수정된 문서)으로 상태를 업데이트합니다.
+    """
+    print("--- 문서 상태 업데이트 중 ---")
+    last_message = state["messages"][-1]
+    if not isinstance(last_message, ToolMessage):
+        return {}
+
+    # 마지막 ToolMessage의 내용으로 document_content를 업데이트
+    updated_content = last_message.content
+    print(f"--- 새 문서 내용으로 상태 업데이트 ---\n{updated_content[:200]}...") # Log first 200 chars
+    return {"document_content": updated_content}
+
+
 # --- Graph Factory ---
 
 def DocumentEditAgent() -> Any:
@@ -69,16 +86,10 @@ def DocumentEditAgent() -> Any:
 
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
     
-    #tool_executor = DocumentEditTools(llm=llm)
-
     # Agent가 사용할 도구들 정의
     tools = [
-        run_document_edit,                    # 문서 전체 편집 도구
-        replace_text_in_document,            # 텍스트 교체 도구
-        #tool_executor.get_document_content,   # 문서 내용 가져오기 도구
-        #tool_executor.validate_edit_tool,     # 편집 결과 검증 도구
-        #tool_executor.format_output_tool,     # 출력 형식 정리 도구
-        #tool_executor.handle_edit_request_tool # 편집 요청 처리 도구
+        run_document_edit,
+        replace_text_in_document,
     ]
     
     # LLM에 도구들 바인딩
@@ -90,11 +101,17 @@ def DocumentEditAgent() -> Any:
     graph = StateGraph(AgentState)
     graph.add_node("agent", runnable_agent_node)
     graph.add_node("tools", ToolNode(tools))
+    graph.add_node("update_state", update_document_state) # 상태 업데이트 노드 추가
     
     # 그래프 시작점을 agent로 설정
     graph.set_entry_point("agent")
+    
+    # 조건부 엣지: LLM의 응답에 따라 tool을 호출할지, 끝낼지 결정
     graph.add_conditional_edges("agent", tools_condition,)
-    graph.add_edge("tools", "agent")
+    
+    # 툴 실행 후 -> 상태 업데이트 -> 다시 에이전트 호출
+    graph.add_edge("tools", "update_state")
+    graph.add_edge("update_state", "agent")
     
     # 메모리 저장소와 함께 그래프 컴파일
     return graph.compile(checkpointer=MemorySaver())
@@ -102,6 +119,6 @@ def DocumentEditAgent() -> Any:
 def generate_config(session_id: str) -> RunnableConfig:
     """Generates a config for the agent run."""
     return RunnableConfig(
-        recursion_limit=50,  # 복잡한 편집 작업을 위한 충분한 재귀 한계
+        recursion_limit=50,
         configurable={"thread_id": session_id},
     )
