@@ -11,13 +11,13 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 
+from ..core.AgentState import AgentState
+
 from ..prompts.system_prompt import get_system_prompt
 
 load_dotenv()
 
-# --- State Definition ---
-class State(TypedDict):
-    messages: Annotated[list, add_messages]
+
 
 # --- Graph Nodes ---
 
