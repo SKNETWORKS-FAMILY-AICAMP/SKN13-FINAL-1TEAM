@@ -4,7 +4,7 @@ from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Generator, Optional, Any
-import json, uuid, shutil, tempfile, os
+import json, uuid, shutil, tempfile, os, re
 from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -565,12 +565,14 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
             final_message = final_state.get("messages", [])[-1]
             
             if final_message and final_message.type == "ai":
-                new_document_content = final_message.content
+                raw_content = final_message.content
                 
-                # DEBUG: Print the exact content returned by the AI
-                print("-" * 80)
-                print(f"[DEBUG] AI Returned Content:\n{new_document_content}")
-                print("-" * 80)
+                # Extract pure HTML from the markdown code block if present
+                match = re.search(r"```(html)?\n(.*?)```", raw_content, re.DOTALL)
+                if match:
+                    new_document_content = match.group(2).strip()
+                else:
+                    new_document_content = raw_content.strip()
 
                 # 1. Send the updated document to the editor UI
                 yield f"data: {json.dumps({'document_update': new_document_content}, ensure_ascii=False)}\n\n"
