@@ -4,7 +4,7 @@ from backend.document_editor_system_prompt import get_document_editor_system_pro
 from typing import Dict, Any
 from langchain_core.messages import ToolMessage
 
-@tool
+@tool(description="문서 내 특정 텍스트를 다른 텍스트로 치환합니다.")
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
     """
     단순 텍스트 치환 툴.
@@ -13,7 +13,7 @@ def replace_text_in_document(document_content: str, old_text: str, new_text: str
     print(f"--- Running replace_text_in_document Tool --- Replacing '{old_text}' with '{new_text}'")
     return document_content.replace(old_text, new_text)
 
-@tool
+@tool(description="문서 편집 명령을 받아 문단 추가/삭제/치환 작업을 수행합니다.")
 def edit_document(document_content: str, instruction: str) -> str:
     """
     문서 편집 툴.
@@ -48,7 +48,7 @@ def edit_document(document_content: str, instruction: str) -> str:
 
     return updated_content
 
-@tool
+@tool(description="사용자 편집 요청을 받아 적절한 툴을 호출하고 ToolMessage로 반환합니다.")
 async def run_document_edit_tool(user_command: str, document_content: str) -> ToolMessage:
     """
     사용자의 편집 요청을 받아 적절한 툴을 호출.
@@ -90,7 +90,7 @@ async def run_document_edit_tool(user_command: str, document_content: str) -> To
     # Tool Call 없으면 GPT 직접 응답
     return ToolMessage(content=response.content)
 
-@tool
+@tool(description="마지막 ToolMessage를 기반으로 문서 상태를 업데이트합니다.")
 async def update_document_state_tool(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     ToolNode 실행 후, 도구의 출력(수정된 문서)으로 상태를 업데이트
