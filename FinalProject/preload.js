@@ -96,3 +96,7 @@ Object.freeze(electronAPI);
 Object.freeze(electronAPI.ipcRenderer);
 Object.freeze(authAPI);
 Object.freeze(fsBridge);
+
+contextBridge.exposeInMainWorld("api", {
+  invoke: (channel, payload) => ipcRenderer.invoke(channel, payload),
+});

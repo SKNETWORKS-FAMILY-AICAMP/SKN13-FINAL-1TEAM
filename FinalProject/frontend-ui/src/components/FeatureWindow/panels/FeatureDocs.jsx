@@ -4,27 +4,9 @@
   역할: 문서 관리 핵심 패널. 로컬 브릿지(fsBridge)를 통해 문서 목록을 조회/삭제하고,
        검색/보기 전환(그리드/리스트), "최근 파일"과 "열람한 문서" 섹션을 렌더링한다.
 
-  LINKS:
-    - 이 파일을 사용하는 곳:
-      * FeatureShell.jsx (역할/라우팅에 따라 이 패널로 진입)
-    - 이 파일이 사용하는 것:
-      * ./Docs/Toolbar.jsx           → 상단 툴바(제목/검색/보기 전환)
-      * ./Docs/Section.jsx           → 구역 래퍼(섹션 타이틀 + 내용)
-      * ./Docs/DocumentGrid.jsx      → 카드형 목록 렌더
-      * ./Docs/DocumentRowList.jsx   → 행형 목록 렌더
-      * ./Docs/Toast.jsx             → 우하단 토스트(성공/오류/되돌리기)
-      * window.fsBridge.listDocs     → 로컬 문서 목록 조회 (Electron preload에서 주입)
-      * window.fsBridge.deleteDoc    → 로컬 문서 삭제
-      * window.fsBridge.openDoc      → 로컬 문서 열기
-
-  데이터 흐름(상위→하위):
-    - 이 컴포넌트가 로컬 문서를 불러와(docs state) → 검색/정렬/그룹화 후
-      DocumentGrid/DocumentRowList에 props로 내려 렌더링한다.
-    - 삭제/열기 등 액션 핸들러(handleDelete/handleOpen)도 여기서 정의되어 자식에 전달.
-
   렌더 섹션:
     1) "최근 파일": 24시간 내 열람(opened_at) 또는 수정(updated_at) 기준으로 필터
-    2) "열람한 문서": opened_at이 존재하는 문서를 열람 시간 순으로 정렬 후 요일/날짜별 그룹화
+    2) "열람한 문서": opened_at이 존재하는 문서를 열람 시간 순으로 정렬 후 날짜별 그룹화
 
   주의:
     - fsBridge는 Electron 환경에서 preload로 주입되는 브릿지 객체이므로 웹 단독 실행 시 undefined일 수 있음
@@ -151,17 +133,21 @@ export default function FeatureDocs() {
     .sort((a,b) => b._opened - a._opened);
 
   /* 날짜 라벨링:
-     - 오늘/어제/요일명/ISO 날짜(YYYY-MM-DD) */
+     - 오늘/어제/한국식 YYYY-MM-DD (요청사항 반영) */
   function dayLabel(ts) {
     const dt = new Date(ts);
     const today = new Date(); today.setHours(0,0,0,0);
     const that = new Date(dt); that.setHours(0,0,0,0);
     const diffDays = Math.round((today - that) / 86400000);
-    if (diffDays === 0) return '오늘';
-    if (diffDays === 1) return '어제';
-    const w = ['일','월','화','수','목','금','토'][dt.getDay()];
-    if (diffDays <= 6) return `${w}요일`;
-    return dt.toISOString().slice(0,10);
+
+    if (diffDays === 0) return "오늘";
+    if (diffDays === 1) return "어제";
+
+    // 무조건 한국식 yyyy-mm-dd
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   /* 열람 문서 그룹핑:
@@ -177,8 +163,7 @@ export default function FeatureDocs() {
   }
 
   /* 문서 열기:
-     - fsBridge.openDoc(path) 호출 (외부 앱/뷰어 연결)
-     - 실패 처리는 fsBridge 내부에서, 여기서는 호출만 담당 */
+     - 파일 카드/행 자체 클릭 → 외부 앱/뷰어 연결 */
   const handleOpen = (doc) => window.fsBridge.openDoc(doc.path);
 
   /* 문서 삭제:
@@ -197,6 +182,26 @@ export default function FeatureDocs() {
       setToast({ type: "error", msg: "삭제에 실패했습니다." });
     }
   };
+
+  /* ⬇⬇⬇ 추가: 수정하기 / 이름변경 콜백 */
+
+  // 수정하기(… 메뉴): .doc은 내부 편집 미구현 안내, 그 외는 외부 앱으로 열기
+  async function handleEdit(doc) {
+    try {
+      const res = await window.api?.invoke?.("fs:openSmart", { name: doc.title });
+      // preload에서 window.api.invoke를 안 열어놨다면 폴백: 외부 열기
+      if (!res) await window.fsBridge.openDoc(doc.path);
+
+      if (res?.mode === "notImplemented") {
+        alert(res?.reason || ".doc 내부 편집은 준비 중입니다.");
+      }
+      // external/opened-at 기록 반영
+      await loadLocalOnly();
+    } catch (e) {
+      console.error("openSmart failed:", e);
+      alert("열기에 실패했습니다.");
+    }
+  }
 
   return (
     <div className="flex h-full">
@@ -219,18 +224,38 @@ export default function FeatureDocs() {
               {/* 최근 파일 (24h 내 열람/수정) */}
               <Section title="최근 파일">
                 {view === "grid"
-                  ? <DocumentGrid docs={recentFiles} onOpen={handleOpen} onDelete={handleDelete} />
-                  : <DocumentRowList docs={recentFiles} onOpen={handleOpen} onDelete={handleDelete} />}
+                  ? <DocumentGrid
+                      docs={recentFiles}
+                      onOpen={handleOpen}
+                      onEdit={handleEdit}      
+                      onDelete={handleDelete}
+                    />
+                  : <DocumentRowList
+                      docs={recentFiles}
+                      onOpen={handleOpen}
+                      onEdit={handleEdit}        
+                      onDelete={handleDelete}
+                    />}
               </Section>
 
-              {/* 열람한 문서 (열람 순 + 요일 그룹) */}
+              {/* 열람한 문서 */}
               <Section title="열람한 문서">
                 {groupByDay(viewed).map(([label, items]) => (
                   <div key={label} className="mb-6">
                     <div className="text-xs font-semibold text-gray-500 mb-2">{label}</div>
                     {view === "grid"
-                      ? <DocumentGrid docs={items} onOpen={handleOpen} onDelete={handleDelete} />
-                      : <DocumentRowList docs={items} onOpen={handleOpen} onDelete={handleDelete} />}
+                      ? <DocumentGrid
+                          docs={items}
+                          onOpen={handleOpen}
+                          onEdit={handleEdit}
+                          onDelete={handleDelete}
+                        />
+                      : <DocumentRowList
+                          docs={items}
+                          onOpen={handleOpen}
+                          onEdit={handleEdit}      
+                          onDelete={handleDelete}
+                        />}
                   </div>
                 ))}
                 {viewed.length === 0 && <div className="text-sm text-gray-400">열람한 문서가 없습니다.</div>}

@@ -20,11 +20,18 @@
     - 문서가 없을 때 비어있는 상태 메시지 표시(UX 배려)
 */
 
+
 import React from "react";
 import OverflowMenu from "./OverflowMenu.jsx";
 import DocTypeBadge from "./DocTypeBadge.jsx";
 
-export default function DocumentGrid({ docs, onDelete, onOpen }) {
+export default function DocumentGrid({
+  docs,
+  onDelete,
+  onOpen,
+  onEdit,     
+  onRename,  
+}) {
   if (!docs?.length) {
     return (
       <div className="rounded-xl border border-dashed p-8 text-sm text-gray-400">
@@ -51,8 +58,12 @@ export default function DocumentGrid({ docs, onDelete, onOpen }) {
                 {d.title || d.name || "제목 없음"}
               </div>
             </div>
-            <div className="shrink-0" onClick={(e) => e.stopPropagation() /* 카드 클릭 이벤트와 분리 */}>
-              <OverflowMenu onDelete={() => onDelete?.(d)} />
+            {/* 메뉴 클릭 시 카드 onClick과 충돌하지 않도록 전파 중단 */}
+            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+              <OverflowMenu
+                onEdit={() => onEdit?.(d)}       
+                onDelete={() => onDelete?.(d)}
+              />
             </div>
           </div>
         </div>
@@ -60,3 +71,4 @@ export default function DocumentGrid({ docs, onDelete, onOpen }) {
     </div>
   );
 }
+

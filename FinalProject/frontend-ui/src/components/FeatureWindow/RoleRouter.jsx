@@ -50,7 +50,7 @@ export default function RoleRouter({ userType, activeKey }) {
     if (activeKey === "employees") return <AdminPage />;
     if (activeKey === "mypage")   return <FeatureFrame defaultTab="mypage" />;
     return <EmptyHint />;
-  } else if (userType === "user") {
+  } else if (userType === "employee") {
     if (activeKey === "docs")     return <FeatureFrame defaultTab="docs" />;
     if (activeKey === "calendar") return <FeatureFrame defaultTab="calendar" />;
     if (activeKey === "mypage")   return <FeatureFrame defaultTab="mypage" />;

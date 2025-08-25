@@ -20,11 +20,22 @@
     - 제목 길이 제한(ellipsis)으로 행 레이아웃 안정화
 */
 
+/* 
+  파일: frontend-ui/src/components/FeatureWindow/panels/Docs/DocumentRowList.jsx
+  역할: 문서 목록을 "행(List) 형태"로 렌더링. 각 행의 좌측에 작은 확장자 배지, 우측에 ⋯ 액션 제공.
+*/
+
 import React from "react";
 import OverflowMenu from "./OverflowMenu.jsx";
 import DocTypeBadge from "./DocTypeBadge.jsx";
 
-export default function DocumentRowList({ docs, onDelete, onOpen }) {
+export default function DocumentRowList({
+  docs,
+  onDelete,
+  onOpen,
+  onEdit,    
+  onRename,   
+}) {
   if (!docs?.length) {
     return (
       <div className="rounded-xl border border-dashed p-8 text-sm text-gray-400">
@@ -48,8 +59,13 @@ export default function DocumentRowList({ docs, onDelete, onOpen }) {
               </div>
             </div>
           </div>
-          <div className="shrink-0" onClick={(e) => e.stopPropagation() /* 행 클릭과 ⋯ 메뉴 분리 */}>
-            <OverflowMenu onDelete={() => onDelete?.(d)} />
+
+          {/* 메뉴 클릭 시 행 onClick과 충돌하지 않도록 전파 중단 */}
+          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            <OverflowMenu
+              onEdit={() => onEdit?.(d)}      
+              onDelete={() => onDelete?.(d)}
+            />
           </div>
         </div>
       ))}
