@@ -56,7 +56,7 @@ async def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
 
     # LLM 호출 및 응답 반환
     prompt = ChatPromptTemplate.from_messages(messages)
-    response = await llm_with_tools.invoke(prompt.format())
+    response = await llm_with_tools.ainvoke(prompt.format())
     return {"messages": [response]}
 
 
