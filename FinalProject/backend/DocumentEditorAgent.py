@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableConfig
+from langchain_core.prompts import ChatPromptTemplate
 
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -57,7 +58,8 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
             messages.append(context_message)
 
     # LLM 호출 및 응답 반환
-    response = llm_with_tools.invoke(messages)
+    prompt = ChatPromptTemplate.from_messages(messages)
+    response = llm_with_tools.invoke(prompt.format())
     return {"messages": [response]}
 
 # --- Graph Factory ---
