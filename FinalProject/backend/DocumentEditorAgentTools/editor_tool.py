@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from ..document_editor_system_prompt import get_document_editor_system_prompt
+from backend.document_editor_system_prompt import get_document_editor_system_prompt
 
 @tool
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
