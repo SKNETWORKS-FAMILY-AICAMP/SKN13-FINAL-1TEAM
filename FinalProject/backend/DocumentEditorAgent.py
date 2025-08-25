@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from .DocumentSearchAgentTools.AgentState import AgentState
 from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document
-
+from document_editor_system_prompt import get_document_search_system_prompt
 load_dotenv()
 
 
@@ -38,15 +38,7 @@ async def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     if document_content:
         print("--- 문서 내용 포함하여 처리 ---")
         context_message = SystemMessage(
-            content=f"""## 중요 지시사항 ##
-당신은 문서 편집 전문가입니다. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.
-대화 기록은 단지 맥락 파악용이며, 절대 대화 내용을 편집해서는 안 됩니다.
-오직 아래의 '편집할 문서' 내용만을 수정 대상으로 삼아야 합니다.
-
---- 편집할 문서 ---
-{document_content}
---- 문서 끝 ---
-"""
+            content=get_document_search_system_prompt(document_content)
         )
         # Insert it before the last user message
         if len(messages) > 1:
