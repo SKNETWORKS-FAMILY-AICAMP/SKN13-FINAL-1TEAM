@@ -31,7 +31,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     document_content = state.get("document_content")
     if not document_content:
         # 편집할 문서가 없으면 AI가 사용자에게 알려주도록 함
-        return {"messages": [SystemMessage(content: "편집할 문서 내용이 없습니다. 사용자에게 문서가 비어있다고 알려주세요.")]}
+        return {"messages": [SystemMessage("편집할 문서 내용이 없습니다. 사용자에게 문서가 비어있다고 알려주세요.")]}
 
     # Get the last user message from the history
     last_user_message = None
@@ -41,13 +41,13 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
             break
     
     if not last_user_message:
-         return {"messages": [SystemMessage(content: "사용자의 편집 명령을 찾을 수 없습니다.")]}
+         return {"messages": [SystemMessage("사용자의 편집 명령을 찾을 수 없습니다.")]}
 
     # Construct a clean message list for the LLM
     # LLM이 대화 기록이 아닌 실제 문서와 명령에만 집중하도록 강제
     messages_for_llm = [
         SystemMessage(
-            content: f"""당신은 다음 문서 내용을 바탕으로 사용자의 편집 요청을 처리해야 합니다. 
+            f"""당신은 다음 문서 내용을 바탕으로 사용자의 편집 요청을 처리해야 합니다. 
 사용자가 문서의 일부를 언급하면, 이 내용에서 찾아야 합니다. 
 사용자가 내용을 추가하거나 요약하라고 하면, 이 내용을 기준으로 작업해야 합니다.
 
