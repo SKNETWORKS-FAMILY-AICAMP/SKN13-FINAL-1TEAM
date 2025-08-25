@@ -17,13 +17,34 @@ from .DocumentSearchAgentTools.AgentState import AgentState
 from .DocumentEditorAgentTools.editor_tool import (
     replace_text_in_document,
     edit_document,
-    run_document_edit_tool,
-    update_document_state_tool
+    run_document_edit_tool
 )
 from backend.document_editor_system_prompt import get_document_editor_system_prompt
 
 load_dotenv()
 
+async def update_document_state_tool(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    ToolNode 실행 후, 도구의 출력(수정된 문서)으로 상태를 업데이트
+    """
+    print("--- Running update_document_state_tool ---")
+    if not state.get("messages"):
+        print("--- 메시지 없음 ---")
+        return {}
+
+    last_message = state["messages"][-1]
+    if not isinstance(last_message, ToolMessage):
+        print("--- 마지막 메시지가 ToolMessage 아님 ---")
+        return {}
+
+    updated_content = last_message.content
+
+    if state.get("document_content") == updated_content:
+        print("--- 문서 내용 동일, 업데이트 스킵 ---")
+        return {}
+
+    print(f"--- 문서 내용 업데이트 ---\n{updated_content[:200]}...")
+    return {"document_content": updated_content}
 
 # --- Agent Node ---
 async def agent_node(state: AgentState, llm_with_tools: Any) -> Dict[str, List[Any]]:
@@ -65,8 +86,7 @@ def DocumentEditAgent() -> Any:
     tools = [
         replace_text_in_document,
         edit_document,
-        run_document_edit_tool,
-        update_document_state_tool
+        run_document_edit_tool
     ]
     
     # LLM에 도구 바인딩
@@ -82,12 +102,14 @@ def DocumentEditAgent() -> Any:
     
     # Tool Node
     graph.add_node("tools", ToolNode(tools))
-    
+    graph.add_node("update_state", update_document_state_tool)
+
     # Graph 연결
     graph.set_entry_point("agent")
     graph.add_conditional_edges("agent", tools_condition)
-    graph.add_edge("tools", "agent")
-    
+    graph.add_edge("tools", "update_state")
+    graph.add_edge("update_state","agent")
+
     # MemorySaver를 통한 상태 체크포인트
     return graph.compile(checkpointer=MemorySaver())
 

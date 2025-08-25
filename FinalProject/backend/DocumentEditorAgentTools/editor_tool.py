@@ -90,26 +90,3 @@ async def run_document_edit_tool(user_command: str, document_content: str) -> To
     # Tool Call 없으면 GPT 직접 응답
     return ToolMessage(content=response.content)
 
-@tool(description="마지막 ToolMessage를 기반으로 문서 상태를 업데이트합니다.")
-async def update_document_state_tool(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    ToolNode 실행 후, 도구의 출력(수정된 문서)으로 상태를 업데이트
-    """
-    print("--- Running update_document_state_tool ---")
-    if not state.get("messages"):
-        print("--- 메시지 없음 ---")
-        return {}
-
-    last_message = state["messages"][-1]
-    if not isinstance(last_message, ToolMessage):
-        print("--- 마지막 메시지가 ToolMessage 아님 ---")
-        return {}
-
-    updated_content = last_message.content
-
-    if state.get("document_content") == updated_content:
-        print("--- 문서 내용 동일, 업데이트 스킵 ---")
-        return {}
-
-    print(f"--- 문서 내용 업데이트 ---\n{updated_content[:200]}...")
-    return {"document_content": updated_content}
