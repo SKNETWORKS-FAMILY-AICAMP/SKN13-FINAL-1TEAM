@@ -534,98 +534,49 @@ async def llm_stream(session_id: str, prompt: str, document_content: Optional[st
     return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
 
 async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
-    # 외래 키 제약 조건 위반을 막기 위해 채팅 세션을 가져오거나 생성한다
+    # Get or create the chat session
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
-        # /chat/save와 같은 다른 엔드포인트에 따라 기본 사용자를 가정한다
         default_user_id = 1
         user = db.query(User).filter(User.id == default_user_id).first()
         if not user:
             user = User(id=default_user_id, unique_auth_number="default_auth", username="default_user", hashed_password="", email="default@example.com")
             db.add(user)
-
-        # 나중에 업데이트될 기본 제목으로 새 세션을 생성한다
-        session = ChatSession(id=session_id, user_id=default_user_id, title="새로운 대화")
+        session = ChatSession(id=session_id, user_id=default_user_id, title=prompt[:50])
         db.add(session)
         db.commit()
 
-    full_response_content = ""
-    
-    history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
-    
-    messages = []
-    for msg in history_messages:
-        if msg.role == "tool":
-            continue
-        role = "ai" if msg.role == "assistant" else msg.role
-        messages.append((role, msg.content))
-    
-    if not messages or messages[-1] != ("user", prompt):
-        messages.append(("user", prompt))
+    # Save the user's message to the database
+    _create_chat_message(db, session_id, "user", prompt)
 
-    input_data = {"messages": messages}
-    # Add document_content to input_data if provided
+    # The agent's memory will handle the history. We just need to pass the new message.
+    input_data = {"messages": [("user", prompt)]}
     if document_content:
         input_data["document_content"] = document_content
 
-    async for event in chat_agent.astream_events(input_data, config=config):
+    async for event in chat_agent.astream_events(input_data, config=config, version="v1"):
         kind = event["event"]
-        if kind == "on_chat_model_stream":
-            content = event["data"]["chunk"].content
-            if content:
-                yield f"data: {json.dumps({'content': content})}\n\n"
-                full_response_content += content
-                
-        elif kind == "on_tool_start":
-            async for chunk in _handle_tool_start(event, session_id, db):
-                yield chunk
         
-        elif kind == "on_tool_end":
-            async for chunk in _handle_tool_end(event, session_id, db):
-                yield chunk
-        
-        elif kind == "on_end": # New block to capture final state
+        if kind == "on_chain_start" and event["name"] == "agent":
+             yield f"data: {json.dumps({'thinking_message': '[AI Thinking]: Editing the document based on your request...'}, ensure_ascii=False)}\n\n"
+
+        if kind == "on_chain_end" and event["name"] == "agent":
             final_state = event.get("data", {}).get("output", {})
-            print(f"--- Final State (on_end): {final_state}") # More specific log
-
-            # Try to find the final_answer from the messages in the final state
-            # This is a more robust way to get the agent's final output
-            final_answer_content = None
-            if "messages" in final_state:
-                for msg in reversed(final_state["messages"]): # Check messages in reverse order
-                    if isinstance(msg, dict) and msg.get("final_answer"):
-                        final_answer_content = msg["final_answer"]
-                        break
-                    elif isinstance(msg, ToolMessage) and msg.content: # Check if it's a ToolMessage with content
-                        # This might be the output of run_document_edit
-                        final_answer_content = msg.content
-                        break
-                    elif isinstance(msg, str) and "final_answer" in msg: # Simple string check
-                        try:
-                            parsed_msg = json.loads(msg)
-                            if parsed_msg.get("final_answer"):
-                                final_answer_content = parsed_msg["final_answer"]
-                                break
-                        except json.JSONDecodeError:
-                            pass # Not a JSON string
-
-            if final_answer_content:
-                print(f"--- Updated Document Content (from final_answer_content): {final_answer_content[:100]}...")
-                yield f"data: {json.dumps({'document_update': final_answer_content}, ensure_ascii=False)}\n\n"
-            else:
-                print("--- No final_answer_content found in final_state messages. ---")
-                # We might also want to save this updated document content to the database
-                # if it's associated with a specific document ID.
-                # This would require passing the document ID through the state or session.
-                # For now, just streaming it.
+            final_message = final_state.get("messages", [])[-1]
             
-            yield "data: [DONE]\n\n" # Moved this line here
-    print(f"time : {time.time()}")
-    if full_response_content:
-        new_message = ChatMessage(session_id=session_id, role="assistant", content=full_response_content)
-        db.add(new_message)
-        db.commit()
-        db.refresh(new_message)
+            if final_message and final_message.type == "ai":
+                new_document_content = final_message.content
+                
+                # 1. Send the updated document to the editor UI
+                yield f"data: {json.dumps({'document_update': new_document_content}, ensure_ascii=False)}\n\n"
+                
+                # 2. Send a confirmation message to the chat window
+                confirmation_message = "The document has been updated as you requested."
+                yield f"data: {json.dumps({'content': confirmation_message})}\n\n"
+                # Also save this confirmation message to the DB
+                _create_chat_message(db, session_id, "assistant", confirmation_message)
+
+    yield "data: [DONE]\n\n"
 
 @api_router.get("/open")
 async def open_document(url):
