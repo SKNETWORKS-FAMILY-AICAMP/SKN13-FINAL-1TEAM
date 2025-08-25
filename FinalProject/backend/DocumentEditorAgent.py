@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from .DocumentSearchAgentTools.AgentState import AgentState
 from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document
-from backend.document_editor_system_prompt import get_document_editor_system_prompt
+from backend.document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
 load_dotenv()
 
 
@@ -38,7 +38,7 @@ async def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     if document_content:
         print("--- 문서 내용 포함하여 처리 ---")
         context_message = SystemMessage(
-            content=get_document_editor_system_prompt(document_content)
+            content=EDITOR_SYSTEM_PROMPT
         )
         # Insert it before the last user message
         if len(messages) > 1:

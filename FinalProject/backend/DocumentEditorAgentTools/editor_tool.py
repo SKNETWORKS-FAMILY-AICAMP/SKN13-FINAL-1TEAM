@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from backend.document_editor_system_prompt import get_document_editor_system_prompt
+from backend.document_editor_system_prompt import EDITOR_SYSTEM_PROMPT
 
 @tool
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
@@ -62,7 +62,7 @@ def run_document_edit(user_command: str, document_content: str) -> str:
     llm_client = ChatOpenAI(model_name='gpt-4o', temperature=0)
     llm_with_tools = llm_client.bind_tools([replace_text_in_document, edit_document])
 
-    user_prompt_content = get_document_editor_system_prompt(document_content) + f"""
+    user_prompt_content = EDITOR_SYSTEM_PROMPT + f"""
 **사용자 편집 요청:**
 {user_command}
 """
