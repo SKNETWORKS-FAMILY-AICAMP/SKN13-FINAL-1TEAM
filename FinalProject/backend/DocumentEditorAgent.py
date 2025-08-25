@@ -19,7 +19,7 @@ load_dotenv()
 
 # --- Main Agent Node ---
 
-def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
+async def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """
     DocumentEditAgent의 메인 노드
     
@@ -59,7 +59,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
 
     # LLM 호출 및 응답 반환
     prompt = ChatPromptTemplate.from_messages(messages)
-    response = llm_with_tools.invoke(prompt.format())
+    response = await llm_with_tools.invoke(prompt.format())
     return {"messages": [response]}
 
 # --- Graph Factory ---
