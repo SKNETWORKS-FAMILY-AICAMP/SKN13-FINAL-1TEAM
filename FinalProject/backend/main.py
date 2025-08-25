@@ -12,9 +12,9 @@ import fitz # PyMuPDF
 from docx import Document as DocxDocument # python-docx
 from langchain_core.messages.tool import ToolMessage
 import time
-from .Chatbot.agents.RoutingAgent import RoutingAgent, generate_config
+from .ChatBot.agents.RoutingAgent import RoutingAgent, generate_config
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
-from .Chatbot.tools.html_to_docx import convert_html_to_docx
+from .ChatBot.tools.html_to_docx import convert_html_to_docx
 
 # FastAPI 인스턴스 생성
 app = FastAPI()
