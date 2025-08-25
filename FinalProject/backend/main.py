@@ -527,6 +527,21 @@ async def llm_stream(session_id: str, prompt: str, document_content: Optional[st
     return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
 
 async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
+    # 외래 키 제약 조건 위반을 막기 위해 채팅 세션을 가져오거나 생성한다
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        # /chat/save와 같은 다른 엔드포인트에 따라 기본 사용자를 가정한다
+        default_user_id = 1
+        user = db.query(User).filter(User.id == default_user_id).first()
+        if not user:
+            user = User(id=default_user_id, unique_auth_number="default_auth", username="default_user", hashed_password="", email="default@example.com")
+            db.add(user)
+
+        # 나중에 업데이트될 기본 제목으로 새 세션을 생성한다
+        session = ChatSession(id=session_id, user_id=default_user_id, title="새로운 대화")
+        db.add(session)
+        db.commit()
+
     full_response_content = ""
     
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
