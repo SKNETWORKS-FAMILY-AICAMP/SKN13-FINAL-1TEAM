@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from .DocumentSearchAgentTools.AgentState import AgentState
 from .DocumentEditorAgentTools.editor_tool import run_document_edit, replace_text_in_document
-from document_editor_system_prompt import get_document_editor_system_prompt
+from backend.document_editor_system_prompt import get_document_editor_system_prompt
 load_dotenv()
 
 
