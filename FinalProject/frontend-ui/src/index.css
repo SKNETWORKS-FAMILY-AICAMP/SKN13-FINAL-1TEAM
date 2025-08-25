@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Electron용 드래그 영역 설정 (원본 유지) */
+/* Electron용 드래그 영역 설정 */
 .drag {
   -webkit-app-region: drag;
 }
@@ -10,32 +10,11 @@
   -webkit-app-region: no-drag;
 }
 
-/* 스크롤바 숨기기 유틸리티 (원본 유지) */
+/* 스크롤바 숨기기 유틸리티 */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 .no-scrollbar {
   -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;     /* Firefox */
-}
-
-/* ----------------------------- */
-/* [추가] 모서리 깜박임 방지용 스타일 */
-/* ----------------------------- */
-
-/* 윈도우 자체 배경은 투명 → 실제 앱 컨테이너(app-shell)에서 흰 배경과 라운딩 */
-html, body, #root {
-  background: transparent;
-}
-
-/* 앱 컨테이너: 라운딩 + overflow hidden으로 모서리 마스킹 */
-.app-shell {
-  border-radius: 16px;       /* 필요 시 20~24px 등으로 조정 가능 */
-  overflow: hidden;
-}
-
-/* 1프레임 합성 트릭: 깜박임 순간 하위 레이어 합성층을 강제 생성 */
-.no-corner-flicker * {
-  backface-visibility: hidden;
-  transform: translateZ(0);
+  scrollbar-width: none;  /* Firefox */
 }

@@ -32,7 +32,7 @@ import React from "react";
  *  - 내부에서 defaultTab에 따라 "문서 목록 / 캘린더 / 문서 작성(forms) / 마이페이지"를 출력.
  *  - 즉, 사원 쪽은 라우팅 없이도 탭 전환으로 UI를 구성하는 컴포넌트 구조.
  */
-import FeatureFrame from "../FeatureWindow/FeatureFrame.jsx";
+import FeatureFrame from "./FeatureFrame.jsx";
 
 /** [관리자 전용] 사원관리 페이지
  *  - 팀원 구현 파일 위치에 맞춰 경로 조정 필요.
