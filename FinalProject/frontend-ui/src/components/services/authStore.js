@@ -16,3 +16,8 @@ export function readUser() {
 export function isLoggedIn() {
   return !!localStorage.getItem(USER_KEY);
 }
+
+export function clearAuth() {
+  try { localStorage.removeItem(USER_KEY); } catch {}
+  try { localStorage.removeItem(TOKEN_KEY); } catch {}
+}

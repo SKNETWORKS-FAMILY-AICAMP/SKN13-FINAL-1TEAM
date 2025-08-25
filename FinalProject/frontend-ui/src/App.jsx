@@ -201,7 +201,7 @@ export default function App() {
               onNewChat={handleNewChat}
               onSelectChat={handleSelectChat}
               isMaximized={isMaximized}
-              onLogout={handleLogout}   /* ← 버튼 → 전역 로그아웃 */
+              onLogout={handleLogout}   // 전역 로그아웃 
             />
           </div>
         )}
