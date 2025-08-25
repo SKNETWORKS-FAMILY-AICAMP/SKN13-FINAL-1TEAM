@@ -107,9 +107,9 @@ def DocumentEditAgent() -> Any:
         tools_condition,
     )
     
-    # 툴 실행 후 -> 상태 업데이트 -> 다시 에이전트 호출
+    # 툴 실행 후 -> 상태 업데이트 -> 종료
     graph.add_edge("tools", "update_state")
-    graph.add_edge("update_state", "agent")
+    graph.add_edge("update_state", END)
     
     # 메모리 저장소와 함께 그래프 컴파일
     return graph.compile(checkpointer=MemorySaver())
