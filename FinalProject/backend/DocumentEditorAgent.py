@@ -89,12 +89,12 @@ def DocumentEditAgent() -> Any:
     graph = StateGraph(AgentState)
     graph.add_node("agent", runnable_agent_node)
     graph.add_node("tools", ToolNode(tools))
-    graph.add_node("update_state", update_document_state)
+    #graph.add_node("update_state", update_document_state)
     
     graph.set_entry_point("agent")
     graph.add_conditional_edges("agent", tools_condition)
-    graph.add_edge("tools", "update_state")
-    graph.add_edge("update_state", "agent")
+    graph.add_edge("tools", "agent")
+    #graph.add_edge("update_state", "agent")
     
     return graph.compile(checkpointer=MemorySaver())
 
