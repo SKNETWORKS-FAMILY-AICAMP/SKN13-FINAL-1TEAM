@@ -567,6 +567,11 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
             if final_message and final_message.type == "ai":
                 new_document_content = final_message.content
                 
+                # DEBUG: Print the exact content returned by the AI
+                print("-" * 80)
+                print(f"[DEBUG] AI Returned Content:\n{new_document_content}")
+                print("-" * 80)
+
                 # 1. Send the updated document to the editor UI
                 yield f"data: {json.dumps({'document_update': new_document_content}, ensure_ascii=False)}\n\n"
                 
