@@ -29,7 +29,7 @@
     - 메시지 배열 조작(setMessages)은 항상 불변성 유지하여 렌더링 일관성 보장
 */
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'; // ✅ useMemo 추가
 import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
 import { getMessages, saveMessage } from '../services/chatApi.js';
@@ -74,10 +74,10 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     })();
   }, [currentSession]);
 
-  // 새 메시지 도착 때 오토스크롤
+  // 새 메시지 도착 때 오토스크롤 (✅ 병합된 목록 기준으로 스크롤)
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages]); // displayMessages로 바꿔도 OK. (아래 useMemo에서 messages만 의존)
 
   // 언마운트 시 SSE 정리
   useEffect(() => () => closeEventSource(), [closeEventSource]);
@@ -215,8 +215,8 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         }
 
         if (data.content) updateLastMessage(data.content);
-        else if (data.thinking_message) appendMessage({ role: 'thinking', content: data.thinking_message });
-        else if (data.tool_message) appendMessage({ role: 'tool', content: data.tool_message });
+        else if (data.thinking_message) appendMessage({ role: 'thinking', content: data.thinking_message }); // ✅ thinking
+        else if (data.tool_message) appendMessage({ role: 'tool', content: data.tool_message });             // ✅ tool
       } catch (e) {
         // JSON 파싱 실패(일부 토큰이 생으로 오는 경우)는 무시
         // console.log('raw event', event.data);
@@ -232,13 +232,50 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     normalizeAttachments, closeEventSource, endStream
   ]);
 
+  /* -------------------- ✅ 연속 assistant/tool/thinking 병합 -------------------- */
+  // 같은 턴에서 연속으로 오는 assistant 계열 메시지들을 하나로 합쳐
+  // MessageBubble 하나가 그 턴 전체를 담당하도록 만든다.
+  const displayMessages = useMemo(() => {
+    const out = [];
+    const normalizeRoleForMerge = (r) => {
+      if (r === 'ai' || r === 'assistant' || r === 'tool' || r === 'thinking') return 'assistant';
+      if (r === 'user') return 'user';
+      return r || 'assistant';
+    };
+
+    for (const m of (messages || [])) {
+      const roleGroup = normalizeRoleForMerge(m?.role);
+
+      if (
+        out.length > 0 &&
+        roleGroup === 'assistant' &&
+        normalizeRoleForMerge(out[out.length - 1].role) === 'assistant'
+      ) {
+        // 이전 assistant와 병합
+        const prev = out[out.length - 1];
+        prev.content = [prev.content, m.content].filter(Boolean).join('\n\n');
+
+        // 첨부도 합치기
+        const prevAtt = Array.isArray(prev.attachments) ? prev.attachments : [];
+        const curAtt  = Array.isArray(m.attachments) ? m.attachments : [];
+        if (prevAtt.length || curAtt.length) {
+          prev.attachments = [...prevAtt, ...curAtt];
+        }
+      } else {
+        out.push({ ...m, role: roleGroup });
+      }
+    }
+    return out;
+  }, [messages]);
+  /* --------------------------------------------------------------------------- */
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        {messages.length === 0 ? (
+    <div className="flex flex-col h-full min-w-0">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 max-w-full">
+        {displayMessages.length === 0 ? (
           <div className="text-center text-gray-400 mt-10 text-sm">무엇이든 물어보세요.</div>
         ) : (
-          messages.map((msg, idx) => <MessageBubble key={idx} message={msg} />)
+          displayMessages.map((msg, idx) => <MessageBubble key={idx} message={msg} />)
         )}
         <div ref={messagesEndRef} />
       </div>

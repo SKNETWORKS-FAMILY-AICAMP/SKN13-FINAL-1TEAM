@@ -120,7 +120,7 @@ export default function ChatInput({
 
   return (
     <div className="w-full flex justify-center px-4 py-3 border-t bg-white/70 backdrop-blur">
-      <div className={`flex-1 ${isMaximized ? 'max-w-[60%]' : 'max-w-4xl'}`}>
+      <div className={`flex-1 min-w-0 ${isMaximized ? 'max-w-[60%]' : 'max-w-4xl'}`}>
         {(filesArr.length > 0) && (
           <div className="mb-2 inline-flex items-start gap-3">
             {/* 파일 칩(비이미지) */}
@@ -179,7 +179,7 @@ export default function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder="메시지를 입력하세요"
             rows={1}
-            className="flex-1 text-sm resize-none outline-none bg-transparent placeholder:text-gray-400"
+            className="flex-1 min-w-0 w-full box-border text-sm resize-none outline-none bg-transparent placeholder:text-gray-400"
           />
 
           {/* ▶ 전송 / ■ 중지 토글 */}

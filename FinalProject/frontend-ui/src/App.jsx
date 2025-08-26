@@ -193,7 +193,7 @@ export default function App() {
         {(isMaximized || sidebarOpen) && (
           <div
             className={`bg-white shadow-lg z-40 transition-all duration-300
-              ${isMaximized ? 'basis-1/6 relative' : 'w-64 fixed h-full left-0 top-0'}`}
+              ${isMaximized ? 'relative shrink-0 grow-0 w-[clamp(16rem,13vw,21rem)] min-w-[16rem] max-w-[21rem]' : 'w-64 fixed h-full left-0 top-0'}`}
           >
             <Sidebar
               onClose={() => setSidebarOpen(false)}
@@ -206,7 +206,7 @@ export default function App() {
           </div>
         )}
 
-        <div className={`flex flex-col transition-all duration-300 ${isMaximized ? 'basis-5/6' : 'flex-1'}`}>
+        <div className={`flex flex-col flex-1 min-w-0 transition-all duration-300`}>
           <ChatWindow
             key={chatKey}
             currentSession={currentSession}
