@@ -21,10 +21,93 @@
     - 첨부의 url/previewUrl/filename 등 다양한 필드 명을 수용(백엔드 다양성 방어)
 */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { PaperClipIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
-import ReactMarkdown from 'react-markdown'; // Added
-import remarkGfm from 'remark-gfm'; // Added
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+/* ------------------------- 추가 유틸: 출력 분류/세그먼트 ------------------------- */
+
+/** 어시스턴트 출력 분류
+ * - 'fenced': 코드펜스(```lang) 시작 또는 순수 JSON/배열 전체
+ * - 'log'   : 툴 로그/혼합 JSON(긴 줄, tool_call_id 등 키워드, 중괄호 밀도)
+ * - 'plain' : 일반 텍스트
+ */
+const classifyAssistantOutput = (raw = '') => {
+  const s = String(raw || '').trim();
+  const startsWithFence = s.startsWith('```');
+  const pureJson =
+    (s.startsWith('{') && s.endsWith('}')) ||
+    (s.startsWith('[') && s.endsWith(']'));
+
+  if (startsWithFence || pureJson) return 'fenced';
+
+  const hasToolLog =
+    /AI Thinking:|Using tool|tool_call_id|artifact"|status"|"type":"tool"/m.test(s);
+
+  const lines = s.split(/\r?\n/);
+  const longLine = lines.some(l => l.length > 140);
+  const braceDensity = ((s.match(/[{}]/g) || []).length) / Math.max(s.length, 1);
+
+  if (hasToolLog || longLine || braceDensity > 0.02) return 'log';
+  return 'plain';
+};
+
+/** 한 메시지 문자열을 plain/bubble 세그먼트 배열로 분리 */
+const segmentAssistantContent = (raw = '') => {
+  const text = String(raw || '');
+  const segments = [];
+  const fenceRe = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```/g;
+
+  let lastIndex = 0;
+  let m;
+  while ((m = fenceRe.exec(text)) !== null) {
+    const before = text.slice(lastIndex, m.index);
+    if (before.trim().length > 0) {
+      const cls = classifyAssistantOutput(before);
+      segments.push({
+        type: cls === 'plain' ? 'plain' : 'bubble',
+        mode: cls,
+        content: before
+      });
+    }
+    const fencedBlock = m[0]; // 코드펜스 전체
+    segments.push({ type: 'bubble', mode: 'fenced', content: fencedBlock });
+    lastIndex = fenceRe.lastIndex;
+  }
+  const tail = text.slice(lastIndex);
+  if (tail.trim().length > 0) {
+    const cls = classifyAssistantOutput(tail);
+    segments.push({
+      type: cls === 'plain' ? 'plain' : 'bubble',
+      mode: cls,
+      content: tail
+    });
+  }
+  if (segments.length === 0) {
+    segments.push({ type: 'plain', mode: 'plain', content: text });
+  }
+  return segments;
+};
+
+/** 인접한 bubble 세그먼트를 하나로 합치기(전체를 한 박스로 보여주기 위함) */
+const mergeAdjacentBubbles = (segs = []) => {
+  const out = [];
+  for (const seg of segs) {
+    const last = out[out.length - 1];
+    if (last && last.type === 'bubble' && seg.type === 'bubble') {
+      out[out.length - 1] = {
+        type: 'bubble',
+        mode: (last.mode === 'fenced' || seg.mode === 'fenced') ? 'fenced' : 'log',
+        content: `${last.content}\n\n${seg.content}`
+      };
+    } else {
+      out.push(seg);
+    }
+  }
+  return out;
+};
+/* ------------------------------------------------------------------------------ */
 
 // 비이미지 첨부 파일 칩
 const FileChip = ({ name, url }) => (
@@ -55,9 +138,7 @@ export default function MessageBubble({ message }) {
   const extra  = Math.max(0, images.length - 4);
   const hasText = !!(message?.content && message.content.trim().length > 0);
 
-  /* 이미지 라이트박스 상태/이동 로직
-     - viewerOpen: 오버레이 표시 여부
-     - viewerIndex: 현재 표시 중인 이미지 인덱스(썸네일 클릭으로 지정) */
+  /* 이미지 라이트박스 상태/이동 로직 */
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const openViewer = useCallback((idx) => { setViewerIndex(idx); setViewerOpen(true); }, []);
@@ -76,6 +157,12 @@ export default function MessageBubble({ message }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [viewerOpen, closeViewer, prevImg, nextImg]);
+
+  // 어시스턴트 텍스트를 세그먼트로 분리(+ 인접 버블 병합)
+  const segments = useMemo(
+    () => (isUser ? [] : mergeAdjacentBubbles(segmentAssistantContent(message?.content || ''))),
+    [isUser, message?.content]
+  );
 
   return (
     <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}>
@@ -117,20 +204,124 @@ export default function MessageBubble({ message }) {
           </div>
         )}
 
-        {/* ⬇ 텍스트: 사용자(회색 말풍선) / AI(기본 텍스트) - Markdown 지원 */}
+        {/* ⬇ 텍스트: 사용자(회색 말풍선) / AI(세그먼트별 렌더) - Markdown 지원 */}
         {hasText && (
           isUser ? (
-            <div className="bg-gray-100 border border-gray-200 rounded-2xl px-4 py-3 text-gray-900 whitespace-pre-wrap">
+            <div className="bg-gray-100 border border-gray-200 rounded-2xl px-4 py-3 text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {message.content}
               </ReactMarkdown>
             </div>
           ) : (
-            <div className="text-gray-900 whitespace-pre-wrap">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.content}
-              </ReactMarkdown>
-            </div>
+            (() => {
+              // 전부 버블(=로그/코드/JSON)인 경우 → 단일 회색 박스
+              const allBubble = segments.length > 0 && segments.every(s => s.type === 'bubble');
+              const hasFenced = segments.some(s => s.mode === 'fenced');
+
+              if (allBubble) {
+                return hasFenced ? (
+                  <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
+                    <div className="max-w-full overflow-x-auto">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code({ inline, children }) {
+                            if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
+                            return (
+                              <pre className="whitespace-pre px-4 py-3 text-sm leading-6 max-w-full">
+                                <code>{children}</code>
+                              </pre>
+                            );
+                          },
+                          table({ children }) {
+                            return <div className="block overflow-x-auto max-w-full px-4 py-3">{children}</div>;
+                          }
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
+                    <div className="max-w-full overflow-x-auto">
+                      <pre className="whitespace-pre px-4 py-3 text-sm leading-6 min-w-0">
+                        {message.content}
+                      </pre>
+                    </div>
+                  </div>
+                );
+              }
+
+              // plain이 섞여 있으면: plain은 말풍선 없이, bubble은 개별 회색 박스
+              return (
+                <div className="w-full flex flex-col gap-2">
+                  {segments.map((seg, idx) => {
+                    if (seg.type === 'bubble') {
+                      if (seg.mode === 'fenced') {
+                        return (
+                          <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
+                            <div className="max-w-full overflow-x-auto">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  code({ inline, children }) {
+                                    if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
+                                    return (
+                                      <pre className="whitespace-pre px-4 py-3 text-sm leading-6 max-w-full">
+                                        <code>{children}</code>
+                                      </pre>
+                                    );
+                                  },
+                                  table({ children }) {
+                                    return <div className="block overflow-x-auto max-w-full px-4 py-3">{children}</div>;
+                                  }
+                                }}
+                              >
+                                {seg.content}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
+                          <div className="max-w-full overflow-x-auto">
+                            <pre className="whitespace-pre px-4 py-3 text-sm leading-6 min-w-0">
+                              {seg.content}
+                            </pre>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // plain
+                    return (
+                      <div key={idx} className="text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            code({ inline, children }) {
+                              if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
+                              return (
+                                <pre className="whitespace-pre overflow-x-auto max-w-full">
+                                  <code>{children}</code>
+                                </pre>
+                              );
+                            },
+                            table({ children }) {
+                              return <div className="block overflow-x-auto max-w-full">{children}</div>;
+                            }
+                          }}
+                        >
+                          {seg.content}
+                        </ReactMarkdown>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
           )
         )}
       </div>
