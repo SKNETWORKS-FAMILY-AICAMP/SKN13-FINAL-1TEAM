@@ -575,7 +575,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
 
     # Pass the state object to the agent stream
     async for event in chat_agent.astream_events(initial_state, config=config):
-        # print(f"--- STREAM EVENT: {event} ---")
+        
         kind = event["event"]
         name = event.get("name")
 
@@ -587,11 +587,6 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 tool_call_id = f"req_doc_{uuid.uuid4()}"
                 yield f"data: {json.dumps({'needs_document_content': True, 'agent_context': {'tool_call_id': tool_call_id}}, ensure_ascii=False)}\n\n"
                 return  # 신호 전송 후 스트림 종료
-
-        # 라우팅 LLM의 스트리밍 출력 버퍼링
-        if kind == "on_chat_model_stream" and name == "ChatOpenAI":
-            llm_output_buffer += event["data"]["chunk"].content
-            continue # 즉시 yield하지 않고 버퍼에 저장
 
         # 'route_question' 체인이 종료되었고, 'request_document'가 트리거되지 않았다면 버퍼된 LLM 출력을 yield
         if kind == "on_chain_end" and name == "route_question":
