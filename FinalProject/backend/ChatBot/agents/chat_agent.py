@@ -9,33 +9,27 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-from .llm_tools.retriever import RAG_tool
-from .llm_tools.naver_search import NaverSearchTool
-from .llm_tools.sEOUl import get_data_seoul
-from .llm_tools.edit_hwpx1 import edit_hwpx
-from .llm_tools.read_hwpx import read_hwpx
-from .system_prompt import get_system_prompt
+from ..core.AgentState import AgentState
+
+from ..prompts.system_prompt import get_system_prompt
 
 load_dotenv()
 
-# --- State Definition ---
-class State(TypedDict):
-    messages: Annotated[list, add_messages]
+
 
 # --- Graph Nodes ---
 
-def prompt_node(state: State) -> State:
+def prompt_node(state: AgentState) -> AgentState:
     """Injects the system prompt at the beginning of the conversation."""
     system_msg = SystemMessage(content=get_system_prompt())
     # Check if system message already exists
-    if not any(isinstance(msg, SystemMessage) for msg in state["messages"]):
-        return {"messages": [system_msg] + state["messages"]}
+    if not any(isinstance(msg, SystemMessage) for msg in state["chat_history"]):
+        return {"chat_history": [system_msg] + state["chat_history"]}
     return state
 
-async def chatbot(state: State) -> dict:
+async def chatbot(state: AgentState) -> dict:
     """Calls the LLM with the current state and returns the AI's response."""
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
     
@@ -47,8 +41,8 @@ async def chatbot(state: State) -> dict:
     config = RunnableConfig(configurable={"tool_choice": "auto"})
 
     # Invoke the LLM to get the full AI message, which might contain tool calls
-    ai_message = await llm_with_tools.ainvoke(state["messages"], config=config)
-    return {"messages": [ai_message]}
+    ai_message = await llm_with_tools.ainvoke(state["chat_history"], config=config)
+    return {"chat_history": [ai_message]}
 
 # --- Graph Definition ---
 
@@ -57,7 +51,7 @@ memory = MemorySaver()
 
 def agent():
     """Compiles and returns the LangGraph agent."""
-    graph = StateGraph(State)
+    graph = StateGraph(AgentState)
 
     # Add nodes
     graph.add_node("prompt", prompt_node)

@@ -1,21 +1,21 @@
 from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import Response, StreamingResponse, JSONResponse, FileResponse
 from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Generator, Optional, Any
-import json, uuid, shutil, tempfile, os
+import json, uuid, shutil, tempfile, os, re
 from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
 import fitz # PyMuPDF
 from docx import Document as DocxDocument # python-docx
 from langchain_core.messages.tool import ToolMessage
-
-from .RoutingAgent import RoutingAgent, generate_config
+import time
+from .ChatBot.agents.RoutingAgent import RoutingAgent, generate_config
+from .ChatBot.core.AgentState import AgentState
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
-from .llm_tools.read_hwpx import read_hwpx # Assuming this function name
-from .llm_tools.html_to_docx import convert_html_to_docx
+from .ChatBot.tools.html_to_docx import convert_html_to_docx
 
 # FastAPI 인스턴스 생성
 app = FastAPI()
@@ -123,7 +123,14 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
+    tool_name = event.get("name")
     raw_output = event.get("data", {}).get("output", "")
+
+    # If the editor tool finishes, its output is the new document.
+    # Yield a specific event for the frontend to catch and update the editor.
+    if tool_name == "run_document_edit":
+        yield f"data: {json.dumps({'document_update': raw_output}, ensure_ascii=False)}\n\n"
+
     formatted_output = "[Tool Output]: "
     tool_raw_json = None
 
@@ -528,6 +535,18 @@ async def llm_stream(session_id: str, prompt: str, document_content: Optional[st
     return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
 
 async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
+    # Get or create the chat session to prevent foreign key violations
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        default_user_id = 1
+        user = db.query(User).filter(User.id == default_user_id).first()
+        if not user:
+            user = User(id=default_user_id, unique_auth_number="default_auth", username="default_user", hashed_password="", email="default@example.com")
+            db.add(user)
+        session = ChatSession(id=session_id, user_id=default_user_id, title="새로운 대화")
+        db.add(session)
+        db.commit()
+
     full_response_content = ""
     
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
@@ -542,12 +561,19 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
     if not messages or messages[-1] != ("user", prompt):
         messages.append(("user", prompt))
 
-    input_data = {"messages": messages}
-    # Add document_content to input_data if provided
-    if document_content:
-        input_data["document_content"] = document_content
+    # ✅ Create the initial state object
+    initial_state: AgentState = {
+        "prompt": prompt,
+        "document_content": document_content,
+        "chat_history": messages,
+        # The following fields will be populated by the agents
+        "intent": None,
+        "intermediate_steps": [],
+        "generation": None,
+    }
 
-    async for event in chat_agent.astream_events(input_data, config=config):
+    # Pass the state object to the agent stream
+    async for event in chat_agent.astream_events(initial_state, config=config):
         kind = event["event"]
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
@@ -563,52 +589,23 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
             async for chunk in _handle_tool_end(event, session_id, db):
                 yield chunk
         
-        elif kind == "on_end": # New block to capture final state
+        elif kind == "on_end":
             final_state = event.get("data", {}).get("output", {})
-            print(f"--- Final State (on_end): {final_state}") # More specific log
-
-            # Try to find the final_answer from the messages in the final state
-            # This is a more robust way to get the agent's final output
-            final_answer_content = None
-            if "messages" in final_state:
-                for msg in reversed(final_state["messages"]): # Check messages in reverse order
-                    if isinstance(msg, dict) and msg.get("final_answer"):
-                        final_answer_content = msg["final_answer"]
-                        break
-                    elif isinstance(msg, ToolMessage) and msg.content: # Check if it's a ToolMessage with content
-                        # This might be the output of run_document_edit
-                        final_answer_content = msg.content
-                        break
-                    elif isinstance(msg, str) and "final_answer" in msg: # Simple string check
-                        try:
-                            parsed_msg = json.loads(msg)
-                            if parsed_msg.get("final_answer"):
-                                final_answer_content = parsed_msg["final_answer"]
-                                break
-                        except json.JSONDecodeError:
-                            pass # Not a JSON string
-
-            if final_answer_content:
-                print(f"--- Updated Document Content (from final_answer_content): {final_answer_content[:100]}...")
-                yield f"data: {json.dumps({'document_update': final_answer_content}, ensure_ascii=False)}\n\n"
-            else:
-                print("--- No final_answer_content found in final_state messages. ---")
-                # We might also want to save this updated document content to the database
-                # if it's associated with a specific document ID.
-                # This would require passing the document ID through the state or session.
-                # For now, just streaming it.
-            
-            yield "data: [DONE]\n\n" # Moved this line here
+            # ... (rest of the logic)
+            yield "data: [DONE]\n\n"
 
     if full_response_content:
-        new_message = ChatMessage(session_id=session_id, role="assistant", content=full_response_content)
-        db.add(new_message)
-        db.commit()
-        db.refresh(new_message)
+        _create_chat_message(db, session_id, "assistant", full_response_content)
 
 @api_router.get("/open")
 async def open_document(url):
     pass
+
+
+@api_router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(key="refresh_token")
+    return {"message": "Logout successful"}
 
 
 # API 라우터를 앱에 포함

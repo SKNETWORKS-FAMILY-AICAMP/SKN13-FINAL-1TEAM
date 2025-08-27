@@ -7,14 +7,14 @@ from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import SystemMessage 
 
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-from .DocumentSearchAgentTools.AgentState import AgentState
-from .DocumentSearchAgentTools.retriever_tool import RAG_search_tool
-from .DocumentSearchAgentTools.agent_logic import AgentTools
-from .document_search_system_prompt import get_document_search_system_prompt 
+from ..core.AgentState import AgentState
+from ..tools.retriever_tool import RAG_search_tool
+from ..tools.agent_logic import AgentTools
+from ..prompts.DocumentSearchSystemPrompt import get_document_search_system_prompt 
 
 load_dotenv()
 
@@ -22,13 +22,13 @@ load_dotenv()
 
 def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """Calls the LLM with the current state and returns the AI's response."""
-    messages = state["messages"]
+    messages = state["chat_history"]
     if not any(isinstance(msg, SystemMessage) for msg in messages):
         system_prompt_content = get_document_search_system_prompt()
         messages = [SystemMessage(content=system_prompt_content)] + messages
 
     response = llm_with_tools.invoke(messages)
-    return {"messages": [response]}
+    return {"chat_history": [response]}
 
 # --- Graph Factory ---
 
@@ -57,10 +57,7 @@ def DocumentSearchAgent() -> Any:
     graph.add_node("tools", ToolNode(tools))
     
     graph.set_entry_point("agent")
-    graph.add_conditional_edges(
-        "agent",
-        tools_condition,
-    )
+    graph.add_conditional_edges("agent", tools_condition,)
     graph.add_edge("tools", "agent")
 
     return graph.compile(checkpointer=MemorySaver())

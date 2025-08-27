@@ -5,7 +5,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_core.tools import tool
 from dotenv import load_dotenv
-
+import time
 load_dotenv()
 
 class DocumentRetriever:
@@ -16,6 +16,7 @@ class DocumentRetriever:
         """
         Initializes the DocumentRetriever.
         """
+        print(f"time: {time.time()}")
         # Corrected DB path to point to project root
         self.db_path = db_path or "../chroma_db"
         self.collection_name = os.getenv("CHROMA_COLLECTION_NAME", "kobaco_pdf_collection")

@@ -16,3 +16,4 @@ passlib[bcrypt]
 python-jose[cryptography]
 html2docx
 python-docx
+beautifulsoup4

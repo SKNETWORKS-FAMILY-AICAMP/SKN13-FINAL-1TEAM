@@ -9,10 +9,10 @@ from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableConfig
 
 # Import the comprehensive state and the sub-agents
-from .DocumentSearchAgentTools.AgentState import AgentState
+from ..core.AgentState import AgentState
 from .chat_agent import agent as GeneralChatAgent
 from .DocumentSearchAgent import DocumentSearchAgent
-from .DocumentEditorAgent import DocumentEditorAgent
+from .DocumentEditorAgent import DocumentEditAgent
 
 load_dotenv()
 
@@ -25,7 +25,7 @@ def route_question(state: AgentState) -> Literal["document_search", "general_cha
     print("---ROUTING QUESTION---")
     
     # Pass the entire message history to the LLM for better context
-    messages = state["messages"]
+    messages = state["chat_history"]
     
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
     
@@ -39,9 +39,9 @@ def route_question(state: AgentState) -> Literal["document_search", "general_cha
 
 1.  **DocumentSearchAgent**: 재무 보고서, 감사 결과, 내부 규정 등 **내부 문서 검색**이 필요한 질문에 사용합니다. 문서 검색 후 다운로드 링크를 요청하는 등의 후속 질문도 포함됩니다.
 
-2.  **DocumentEditorAgent**: 사용자가 현재 작업중인 문서의 내용을 **수정, 변경, 추가, 삭제 등 편집**을 요청할 때 사용합니다. 사용자의 메시지에 '수정해줘', '바꿔줘', '추가해줘' 같은 **명령어**와 함께 **편집할 문서 내용**이 포함되어 있거나, **문서 편집 세션 중**에 문서에 내용을 추가하려는 의도(예: "재밌는 농담 작성해줘!")가 명확할 때 사용합니다.
+2.  **DocumentEditorAgent**: 사용자가 현재 작업중인 문서의 내용을 **수정, 변경, 추가, 삭제와 같은 명시적인 '명령'**을 내릴 때 사용합니다. '...해줘', '...바꿔줘', '...만들어줘' 와 같이 행동을 요구하는 경우가 해당됩니다. **단순히 문서에 대해 질문하거나 요약을 요청하는 경우는 해당하지 않습니다.**
 
-3.  **GeneralChatAgent**: 일반적인 대화, 인사, 또는 위 두 전문가의 역할을 제외한 모든 질문에 사용합니다. **단, 요청에 문서 내용이 포함되어 있거나, 문서 편집/검색과 관련된 단어가 있다면 이 에이전트를 사용해서는 안 됩니다.**
+3.  **GeneralChatAgent**: 일반적인 대화, 인사, 혹은 위 두 전문가의 역할을 제외한 모든 질문에 사용합니다. **사용자가 문서 내용을 제공하며 그에 대해 '설명해줘', '요약해줘', '무슨 내용이야?' 와 같이 질문하는 경우, 이 에이전트를 사용해야 합니다.**
 
 대화 기록과 사용자의 최신 질문을 바탕으로, 어떤 전문가를 사용해야 합니까?
 
@@ -70,7 +70,7 @@ def RoutingAgent():
     # Instantiate the sub-agents that this router will call
     general_agent = GeneralChatAgent()
     document_search_agent = DocumentSearchAgent()
-    document_editor_agent = DocumentEditorAgent()
+    document_editor_agent = DocumentEditAgent()
 
     # Define the master graph
     workflow = StateGraph(AgentState)
