@@ -6,13 +6,12 @@
  *  - [변경] 로그아웃 기능을 "명시 요청"으로만 브로드캐스트하도록 분리
  */
 
-
-
 require("dotenv").config();
 
-const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require("electron"); // ✅ dialog 추가
 const path = require("path");
 const fs = require("fs");
+const express = require("express"); // ✅ 텍스트 코드에만 있던 express 추가
 
 process.on("uncaughtException", (err) => {
   console.error("[MAIN] uncaughtException:", err?.name, err?.message, err?.stack);
@@ -85,7 +84,7 @@ function createMainWindow() {
     mainWindow?.webContents?.send("window-resized");
   });
 
-  // ❌ 창 닫힘 → 로그아웃 신호는 제거(원치 않는 로그아웃 방지)
+  // ❌ 텍스트 코드에는 있었지만, 기존 파일은 "명시로그아웃" 정책이라 유지: 자동 로그아웃 브로드캐스트는 생략
   // mainWindow.on("close", () => {
   //   mainWindow?.webContents?.send("logout");
   // });
@@ -167,6 +166,32 @@ function createAdminWindow() {
   return adminWindow;
 }
 
+/* ────────────────────────────────────────────────────────────
+ * ✅ 텍스트 코드 추가: HTTP 서버 (백엔드에서 프런트 content 요청)
+ * ──────────────────────────────────────────────────────────── */
+const expressApp = express();
+const PORT = 8080;
+
+expressApp.get("/get-document-content", async (_req, res) => {
+  try {
+    if (featureWindow && !featureWindow.webContents.isLoading()) {
+      // ✅ 렌더러로 에디터 콘텐츠 요청 (아래 IPC 핸들러와 연동)
+      const content = await featureWindow.webContents.invoke("get-editor-content");
+      res.json({ content });
+    } else {
+      res.status(404).json({ error: "Feature window not active or ready." });
+    }
+  } catch (error) {
+    console.error("Error getting document content from renderer:", error);
+    res.status(500).json({ error: "Failed to get document content." });
+  }
+});
+
+expressApp.listen(PORT, () => {
+  console.log(`Electron HTTP server listening on port ${PORT}`);
+});
+
+
 app.whenReady().then(() => {
   createMainWindow();
   app.on("activate", () => {
@@ -199,6 +224,28 @@ ipcMain.handle("window:unmaximize", (event) => { const w = getSenderWindow(event
 ipcMain.handle("window:maximize-toggle", (event) => { const w = getSenderWindow(event); if (!w) return false; w.isMaximized() ? w.unmaximize() : w.maximize(); w.webContents?.send?.("window-resized"); return true; });
 ipcMain.handle("window:close", (event) => { getSenderWindow(event)?.close(); return true; });
 
+/* ✅ 텍스트 코드 추가: 에디터 content 요청/브로드캐스트 */
+ipcMain.handle("get-editor-content", async () => {
+  try {
+    if (featureWindow && !featureWindow.webContents.isLoading()) {
+      // 렌더러의 window.getTiptapEditorContent()를 실행해서 HTML 가져오기
+      const content = await featureWindow.webContents.executeJavaScript(`
+        window.getTiptapEditorContent ? window.getTiptapEditorContent() : '';
+      `);
+      return content;
+    }
+    return "";
+  } catch (error) {
+    console.error("Error in get-editor-content IPC handler:", error);
+    return "";
+  }
+});
+// 렌더러(챗봇) → 기능창 편집기에 적용
+ipcMain.on("update-editor-content", (_event, content) => {
+  if (featureWindow) {
+    featureWindow.webContents.send("apply-editor-update", content);
+  }
+});
 
 /* S3 및 FS Bridge (원본 유지) */
 ipcMain.handle("get-s3-upload-url", async (_evt, fileName) => {
@@ -262,6 +309,7 @@ async function upsertOpened(doc) {
   );
 }
 
+/* 파일 리스트 */
 ipcMain.handle("fs:listDocs", async () => {
   const base = resolveBaseDir();
   const names = await fs.promises.readdir(base);
@@ -301,31 +349,76 @@ ipcMain.handle("fs:listDocs", async () => {
   return out;
 });
 
-ipcMain.handle("fs:readDoc", async (_evt, { name }) => {
-  const base = resolveBaseDir();
-  const full = safeJoin(base, name);
-  const txt = await fs.promises.readFile(full, "utf-8");
+/* 파일 읽기 (기존 시그니처 유지: { name }) */
+ipcMain.handle("fs:readDoc", async (_evt, payload = {}) => {
+  try {
+    const { name, filePath } = payload;
+    let full = "";
+    let fileName = "";
 
-  await upsertOpened({
-    path: full,
-    name,
-    opened_at: new Date().toISOString(),   // 지금 열람한 시간 기록
-  });
+    if (filePath && typeof filePath === "string") {
+      // 절대경로(filePath) 직접 사용
+      full = filePath;
+      fileName = path.basename(full);
+    } else if (name && typeof name === "string") {
+      // 기존 방식: 베이스 디렉터리 + 파일명
+      const base = resolveBaseDir();
+      full = safeJoin(base, name);
+      fileName = name;
+    } else {
+      throw new Error("filePath or name is required");
+    }
 
-  return { name, content: txt };           // 프런트로 파일 내용 전달
+    if (!fs.existsSync(full)) {
+      return { ok: false, reason: "not_found" };
+    }
+
+    const content = await fs.promises.readFile(full, "utf-8");
+
+    await upsertOpened({
+      path: full,
+      name: fileName,
+      opened_at: new Date().toISOString(),
+    });
+
+    const ext = path.extname(full).slice(1).toLowerCase();
+    return { ok: true, name: fileName, content, mime: extToMime(ext) };
+  } catch (err) {
+    console.error("fs:readDoc error:", err);
+    return { ok: false, error: err.message };
+  }
 });
 
-ipcMain.handle("fs:saveDoc", async (_evt, { name, content }) => {
-  if (!name) throw new Error("filename required");       // 파일명이 없으면 에러
+/* 파일 저장 — ✅ 호환 확장: { name, content } 또는 { filePath, content } 모두 허용 */
+ipcMain.handle("fs:saveDoc", async (_evt, payload) => {
+  try {
+    const { name, filePath, content } = payload || {};
+    let full = "";
 
-  const base = resolveBaseDir();                         // 기본 문서 폴더 경로 (예: C:\testfiles)
-  const full = safeJoin(base, name);                     // 전체 파일 경로 (보안 join)
+    if (filePath) {
+      // 새 구조: 절대경로 직접 저장
+      full = filePath;
+    } else if (name) {
+      // 기존 구조: 베이스 디렉터리 + 파일명
+      const base = resolveBaseDir();
+      full = safeJoin(base, name);
+    } else {
+      throw new Error("filename or filePath required");
+    }
 
-  await fs.promises.writeFile(full, content ?? "", "utf-8"); // 파일에 내용 저장 (없으면 빈 문자열)
+    await fs.promises.writeFile(full, content ?? "", "utf-8");
 
-await upsertOpened({ path: full, name, opened_at: new Date().toISOString() });
+    await upsertOpened({
+      path: full,
+      name: path.basename(full),
+      opened_at: new Date().toISOString(),
+    });
 
-  return { ok: true };                                   // 성공 응답
+    return { ok: true };
+  } catch (err) {
+    console.error("fs:saveDoc error:", err);
+    return { ok: false, error: err.message };
+  }
 });
 
 ipcMain.handle("fs:deleteDoc", async (_evt, { name }) => {
@@ -355,6 +448,28 @@ ipcMain.handle("fs:open", async (_evt, { name }) => {
   return { ok: true };
 });
 
+/* ✅ 텍스트 코드 추가: 파일 대화상자 */
+ipcMain.handle("fs:showSaveDialog", async (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  try {
+    const result = await dialog.showSaveDialog(win, options);
+    return result;
+  } catch (err) {
+    console.error("Error occurred in handler for 'fs:showSaveDialog':", err);
+    return { canceled: true, error: err.message };
+  }
+});
+ipcMain.handle("fs:showOpenDialog", async (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  try {
+    const result = await dialog.showOpenDialog(win, options);
+    return result;
+  } catch (err) {
+    console.error("Error occurred in handler for 'fs:showOpenDialog':", err);
+    return { canceled: true, error: err.message };
+  }
+});
+
 /* 역할별 창 오픈 */
 ipcMain.on("auth:success", (_evt, payload) => {
   const role = payload?.role;
@@ -377,17 +492,17 @@ ipcMain.on("app:logout-request", (event, scope = "all") => {
     return;
   }
 
-ipcMain.on("app:show-main", () => {
-  const w = createMainWindow(); // 없으면 생성, 있으면 가져옴
-  w.show();
-  w.focus();
-});
+  ipcMain.on("app:show-main", () => {   // (원본 위치 유지)
+    const w = createMainWindow(); // 없으면 생성, 있으면 가져옴
+    w.show();
+    w.focus();
+  });
+
   // 전체 창(필요 시 role 필터 가능)
   BrowserWindow.getAllWindows().forEach((w) => w.webContents?.send("logout"));
 });
 
-
-// 수정하기(스마트 오픈): .doc는 내부편집 비활성화 응답, 그 외는 외부 앱
+/* 수정하기(스마트 오픈) */
 ipcMain.handle("fs:openSmart", async (_evt, { name }) => {
   const base = resolveBaseDir();
   const full = safeJoin(base, name);
@@ -396,10 +511,29 @@ ipcMain.handle("fs:openSmart", async (_evt, { name }) => {
   await upsertOpened({ path: full, name, opened_at: new Date().toISOString() });
 
   if (ext === ".doc") {
-    // 내부 편집 페이지 미구현 → 프런트에서 안내 메시지만 띄우게
     return { mode: "notImplemented", reason: ".doc 내부 편집은 준비 중입니다." };
   } else {
-    await shell.openPath(full); // 그 외 확장자는 외부 앱에서
+    await shell.openPath(full);
     return { mode: "external" };
   }
 });
+
+/* ✅ 텍스트 코드 추가: 레거시 on 채널도 지원 (필요시 사용) */
+ipcMain.on("win:minimize", (event) => getSenderWindow(event)?.minimize());
+ipcMain.on("win:maximize", (event) => {
+  const w = getSenderWindow(event);
+  if (!w) return;
+  if (w.isMaximized()) w.unmaximize();
+  else w.maximize();
+  w.webContents?.send?.("window-resized");
+});
+ipcMain.on("win:close", (event) => getSenderWindow(event)?.close());
+ipcMain.on("window-minimize", (e) => getSenderWindow(e)?.minimize());
+ipcMain.on("window-maximize", (e) => {
+  const w = getSenderWindow(e);
+  if (!w) return;
+  if (w.isMaximized()) w.unmaximize();
+  else w.maximize();
+  w.webContents?.send?.("window-resized");
+});
+ipcMain.on("window-close", (e) => getSenderWindow(e)?.close());

@@ -11,7 +11,7 @@
 
   사용 예:
     const stop = streamLLM({
-      sessionId, prompt,
+      sessionId, prompt, documentContent,
       onDelta: (chunk, full) => ...,
       onToolMessage: (msg) => ...,
       onDone: (full) => ...,
@@ -23,12 +23,13 @@
 import { LLM_API_BASE } from './env';
 
 /* 
-  streamLLM({ sessionId, prompt, onDelta, onToolMessage, onDone, onError })
+  streamLLM({ sessionId, prompt, documentContent, onDelta, onToolMessage, onDone, onError })
   목적: SSE로 토큰 스트리밍을 수신하고 적절한 콜백을 호출한다.
 
   인자:
     - sessionId: 세션 ID (쿼리스트링로 전달)
     - prompt: 사용자 입력 프롬프트
+    - documentContent (옵션): 문서 편집 내용 HTML. 제공 시 ?document_content= 로 함께 전송
     - onDelta(token, full): 토큰 단위 증분이 오면 호출 (full은 누적 텍스트)
     - onToolMessage(msg): 도구 메시지 수신 시 호출
     - onDone(full): 스트림 종료 시 호출
@@ -37,8 +38,18 @@ import { LLM_API_BASE } from './env';
   반환:
     - stop(): 현재 SSE 연결을 종료하는 함수
 */
-export function streamLLM({ sessionId, prompt, onDelta, onToolMessage, onDone, onError }) {
-  const url = `${LLM_API_BASE}/llm/stream?session_id=${encodeURIComponent(sessionId)}&prompt=${encodeURIComponent(prompt)}`;
+export function streamLLM({ sessionId, prompt, documentContent, onDelta, onToolMessage, onDone, onError }) {
+  // 기존 구현 유지 + document_content만 옵션으로 추가
+  const base = `${LLM_API_BASE}/llm/stream`;
+  const qs = [
+    `session_id=${encodeURIComponent(sessionId)}`,
+    `prompt=${encodeURIComponent(prompt)}`
+  ];
+  if (documentContent) {
+    qs.push(`document_content=${encodeURIComponent(documentContent)}`);
+  }
+  const url = `${base}?${qs.join('&')}`;
+
   const es = new EventSource(url);
   let full = '';
 

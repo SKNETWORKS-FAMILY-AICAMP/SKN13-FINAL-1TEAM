@@ -205,3 +205,56 @@ export async function listRecentDocs({ limit = 50, page = 1, sort = "-updated_at
   const data = await request(`/documents/recent?${sp.toString()}`);
   return data?.items ?? data ?? [];
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * (추가) exportToDocx(html, filename)
+ * - 우선 서버 변환 API를 시도하고, 실패 시 클라이언트 폴백(HTML을 Word에서 열 수 있는 Blob) 반환
+ * - 반환값: Blob (saveAs(blob, "파일명.docx") 로 저장)
+ * ───────────────────────────────────────────────────────────── */
+export async function exportToDocx(html, filename = "document.docx") {
+  // 1) 서버에 DOCX 변환 API가 있을 경우: 사용
+  try {
+    const url = `${BASE_URL}/documents/export-docx`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html, filename }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    // 서버가 진짜 docx 바이너리를 보내주는 경우
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/vnd.openxmlformats-officedocument.wordprocessingml.document")) {
+      return await res.blob();
+    }
+
+    // 혹시 다른 타입(예: base64/text)로 올 경우에도 blob으로 변환 시도
+    const buf = await res.arrayBuffer();
+    return new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+  } catch (e) {
+    console.warn("[documentsApi] exportToDocx: 서버 변환 실패, 클라이언트 폴백 사용", e);
+  }
+
+  // 2) 폴백: HTML을 Word에서 열 수 있는 형식으로 저장
+  //    * 진짜 .docx 변환은 아님 (정확한 변환은 서버/전용 라이브러리 필요)
+  //    * 그래도 Word는 HTML 파일을 잘 열 수 있음
+  const htmlDoc =
+    `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${(filename || "document").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</title>
+</head>
+<body>
+${html || ""}
+</body>
+</html>`;
+
+  // Word가 열 수 있도록 MIME을 Word 계열로 지정 (완벽한 docx는 아님)
+  return new Blob([htmlDoc], { type: "application/msword" });
+}
