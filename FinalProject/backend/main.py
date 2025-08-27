@@ -575,6 +575,17 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
     # Pass the state object to the agent stream
     async for event in chat_agent.astream_events(initial_state, config=config):
         kind = event["event"]
+        name = event.get("name")
+
+        # 에이전트 노드가 문서 내용을 요청하는지 확인
+        if kind == "on_end" and name == "agent":
+            node_output = event.get("data", {}).get("output", {})
+            if node_output and node_output.get("needs_document_content"):
+                print("--- 프론트엔드에 문서 요청 신호 전송 ---")
+                tool_call_id = f"req_doc_{uuid.uuid4()}"
+                yield f"data: {json.dumps({'needs_document_content': True, 'agent_context': {'tool_call_id': tool_call_id}}, ensure_ascii=False)}\n\n"
+                return  # 신호 전송 후 스트림 종료
+
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
             if content:
