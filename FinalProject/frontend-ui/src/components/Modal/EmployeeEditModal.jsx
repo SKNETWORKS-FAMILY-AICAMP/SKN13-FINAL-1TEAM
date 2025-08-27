@@ -1,8 +1,35 @@
+/* 
+  파일: src/components/Modal/EmployeeEditModal.jsx
+  역할: 기존 사원 계정 정보를 수정하는 모달. 부서/직급은 옵션 또는 직접입력, 비밀번호는 "초기화" 버튼으로 기본값 설정.
+
+  LINKS:
+    - 이 파일을 사용하는 곳:
+      * 상위 "사원 관리" 화면에서 특정 사원 행의 "수정" 액션 클릭 시 open=true로 표시
+    - 이 파일이 사용하는 것:
+      * FormModal → 공통 모달 프레임
+    - 연계(상위 ↔ 하위):
+      * props.employee → 수정 대상 데이터 주입
+      * onSubmit(payload) → 저장 동작(상위/API)
+      * onClose() → 닫기
+
+  데이터 흐름(요약):
+    1) 모달이 열리면(useEffect) employee 값을 각 입력 상태로 주입
+       - dept/rank가 옵션 목록에 없으면 CUSTOM 모드로 전환하여 직접입력 필드 활성화
+    2) 필수값(name/department/position/userId/password) 검증 → submit 버튼 활성화
+    3) "비밀번호 초기화" 클릭 시 password 상태에 "12345678!" 설정
+    4) handleSubmit()에서 payload 구성 → onSubmit(payload) → onClose()
+
+  주의:
+    - 이메일 필드는 읽기 전용(변경 불가)로 처리
+    - 실제 배포에서는 초기화 비밀번호 정책/고지 필요
+*/
+
 import React, { useEffect, useMemo, useState } from "react";
 import FormModal from "./FormModal";
 
 const CUSTOM = "__custom__";
 
+/* Select + Custom Input 한 줄 컴포넌트 (value === CUSTOM이면 input 활성) */
 const SelectWithCustomInline = ({
     label,
     options,
@@ -65,7 +92,8 @@ const EmployeeEditModal = ({
     const [password, setPassword] = useState("");
     const [email, setEmail] = useState("");
 
-    // 모달 열릴 때 기존 값 주입
+    /* 모달 열릴 때 기존 값 주입
+       - dept/rank가 options에 없으면 CUSTOM 모드로 전환 */
     useEffect(() => {
         if (!isOpen || !employee) return;
 
@@ -92,6 +120,7 @@ const EmployeeEditModal = ({
         setEmail(employee.email || "");
     }, [isOpen, employee, deptOptions, rankOptions]);
 
+    // 최종 선택값 계산
     const chosenDept = useMemo(
         () => (deptSel === CUSTOM ? deptCustom.trim() : deptSel),
         [deptSel, deptCustom]

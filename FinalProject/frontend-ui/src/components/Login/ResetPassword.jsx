@@ -1,3 +1,23 @@
+/* 
+  파일: src/components/Login/ResetPassword.jsx
+  역할: 이메일 인증을 통해 비밀번호를 재설정하는 화면.
+
+  LINKS:
+    - 이 파일을 사용하는 곳:
+      * LoginPage.jsx에서 “비밀번호 찾기” 클릭 시 이 컴포넌트로 전환(상위 라우팅에서 처리)
+    - 이 파일이 사용하는 것:
+      * ../services/authApi → requestEmailCode, verifyEmailCode, updatePassword
+
+  데이터 흐름(요약):
+    1) handleSendCode: 인증 코드 발송 요청
+    2) handleVerify: 코드 검증 성공 시 isVerified=true
+    3) handleSubmit: 비밀번호 유효성(길이/일치) 검사 후 updatePassword → onBack()
+
+  주의:
+    - 버튼 disabled로 기본 유효성(입력 여부/코드 전송 여부/일치 여부) 방어
+    - 비밀번호 보안 가이드 문구(길이/조합) 안내
+*/
+
 // ✅ src/components/Login/ResetPassword.jsx
 import React, { useState } from "react";
 import { requestEmailCode, verifyEmailCode, updatePassword } from "../services/authApi";
