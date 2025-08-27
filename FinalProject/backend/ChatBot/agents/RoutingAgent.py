@@ -25,7 +25,7 @@ def route_question(state: AgentState) -> Literal["document_search", "general_cha
     print("---ROUTING QUESTION---")
     
     # Pass the entire message history to the LLM for better context
-    messages = state["messages"]
+    messages = state["chat_history"]
     
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
     

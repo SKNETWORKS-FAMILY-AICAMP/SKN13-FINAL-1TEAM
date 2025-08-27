@@ -13,6 +13,7 @@ from docx import Document as DocxDocument # python-docx
 from langchain_core.messages.tool import ToolMessage
 import time
 from .ChatBot.agents.RoutingAgent import RoutingAgent, generate_config
+from .ChatBot.core.AgentState import AgentState
 from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
 from .ChatBot.tools.html_to_docx import convert_html_to_docx
 
@@ -560,11 +561,19 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
     if not messages or messages[-1] != ("user", prompt):
         messages.append(("user", prompt))
 
-    input_data = {"messages": messages}
-    if document_content:
-        input_data["document_content"] = document_content
+    # ✅ Create the initial state object
+    initial_state: AgentState = {
+        "prompt": prompt,
+        "document_content": document_content,
+        "chat_history": messages,
+        # The following fields will be populated by the agents
+        "intent": None,
+        "intermediate_steps": [],
+        "generation": None,
+    }
 
-    async for event in chat_agent.astream_events(input_data, config=config):
+    # Pass the state object to the agent stream
+    async for event in chat_agent.astream_events(initial_state, config=config):
         kind = event["event"]
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content

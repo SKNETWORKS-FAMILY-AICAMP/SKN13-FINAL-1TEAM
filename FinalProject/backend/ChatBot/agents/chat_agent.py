@@ -25,8 +25,8 @@ def prompt_node(state: AgentState) -> AgentState:
     """Injects the system prompt at the beginning of the conversation."""
     system_msg = SystemMessage(content=get_system_prompt())
     # Check if system message already exists
-    if not any(isinstance(msg, SystemMessage) for msg in state["messages"]):
-        return {"messages": [system_msg] + state["messages"]}
+    if not any(isinstance(msg, SystemMessage) for msg in state["chat_history"]):
+        return {"chat_history": [system_msg] + state["chat_history"]}
     return state
 
 async def chatbot(state: AgentState) -> dict:
@@ -41,8 +41,8 @@ async def chatbot(state: AgentState) -> dict:
     config = RunnableConfig(configurable={"tool_choice": "auto"})
 
     # Invoke the LLM to get the full AI message, which might contain tool calls
-    ai_message = await llm_with_tools.ainvoke(state["messages"], config=config)
-    return {"messages": [ai_message]}
+    ai_message = await llm_with_tools.ainvoke(state["chat_history"], config=config)
+    return {"chat_history": [ai_message]}
 
 # --- Graph Definition ---
 

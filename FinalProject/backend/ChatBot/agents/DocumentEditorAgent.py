@@ -29,7 +29,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     print("--- DocumentEditAgent 노드 실행 중 ---")
     
     # IMPORTANT: Make a copy so we don't modify the original state list
-    messages = state["messages"].copy()
+    messages = state["chat_history"].copy()
     document_content = state.get("document_content")
 
     # Inject the document content as a system message for the LLM to see
@@ -55,7 +55,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     # LLM 호출 및 응답 반환
     prompt = ChatPromptTemplate.from_messages(messages)
     response = llm_with_tools.invoke(prompt.format())
-    return {"messages": [response]}
+    return {"chat_history": [response]}
 
 # --- State Update Node ---
 
@@ -64,7 +64,7 @@ def update_document_state(state: AgentState) -> dict:
     ToolNode 실행 후, 도구의 출력(수정된 문서)으로 상태를 업데이트합니다.
     """
     print("--- 문서 상태 업데이트 중 ---")
-    last_message = state["messages"][-1]
+    last_message = state["chat_history"][-1]
     if not isinstance(last_message, ToolMessage):
         return {}
 
