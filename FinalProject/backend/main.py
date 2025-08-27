@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import Response, StreamingResponse, JSONResponse, FileResponse
 from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -591,6 +591,12 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
 @api_router.get("/open")
 async def open_document(url):
     pass
+
+
+@api_router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(key="refresh_token")
+    return {"message": "Logout successful"}
 
 
 # API 라우터를 앱에 포함

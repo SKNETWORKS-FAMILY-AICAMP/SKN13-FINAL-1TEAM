@@ -48,6 +48,7 @@ class User(Base):
     username = Column(String(255), unique=True, index=True)                # 사용자명 (로그인 ID)
     hashed_password = Column(String(255))                                  # 암호화된 비밀번호
     email = Column(String(255), unique=True, index=True)                   # 이메일 주소
+    is_manager = Column(Boolean)
     
     # 시간 정보
     created_at = Column(DateTime, default=now_utc, index=True)             # 계정 생성 시간
