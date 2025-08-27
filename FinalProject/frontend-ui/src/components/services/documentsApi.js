@@ -209,7 +209,7 @@ export async function listRecentDocs({ limit = 50, page = 1, sort = "-updated_at
 /* ─────────────────────────────────────────────────────────────
  * (추가) exportToDocx(html, filename)
  * - 우선 서버 변환 API를 시도하고, 실패 시 클라이언트 폴백(HTML을 Word에서 열 수 있는 Blob) 반환
- * - 반환값: Blob (saveAs(blob, "파일명.docx") 로 저장)
+ * - 반환값: Blob (saveAs(blob, "파일명.docx") 로 저장)  나중에 이 아래에 위치한 임시코드는 삭제하거나 해야함
  * ───────────────────────────────────────────────────────────── */
 export async function exportToDocx(html, filename = "document.docx") {
   // 1) 서버에 DOCX 변환 API가 있을 경우: 사용
@@ -258,3 +258,4 @@ ${html || ""}
   // Word가 열 수 있도록 MIME을 Word 계열로 지정 (완벽한 docx는 아님)
   return new Blob([htmlDoc], { type: "application/msword" });
 }
+//
