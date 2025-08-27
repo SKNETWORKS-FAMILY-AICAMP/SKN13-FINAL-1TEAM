@@ -579,7 +579,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         name = event.get("name")
 
         # 에이전트 노드가 문서 내용을 요청하는지 확인
-        if kind == "on_end" and name == "request_document":
+        if kind == "on_chain_end" and name == "request_document":
             node_output = event.get("data", {}).get("output", {})
             if node_output and node_output.get("needs_document_content"):
                 print("--- 프론트엔드에 문서 요청 신호 전송 ---")
