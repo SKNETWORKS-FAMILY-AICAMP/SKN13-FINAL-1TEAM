@@ -587,6 +587,10 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 yield f"data: {json.dumps({'needs_document_content': True, 'agent_context': {'tool_call_id': tool_call_id}}, ensure_ascii=False)}\n\n"
                 return  # 신호 전송 후 스트림 종료
 
+        # 라우팅 LLM의 스트리밍 출력 필터링
+        if kind == "on_chat_model_stream" and name == "ChatOpenAI":
+            continue # 이 이벤트는 일단 건너뛰어 화면에 표시되지 않도록 함
+
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
             if content:
