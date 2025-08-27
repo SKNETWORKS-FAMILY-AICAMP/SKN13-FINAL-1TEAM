@@ -574,6 +574,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
 
     # Pass the state object to the agent stream
     async for event in chat_agent.astream_events(initial_state, config=config):
+        print(f"--- STREAM EVENT: {event} ---")
         kind = event["event"]
         name = event.get("name")
 
