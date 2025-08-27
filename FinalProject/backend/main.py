@@ -548,6 +548,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         db.commit()
 
     full_response_content = ""
+    llm_output_buffer = "" # 라우팅 LLM 출력을 위한 버퍼
     
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
     
@@ -574,11 +575,11 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
 
     # Pass the state object to the agent stream
     async for event in chat_agent.astream_events(initial_state, config=config):
-        print(f"--- STREAM EVENT: {event} ---")
+        # print(f"--- STREAM EVENT: {event} ---")
         kind = event["event"]
         name = event.get("name")
 
-        # 에이전트 노드가 문서 내용을 요청하는지 확인
+        # 'request_document' 노드가 종료되었는지 확인
         if kind == "on_chain_end" and name == "request_document":
             node_output = event.get("data", {}).get("output", {})
             if node_output and node_output.get("needs_document_content"):
@@ -587,10 +588,18 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 yield f"data: {json.dumps({'needs_document_content': True, 'agent_context': {'tool_call_id': tool_call_id}}, ensure_ascii=False)}\n\n"
                 return  # 신호 전송 후 스트림 종료
 
-        # 라우팅 LLM의 스트리밍 출력 필터링
+        # 라우팅 LLM의 스트리밍 출력 버퍼링
         if kind == "on_chat_model_stream" and name == "ChatOpenAI":
-            continue # 이 이벤트는 일단 건너뛰어 화면에 표시되지 않도록 함
+            llm_output_buffer += event["data"]["chunk"].content
+            continue # 즉시 yield하지 않고 버퍼에 저장
 
+        # 'route_question' 체인이 종료되었고, 'request_document'가 트리거되지 않았다면 버퍼된 LLM 출력을 yield
+        if kind == "on_chain_end" and name == "route_question":
+            if llm_output_buffer:
+                yield f"data: {json.dumps({'content': llm_output_buffer}, ensure_ascii=False)}\n\n"
+                llm_output_buffer = "" # 버퍼 비우기
+
+        # 일반적인 LLM 스트림 처리 (라우팅 LLM 제외)
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
             if content:
