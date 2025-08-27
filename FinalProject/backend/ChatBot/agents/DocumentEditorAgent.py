@@ -28,34 +28,22 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """
     print("--- DocumentEditAgent 노드 실행 중 ---")
     
-    document_content = state.get("document_content")
-
-    # 문서 내용이 없으면, 프론트엔드에 요청 신호를 보냄
-    if not document_content:
-        print("--- 문서 내용 없음, 프론트엔드에 요청 신호 보냄 ---")
-        return {"needs_document_content": True}
-
     # IMPORTANT: Make a copy so we don't modify the original state list
     messages = state["chat_history"].copy()
-    
-    # Inject the document content as a system message for the LLM to see
-    print("--- 문서 내용 포함하여 처리 ---")
-    context_message = SystemMessage(
-        content=f"""## 중요 지시사항 ##
-당신은 문서 편집 전문가입니다. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.
-대화 기록은 단지 맥락 파악용이며, 절대 대화 내용을 편집해서는 안 됩니다.
-오직 아래의 '편집할 문서' 내용만을 수정 대상으로 삼아야 합니다.
+    document_content = state.get("document_content")
 
---- 편집할 문서 ---
-{document_content}
---- 문서 끝 ---
+    # Inject the document content as a system message for the LLM to see
+    if document_content:
+        print("--- 문서 내용 포함하여 처리 ---")
+        context_message = SystemMessage(
+            content=f"""## 중요 지시사항 ##\n당신은 문서 편집 전문가입니다. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.\n대화 기록은 단지 맥락 파악용이며, 절대 대화 내용을 편집해서는 안 됩니다.\n오직 아래의 '편집할 문서' 내용만을 수정 대상으로 삼아야 합니다.\n\n--- 편집할 문서 ---\n{document_content}\n--- 문서 끝 ---
 """
-    )
-    # Insert it before the last user message
-    if len(messages) > 1:
-        messages.insert(-1, context_message)
-    else:
-        messages.append(context_message)
+        )
+        # Insert it before the last user message
+        if len(messages) > 1:
+            messages.insert(-1, context_message)
+        else:
+            messages.append(context_message)
 
     # LLM 호출 및 응답 반환
     prompt = ChatPromptTemplate.from_messages(messages)
