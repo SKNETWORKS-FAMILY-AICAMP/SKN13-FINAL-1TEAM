@@ -16,11 +16,18 @@ from .DocumentEditorAgent import DocumentEditAgent
 
 load_dotenv()
 
+# --- New Node for Requesting Document ---
+def request_document_node(state: AgentState) -> dict:
+    """This node sets the flag to request the document from the frontend."""
+    print("--- Setting flag to request document from frontend ---")
+    return {"needs_document_content": True}
+
 # --- Router Logic ---
 
-def route_question(state: AgentState) -> Literal["document_search", "general_chat", "document_edit"]:
+def route_question(state: AgentState) -> Literal["document_search", "general_chat", "document_edit", "request_document"]:
     """
     Classifies the user's question to decide which agent should handle it, considering conversation history.
+    If the agent requires a document but it's not present, it routes to request the document.
     """
     print("---ROUTING QUESTION---")
     
@@ -51,6 +58,11 @@ def route_question(state: AgentState) -> Literal["document_search", "general_cha
     # Invoke LLM with the system prompt and the entire message history
     response = llm.invoke([SystemMessage(content=system_prompt)] + messages)
     decision = response.content.strip()
+
+    # If agent requires a document but it's not in the state, request it.
+    if ("DocumentEditorAgent" in decision or "DocumentSearchAgent" in decision) and not state.get("document_content"):
+        print(f"--- Decision: {decision}, but document not found. Routing to request_document. ---")
+        return "request_document"
     
     print(f"Routing decision: {decision}")
 
@@ -79,6 +91,7 @@ def RoutingAgent():
     workflow.add_node("document_search", document_search_agent)
     workflow.add_node("general_chat", general_agent)
     workflow.add_node("document_edit", document_editor_agent)
+    workflow.add_node("request_document", request_document_node) # Add the new node
 
     # The entry point is the router function
     workflow.set_conditional_entry_point(
@@ -87,6 +100,7 @@ def RoutingAgent():
             "document_search": "document_search",
             "general_chat": "general_chat",
             "document_edit": "document_edit",
+            "request_document": "request_document", # Add the new route
         }
     )
 
@@ -94,6 +108,7 @@ def RoutingAgent():
     workflow.add_edge("document_search", END)
     workflow.add_edge("general_chat", END)
     workflow.add_edge("document_edit", END)
+    workflow.add_edge("request_document", END) # Add edge for the new node
 
     # Compile the master agent
     return workflow.compile()

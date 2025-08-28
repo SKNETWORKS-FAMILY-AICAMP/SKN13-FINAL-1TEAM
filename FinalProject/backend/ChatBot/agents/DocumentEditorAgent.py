@@ -36,14 +36,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     if document_content:
         print("--- 문서 내용 포함하여 처리 ---")
         context_message = SystemMessage(
-            content=f"""## 중요 지시사항 ##
-당신은 문서 편집 전문가입니다. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.
-대화 기록은 단지 맥락 파악용이며, 절대 대화 내용을 편집해서는 안 됩니다.
-오직 아래의 '편집할 문서' 내용만을 수정 대상으로 삼아야 합니다.
-
---- 편집할 문서 ---
-{document_content}
---- 문서 끝 ---
+            content=f"""## 중요 지시사항 ##\n당신은 문서 편집 전문가입니다. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.\n대화 기록은 단지 맥락 파악용이며, 절대 대화 내용을 편집해서는 안 됩니다.\n오직 아래의 '편집할 문서' 내용만을 수정 대상으로 삼아야 합니다.\n\n--- 편집할 문서 ---\n{document_content}\n--- 문서 끝 ---
 """
         )
         # Insert it before the last user message

@@ -15,6 +15,9 @@ class AgentState(TypedDict):
     # 라우팅 결과
     intent: Optional[str]
 
+    # 프론트엔드에 문서 내용을 요청해야 하는지 여부
+    needs_document_content: Optional[bool]
+
     # 각 도구 실행 후 중간 결과물
     intermediate_steps: List[tuple]
 
