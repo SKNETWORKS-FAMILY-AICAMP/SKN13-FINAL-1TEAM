@@ -1,3 +1,68 @@
+// ✅ 파일 위치: src/pages/AdminPage.jsx
+//
+// ────────────────────────────────────────────────────────────────
+// 역할(Role)
+//  - 관리자(Admin)가 사원 계정을 관리할 수 있는 페이지.
+//  - 사원 목록 조회, 검색/필터링(부서/직급/이름), 신규 계정 추가, 수정, 삭제.
+//  - 계정정보(아이디/비번) 복사 기능, 모달(등록/수정) 연동.
+//  - 좌측 사이드바(MainSidebar) + 상단 헤더(HeaderBar)와 통합된 전체 레이아웃.
+//
+// 사용처(Expected Usage)
+//  - 관리자 로그인 후 접근 가능한 "사원 관리(Admin)" 화면.
+//  - 일반 사원 계정은 접근하지 못하도록 제한됨.
+//  - Sidebar의 pageType="admin" 전달로 관리자 메뉴 UI 활성화.
+//
+// 주요 상수
+//  - DEPT_OPTIONS: ["인사부", "총무부", "개발부"]
+//  - RANK_OPTIONS: ["사원", "대리", "팀장"]
+//  - DUMMY: 초기 더미 데이터 (id, name, dept, rank, email, accountId, password, isAdmin)
+//
+// state 관리
+//  - collapsed       : 사이드바 열림/닫힘 여부
+//  - employees       : 현재 표시되는 사원 목록 (초기 DUMMY, 등록/수정/삭제로 갱신)
+//  - dept, rank, q   : 필터 상태 (부서/직급/검색어)
+//  - copiedMsg       : 계정 복사 성공 시 잠시 표시되는 토스트 메시지
+//  - openAddModal    : 사원 등록 모달 열림 여부
+//  - openEditModal   : 사원 수정 모달 열림 여부
+//  - selectedEmployee: 현재 수정 중인 사원 데이터
+//  - openMenuId      : "더보기" 드롭다운이 열린 행의 id
+//
+// 주요 함수
+//  - copyCreds(u): 선택한 사원의 accountId/비번을 클립보드에 복사 → 토스트 표시
+//  - handleCreateSubmit(payload): 등록 모달에서 받은 payload를 검증 후 employees에 추가
+//       · accountId 중복 방지
+//       · 필수값 누락 시 alert
+//  - handleRowActionEdit(u): "수정하기" 클릭 시 → 선택된 사원 저장 + 수정 모달 열기
+//  - handleRowActionDelete(u): "삭제하기" 클릭 시 → employees 상태에서 제거
+//  - handleEditSubmit(payload): 수정 모달에서 저장 시 employees 업데이트
+//
+// useEffect 훅
+//  - 바깥 클릭/ESC 입력 시 openMenuId 초기화 (더보기 드롭다운 닫힘 처리)
+//
+// 외부 연결(Dependency)
+//  - HeaderBar: 상단 공통 헤더 UI
+//  - MainSidebar: 좌측 관리자 메뉴
+//  - EmployeeCreateModal: 신규 사원 등록 모달
+//  - EmployeeEditModal  : 기존 사원 수정 모달
+//  - react-icons(FiMenu, FaSearch): UI 아이콘
+//
+// UI 구성
+//  1. HeaderBar (상단)
+//  2. MainSidebar (좌측) + 본문 컨테이너
+//  3. 상단 제목("사원 목록") + "사원 계정 추가" 버튼
+//  4. 필터 영역 (부서/직급/검색창)
+//  5. 사원 목록 테이블 (번호, 이름, 부서, 직급, 이메일)
+//     - 이메일 오른쪽에 [복사 버튼] + [더보기(수정/삭제) 드롭다운]
+//  6. 모달들 (EmployeeCreateModal, EmployeeEditModal)
+//  7. 복사 토스트 (fixed, 하단 우측)
+//
+// 주의 사항
+//  - 현재 employees는 프론트 상태만 업데이트 (백엔드 연동 필요).
+//  - 계정 삭제/수정 시 API 호출이 추가되어야 실제 DB 반영 가능.
+//  - 이메일은 읽기 전용 필드로 설정 (수정 불가).
+// ────────────────────────────────────────────────────────────────
+
+
 import React, { useMemo, useState, useEffect } from "react";
 import HeaderBar from "../components/shared/HeaderBar";
 import MainSidebar from "../components/Sidebar/MainSidebar";

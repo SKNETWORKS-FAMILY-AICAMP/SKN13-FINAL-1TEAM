@@ -1,3 +1,46 @@
+// ✅ 파일 위치: src/components/DocumentEditor.jsx
+//
+// ────────────────────────────────────────────────────────────────
+// 역할(Role)
+//  - 문서 편집기 페이지 전체를 구성하는 컨테이너 컴포넌트.
+//  - TipTap 기반 RichEditor + EditorToolbar(툴바) + 상단 앱바(저장/불러오기/AI 등).
+//  - 파일 저장/불러오기, DOCX 내보내기, AI 편집, 로컬스토리지 자동 저장/복원,
+//    단축키(Ctrl+S, Ctrl+O) 지원.
+//  - 문서 제목 관리 및 Dirty 상태(*) 표시.
+//
+// 사용처(Expected Usage)
+//  - 기능부/관리자 페이지에서 문서를 작성, 수정, 불러오기 할 때 사용.
+//  - `RichEditor` (본문 편집기)와 `EditorToolbar` (서식 툴바)를 포함.
+//  - 파일 시스템 연결: window.fsBridge (Electron preload.js)
+//  - AI 편집 연결: streamLLM (services/llmApi.js)
+//
+// 주요 State
+//  - documentTitle : 현재 문서 제목
+//  - editorContent : HTML 형태의 본문 내용
+//  - isDirty       : 저장되지 않은 변경 여부 (true일 때 제목에 * 붙음)
+//  - editorRef     : TipTap 에디터 인스턴스 참조
+//  - sessionId     : AI 편집 세션 식별용 (UUID)
+//
+// 함수 설명
+//  - ErrorBoundary   : 에디터 내부에서 JS 오류 발생 시 안전하게 감싸주는 UI
+//  - toSimpleHTML() : TXT/MD 불러올 때 줄바꿈 → <br> 변환
+//  - handleSave()   : 현재 내용을 로컬 파일(html/txt/md)로 저장
+//  - handleLoad()   : 파일 불러오기 (html/txt/md → HTML 변환 후 반영)
+//  - handleExportDocx() : 현재 문서를 .docx 형식으로 내보내기
+//  - handleEditWithAI(): LLM API(streamLLM) 호출해 자동 편집 실행
+//  - handleClose()  : 닫기 버튼 → 미저장 확인 후 부모의 onClose 실행
+//  - useEffect(keydown): Ctrl+S / Ctrl+O 단축키 바인딩
+//
+// 외부 연결(Dependency)
+//  - RichEditor: 실제 본문 입력/렌더링
+//  - EditorToolbar: 글꼴, 정렬, 표 삽입 등 서식 조작 툴바
+//  - documentsApi.exportToDocx(): HTML → DOCX 변환
+//  - llmApi.streamLLM(): 문서 내용 기반 AI 편집 호출
+//  - window.fsBridge.showSaveDialog/saveDoc/showOpenDialog
+//    → Electron preload에서 파일 입출력 연결
+// ────────────────────────────────────────────────────────────────────────────────
+
+
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import EditorToolbar from "./Editor/EditorToolbar";
 import RichEditor from "./Editor/RichEditor";

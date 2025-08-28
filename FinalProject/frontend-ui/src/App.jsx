@@ -1,3 +1,36 @@
+// ✅ 파일: src/App.jsx
+/* 
+  목적(Purpose)
+  - 데스크톱(전자정부/Electron) 앱의 React 루트 컴포넌트.
+  - 로그인/아이디찾기/비밀번호찾기 → 채팅 화면 전환을 관리한다.
+  - 좌측 사이드바(세션 목록/새 대화/로그아웃)와 우측 ChatWindow를 배치한다.
+  - '기능부 전용 창(FeatureShell)' 진입 시 URL ?feature=1 파라미터를 해석해 별도 셸을 띄운다.
+  - 전역 로그아웃 브로드캐스트(window.auth.onLogout)를 수신해 로컬 세션을 정리하고 로그인 화면으로 복귀한다.
+
+  사용처(Where Used)
+  - 렌더러 프로세스의 엔트리 컴포넌트로, 메인/기능부/관리자 창에서 공통으로 사용된다.
+  - Sidebar/ChatWindow/HeaderBar 등 UI 컴포넌트를 포함한다.
+
+  외부 연동(Bridges & APIs)
+  - window.electron: 창 상태(최대화/리사이즈) 질의 및 이벤트(onWindowResize 등)
+  - window.auth: 전역 로그아웃 요청(requestLogout) 및 로그아웃 이벤트(onLogout)
+  - chatApi.getChatSessions(): 저장된 채팅 세션 목록 로드
+  - localStorage: USER_KEY/TOKEN_KEY 저장 및 자동 로그인 판단
+
+  주요 상태(State)
+  - sidebarOpen: 사이드바 오버레이 열림/닫힘
+  - sessionList: 세션 목록
+  - currentSession: 현재 선택된 세션
+  - isMaximized: 메인 창 최대화 여부
+  - currentPage: 'login' | 'find-id' | 'find-pw' | 'chat' (화면 분기)
+  - isFeatureWindow: ?feature=1 여부로 기능부 셸인지 판단
+
+  설계 포인트(Notes)
+  - 전역 로그아웃: Sidebar에서 onLogout → window.auth.requestLogout('all')
+  - 수신 측(App): window.auth.onLogout(...)에서 USER_KEY/TOKEN_KEY 제거 후 로그인 화면으로 전환
+  - 최대화/리사이즈: 창 상태 변화 시 사이드바 표시 전략 변경(고정 vs 오버레이)
+*/
+
 import React, { useEffect, useMemo, useState, useLayoutEffect, useRef } from 'react';
 
 import ChatWindow from './components/ChatWindow/ChatWindow.jsx';
@@ -17,15 +50,21 @@ const TOKEN_KEY = 'userToken';
 
 export default function App() {
   // ----- 기존 상태/로직 유지 -----
+  // 사이드바 오픈 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 세션 목록
   const [sessionList, setSessionList] = useState([]);
+  // 현재 세션
   const [currentSession, setCurrentSession] = useState(null);
+  // 창 최대화 여부
   const [isMaximized, setIsMaximized] = useState(false);
+  // 현재 페이지 분기
   const [currentPage, setCurrentPage] = useState('login');
 
   const initedRef = useRef(false);
   const mountIdRef = useRef(Math.random().toString(36).slice(2));
 
+  // 기능부 전용 셸 여부 계산
   const isFeatureWindow = useMemo(() => {
     try {
       return new URLSearchParams(window.location.search).get('feature') === '1';
@@ -34,6 +73,7 @@ export default function App() {
     }
   }, []);
 
+  // 부팅 로깅
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     console.groupCollapsed(`[App boot ${mountIdRef.current}]`);
@@ -43,7 +83,9 @@ export default function App() {
     console.groupEnd();
   }, []);
 
+  // 기능부 전용 셸 분기 즉시 반환
   if (isFeatureWindow) {
+    // 기능부 셸 사용자 역할 추출
     let role = 'user';
     try {
       const raw = localStorage.getItem(USER_KEY);
@@ -58,6 +100,7 @@ export default function App() {
     return <FeatureShell userType={role} />;
   }
 
+  // 세션 목록 로드
   const loadSessions = async () => {
     const t0 = performance.now();
     console.group(`[App ${mountIdRef.current}] loadSessions start`);
@@ -77,12 +120,14 @@ export default function App() {
     }
   };
 
+  // 새 대화 시작
   const handleNewChat = () => {
     const newId = `session-${Date.now()}`;
     console.log("[App] new chat ->", newId);
     setCurrentSession({ id: newId, title: '새로운 대화' });
   };
 
+  // 세션 선택
   const handleSelectChat = (target) => {
     const id = typeof target === 'string' ? target : (target?.session_id || target?.id);
     console.log("[App] select chat ->", id);
@@ -91,13 +136,15 @@ export default function App() {
     if (!isMaximized) setSidebarOpen(false);
   };
 
+  // ChatWindow key (세션 전환 시 리렌더 키)
   const chatKey = useMemo(() => currentSession?.id || 'no-session', [currentSession?.id]);
 
-  /** ✅ 변경: 사이드바에서 눌러도 "전역" 로그아웃을 트리거 */
+  // 로그아웃 핸들러(전역 브로드캐스트)
   const handleLogout = () => {
     window.auth?.requestLogout?.('all'); // ← 브로드캐스트
   };
 
+  // 창 최대화 여부/리사이즈 훅
   useEffect(() => {
     const checkMax = async () => {
       try {
@@ -114,12 +161,14 @@ export default function App() {
     return () => window.electron?.offWindowResize?.(checkMax);
   }, []);
 
+  // 자동 로그인 판단
   useEffect(() => {
     const userRaw = localStorage.getItem(USER_KEY);
     console.log("[App] auto-login check ->", !!userRaw);
     setCurrentPage(userRaw ? 'chat' : 'login');
   }, []);
 
+  // 로그인 성공 처리
   const handleLoginSuccess = (userData) => {
     console.log("[App] login success", userData);
     localStorage.setItem(USER_KEY, JSON.stringify(userData));
@@ -127,11 +176,13 @@ export default function App() {
     setCurrentPage('chat');
   };
 
+  // 채팅 페이지 진입 시 세션 로드
   useEffect(() => {
     console.log("[App] currentPage =", currentPage);
     if (currentPage === 'chat') loadSessions();
   }, [currentPage]);
 
+  // 프레임리스 모서리 플리커 방지 (컴포지팅 킥)
   useLayoutEffect(() => {
     const kickComposite = () => {
       document.body.classList.add('no-corner-flicker');
@@ -147,7 +198,7 @@ export default function App() {
     };
   }, []);
 
-  /** ✅ 추가: 전역 logout 브로드캐스트 "수신" → 토큰 정리 + 로그인 화면 */
+  // 전역 로그아웃 수신(브로드캐스트) → 로컬 정리 + 로그인 화면
   useEffect(() => {
     const off = window.auth?.onLogout?.(() => {
       try {
@@ -159,6 +210,7 @@ export default function App() {
     return () => off?.();
   }, []);
 
+  // 페이지 분기: 로그인
   if (currentPage === 'login') {
     return (
       <LoginPage
@@ -168,13 +220,16 @@ export default function App() {
       />
     );
   }
+  // 페이지 분기: 아이디 찾기
   if (currentPage === 'find-id') {
     return <FindId onBack={() => setCurrentPage('login')} />;
   }
+  // 페이지 분기: 비밀번호 찾기
   if (currentPage === 'find-pw') {
     return <ResetPassword onBack={() => setCurrentPage('login')} />;
   }
 
+  // 채팅 레이아웃
   return (
     <div className="app-shell h-screen flex flex-col bg-white">
       <HeaderBar

@@ -25,7 +25,7 @@
 
 import React from "react";
 
-export default function FeatureMypage() {
+export default function FeatureCalendar() {
     return (
         <section>
             <div className="mx-auto w-full max-w-[1200px] px-6 py-6">

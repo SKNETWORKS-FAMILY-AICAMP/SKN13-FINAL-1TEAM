@@ -1,4 +1,42 @@
-// EditorToolbar.jsx
+// ✅ 파일 위치: src/components/Editor/EditorToolbar.jsx
+//
+// ────────────────────────────────────────────────────────────────
+// 역할(Role)
+//  - RichEditor(TipTap)의 글꼴/크기/서식/정렬/표 삽입/리스트 등
+//    "문서 편집용 툴바 UI".
+//  - 워드프로세서 수준의 다양한 서식 버튼 제공.
+//  - selection/caret 모드 선택: 드래그 영역 vs 커서 위치에만 적용.
+//
+// 사용처(Expected Usage)
+//  - DocumentEditor.jsx 내부에서 <EditorToolbar editor={editorRef.current}/> 형태로 사용.
+//  - 에디터의 상태(TipTap chain API)에 직접 연결되어 실행.
+//
+// 주요 컴포넌트 / 함수
+//  - IconBtn: 아이콘 버튼 (클릭 시 selection 포커스 잃지 않도록 처리)
+//  - TableDropdown: 표 삽입 UI (N×M 크기 선택 + 행/열 추가 버튼)
+//  - usePageNumberToggle(): 인쇄 시 페이지 번호 표시용 스타일 삽입/제거
+//
+// state & 변수
+//  - applyMode: "selection"(선택 영역) vs "caret"(커서 위치부터)
+//  - FONT_LIST: 한국어 글꼴 목록 (맑은 고딕, 나눔고딕 등)
+//  - WORD_STEPS: 워드처럼 단계별 글자 크기 배열 (8, 9, 10 … 128px)
+//  - lastSelRef: 마지막 드래그 선택 범위 기억 (input 포커스 전환 시 유지)
+//
+// 기능별 버튼
+//  - Bold/Italic/Underline/Strike → 기본 텍스트 스타일
+//  - 글꼴 선택 (입력/드롭다운) + 글자 크기 (입력/드롭다운)
+//  - 글자색 변경(Droplet) + 하이라이트 토글
+//  - 문단/제목1~3/정렬(좌,중앙,우,양쪽)
+//  - 리스트(순서/비순서), 들여쓰기/내어쓰기
+//  - 표 삽입/행열 추가/삭제
+//  - 페이지 번호 인쇄용 토글 (#페이지)
+//  - 실행취소(Undo)/다시실행(Redo)
+//
+// 외부 연결(Dependency)
+//  - lucide-react 아이콘 (UI 일관성 유지)
+//  - TipTap editor.chain() API (실제 서식 적용 로직)
+// ────────────────────────────────────────────────────────────────
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bold, Italic, Underline as UIcon, Strikethrough,
