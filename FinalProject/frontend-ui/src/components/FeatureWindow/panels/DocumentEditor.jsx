@@ -277,8 +277,8 @@ export default function DocEditor({ onClose }) {
         {/* 본문 에디터 */}
         <div className="flex-1 overflow-y-auto" onClick={() => editorRef.current?.commands.focus()}>
           <RichEditor
-            initialContent={editorContent}
-            onReady={(editorInstance) => {
+            initialHTML={editorContent}              // ✅ prop 이름 맞춤
+            setEditorRef={(editorInstance) => {      // ✅ setEditorRef로 인스턴스 전달
               editorRef.current = editorInstance;
               window.getTiptapEditorContent = () => editorInstance.getHTML();
             }}
