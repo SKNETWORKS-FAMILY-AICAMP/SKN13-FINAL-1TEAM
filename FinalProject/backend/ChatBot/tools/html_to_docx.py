@@ -60,7 +60,7 @@ def apply_run_formatting(run, style: dict):
 
 # 안전하게 paragraph 생성
 def safe_add_paragraph(container):
-    if isinstance(container, Document) or isinstance(container, _Cell):
+    if isinstance(container, (Document, _Cell)):
         return container.add_paragraph()
     elif isinstance(container, Paragraph):
         return container  # Paragraph 안에서는 run만 사용
