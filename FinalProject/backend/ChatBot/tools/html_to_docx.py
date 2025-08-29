@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup, NavigableString
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 
 def parse_style_attribute(style_str):
     """Parses an inline style attribute string into a dictionary."""
