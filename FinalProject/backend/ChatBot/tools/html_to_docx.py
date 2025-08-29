@@ -58,16 +58,18 @@ def apply_run_formatting(run, style):
     if style.get('highlight'):
         run.font.highlight_color = WD_COLOR_INDEX.YELLOW  # 기본 노란색
 
+
 def process_node(node, container, style):
-    """Recursively processes a node."""
+    """Recursively processes a node safely."""
     if isinstance(node, NavigableString):
         text = node.string.strip()
         if text:
+            # Paragraph나 Cell 안에서 run 추가
             if hasattr(container, 'add_run'):
                 run = container.add_run(text)
                 apply_run_formatting(run, style)
             else:
-                p = container.add_run()
+                p = container.add_paragraph()
                 run = p.add_run(text)
                 apply_run_formatting(run, style)
         return
@@ -79,7 +81,6 @@ def process_node(node, container, style):
     if tag == 'u': new_style['underline'] = True
     if tag in ['s', 'del']: new_style['strike'] = True
     if tag == 'mark': new_style['highlight'] = 'yellow'
-
     if node.has_attr('style'):
         new_style.update(parse_style_attribute(node['style']))
 
@@ -89,7 +90,7 @@ def process_node(node, container, style):
             level = int(tag[1])
             p = container.add_heading(level=level)
         else:
-            p = container.add_run()
+            p = container.add_paragraph()
 
         if new_style.get('text-align'):
             align_map = {'left': WD_ALIGN_PARAGRAPH.LEFT,
@@ -97,13 +98,14 @@ def process_node(node, container, style):
                          'right': WD_ALIGN_PARAGRAPH.RIGHT}
             p.alignment = align_map.get(new_style['text-align'], WD_ALIGN_PARAGRAPH.LEFT)
 
+        # Paragraph 안에서는 run만 추가
         for child in node.children:
             process_node(child, p, new_style)
 
     elif tag in ['ul', 'ol']:
         for li in node.find_all('li', recursive=False):
             style_name = 'List Bullet' if tag == 'ul' else 'List Number'
-            p = container.add_run(style=style_name)
+            p = container.add_paragraph(style=style_name)
             for child in li.children:
                 process_node(child, p, new_style)
 
@@ -121,8 +123,14 @@ def process_node(node, container, style):
                     process_node(child, cell, new_style)
 
     else:
+        # Paragraph 안에서는 run만 추가
         for child in node.children:
-            process_node(child, container, new_style)
+            if hasattr(container, 'add_run') or isinstance(container, str):
+                process_node(child, container, new_style)
+            else:
+                p = container.add_paragraph()
+                process_node(child, p, new_style)
+
 
 # ------------------------ Main Function ------------------------
 def convert_html_to_docx(html_content: str, output_path: str, title: str = ""):
