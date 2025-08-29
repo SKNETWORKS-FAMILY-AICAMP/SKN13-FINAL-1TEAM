@@ -1,9 +1,11 @@
+from bs4 import BeautifulSoup
 from html2docx import html2docx
 import os
 
 def convert_html_to_docx(html_content: str, output_path: str, title: str) -> bool:
     """
-    Converts an HTML string to a .docx file using the html2docx function.
+    Converts an HTML string to a .docx file using the html2docx function,
+    after cleaning the HTML.
 
     Args:
         html_content: The HTML content as a string.
@@ -23,10 +25,20 @@ def convert_html_to_docx(html_content: str, output_path: str, title: str) -> boo
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        print(f"--- convert_html_to_docx: Input HTML content length: {len(html_content)} ---")
-        print(f"--- convert_html_to_docx: Input HTML (first 500 chars): {html_content[:500]} ---")
+        # Clean the HTML content
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # Remove script and style tags as they can interfere with conversion
+        for tag in soup(['script', 'style']):
+            tag.decompose()
+            
+        cleaned_html = str(soup)
+
+        print(f"--- convert_html_to_docx: Cleaned HTML content length: {len(cleaned_html)} ---")
+        print(f"--- convert_html_to_docx: Cleaned HTML (first 500 chars): {cleaned_html[:500]} ---")
+
         # html2docx function returns a buffer
-        buf = html2docx(html_content, title=title)
+        buf = html2docx(cleaned_html, title=title)
         print(f"--- convert_html_to_docx: html2docx returned buffer. Buffer length: {len(buf.getvalue())} ---")
 
         # Write the buffer to a .docx file
@@ -47,10 +59,16 @@ if __name__ == '__main__':
     <h1>This is a Test Heading</h1>
     <p>This is a test paragraph from your GigaChad agent.</p>
     <p>This text should be <b>bold</b> and this should be <i>italic</i>.</p>
+    <style>
+        p { color: red; }
+    </style>
     <ul>
         <li>List item 1</li>
         <li>List item 2</li>
     </ul>
+    <script>
+        alert('This should be removed');
+    </script>
     """
     desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
     test_output_path = os.path.join(desktop_path, "test_document_final.docx")
