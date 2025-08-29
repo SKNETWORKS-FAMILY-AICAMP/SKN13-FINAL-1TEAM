@@ -6,8 +6,9 @@ from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 
+# ------------------------ Helpers ------------------------
 def parse_style_attribute(style_str):
-    """Parses an inline style attribute string into a dictionary."""
+    """Parses inline CSS style string into a dict."""
     style_dict = {}
     if not style_str:
         return style_dict
@@ -23,17 +24,19 @@ def parse_style_attribute(style_str):
         elif key == 'font-size':
             style_dict['font_size'] = value
         elif key == 'color':
-            match = re.search(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', value)
-            if match:
-                style_dict['color'] = {'r': int(match.group(1)), 'g': int(match.group(2)), 'b': int(match.group(3))}
+            m = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', value)
+            if m:
+                style_dict['color'] = {'r': int(m.group(1)), 'g': int(m.group(2)), 'b': int(m.group(3))}
+            else:
+                style_dict['color'] = value
         elif key == 'background-color':
-            style_dict['highlight'] = value # Simple mapping for now
+            style_dict['highlight'] = value
         elif key == 'text-align':
             style_dict['text-align'] = value
     return style_dict
 
 def apply_run_formatting(run, style):
-    """Applies formatting from a style dict to a run."""
+    """Applies style to a run."""
     font = run.font
     if style.get('bold'): font.bold = True
     if style.get('italic'): font.italic = True
@@ -49,77 +52,79 @@ def apply_run_formatting(run, style):
         except ValueError:
             pass
     if style.get('color'):
-        rgb = style['color']
-        font.color.rgb = RGBColor(rgb['r'], rgb['g'], rgb['b'])
+        c = style['color']
+        if isinstance(c, dict):
+            font.color.rgb = RGBColor(c['r'], c['g'], c['b'])
     if style.get('highlight'):
-        # Map common highlight colors
-        color_map = {'yellow': 'yellow', 'rgb(255, 255, 0)': 'yellow'}
-        highlight_color_str = color_map.get(style['highlight'].lower(), 'yellow')
-        run.font.highlight_color = getattr(WD_COLOR_INDEX, highlight_color_str.upper(), WD_COLOR_INDEX.YELLOW)
+        run.font.highlight_color = WD_COLOR_INDEX.YELLOW  # 기본 노란색
 
-def process_node(node, container, current_style):
-    """Recursively processes a node, adding it to the container (doc or cell)."""
+def process_node(node, container, style):
+    """Recursively processes a node."""
     if isinstance(node, NavigableString):
-        if node.string.strip():
-            p = container if hasattr(container, 'add_run') else container.add_paragraph()
-            apply_run_formatting(p.add_run(node.string), current_style)
+        text = node.string.strip()
+        if text:
+            if hasattr(container, 'add_run'):
+                run = container.add_run(text)
+                apply_run_formatting(run, style)
+            else:
+                p = container.add_paragraph()
+                run = p.add_run(text)
+                apply_run_formatting(run, style)
         return
 
-    # Update style from the current tag
-    new_style = current_style.copy()
-    tag_name = node.name
-    if tag_name in ['strong', 'b']: new_style['bold'] = True
-    if tag_name in ['em', 'i']: new_style['italic'] = True
-    if tag_name == 'u': new_style['underline'] = True
-    if tag_name in ['s', 'del']: new_style['strike'] = True
-    if tag_name == 'mark': new_style['highlight'] = 'yellow' # Default highlight for <mark>
+    new_style = style.copy()
+    tag = node.name
+    if tag in ['b', 'strong']: new_style['bold'] = True
+    if tag in ['i', 'em']: new_style['italic'] = True
+    if tag == 'u': new_style['underline'] = True
+    if tag in ['s', 'del']: new_style['strike'] = True
+    if tag == 'mark': new_style['highlight'] = 'yellow'
 
     if node.has_attr('style'):
         new_style.update(parse_style_attribute(node['style']))
 
-    # Process element based on its type
-    if tag_name in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-        if tag_name.startswith('h'):
-            level = int(tag_name[1])
+    # ----------------- Block Elements -----------------
+    if tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+        if tag.startswith('h'):
+            level = int(tag[1])
             p = container.add_heading(level=level)
         else:
             p = container.add_paragraph()
-        
+
         if new_style.get('text-align'):
-            align_map = {'left': WD_ALIGN_PARAGRAPH.LEFT, 'center': WD_ALIGN_PARAGRAPH.CENTER, 'right': WD_ALIGN_PARAGRAPH.RIGHT}
+            align_map = {'left': WD_ALIGN_PARAGRAPH.LEFT,
+                         'center': WD_ALIGN_PARAGRAPH.CENTER,
+                         'right': WD_ALIGN_PARAGRAPH.RIGHT}
             p.alignment = align_map.get(new_style['text-align'], WD_ALIGN_PARAGRAPH.LEFT)
 
         for child in node.children:
             process_node(child, p, new_style)
 
-    elif tag_name in ['ul', 'ol']:
+    elif tag in ['ul', 'ol']:
         for li in node.find_all('li', recursive=False):
-            style = 'List Bullet' if tag_name == 'ul' else 'List Number'
-            p = container.add_paragraph(style=style)
+            style_name = 'List Bullet' if tag == 'ul' else 'List Number'
+            p = container.add_paragraph(style=style_name)
             for child in li.children:
                 process_node(child, p, new_style)
 
-    elif tag_name == 'table':
+    elif tag == 'table':
         rows = node.find_all('tr')
         if not rows: return
-        cols_count = max(len(tr.find_all(['td', 'th'])) for tr in rows)
-        table = container.add_table(rows=len(rows), cols=cols_count, style='Table Grid')
+        col_count = max(len(tr.find_all(['td', 'th'])) for tr in rows)
+        table = container.add_table(rows=len(rows), cols=col_count, style='Table Grid')
         for i, tr in enumerate(rows):
-            for j, cell_node in enumerate(tr.find_all(['td', 'th'])):
+            cells = tr.find_all(['td', 'th'])
+            for j, td in enumerate(cells):
                 cell = table.cell(i, j)
-                cell.text = '' # Clear default paragraph
-                for child in cell_node.children:
+                cell.text = ''  # clear default
+                for child in td.children:
                     process_node(child, cell, new_style)
 
-    elif hasattr(container, 'add_run'): # Already in a paragraph
+    else:
         for child in node.children:
             process_node(child, container, new_style)
-    else: # Fallback for other block-level elements
-        p = container.add_paragraph()
-        for child in node.children:
-            process_node(child, p, new_style)
 
-
+# ------------------------ Main Function ------------------------
 def convert_html_to_docx(html_content: str, output_path: str, title: str = ""):
     if not output_path.endswith('.docx'):
         return False
@@ -131,30 +136,30 @@ def convert_html_to_docx(html_content: str, output_path: str, title: str = ""):
         soup = BeautifulSoup(html_content, 'html.parser')
         body = soup.find('body') or soup
 
-        for element in body.children:
-            if not isinstance(element, NavigableString):
-                process_node(element, doc, {})
+        for el in body.children:
+            if not isinstance(el, NavigableString):
+                process_node(el, doc, {})
 
         doc.save(output_path)
         return True
     except Exception as e:
-        print(f"Error during DOCX conversion: {e}")
+        print(f"Error during conversion: {e}")
         import traceback
         traceback.print_exc()
         return False
 
-# Example Usage:
+# ------------------------ Example Usage ------------------------
 if __name__ == '__main__':
     sample_html = '''
-    <h1>이 글은 H1 입니다.</h1><h2>이 글은 H2 입니다.</h2><h3>이 글은 H3 입니다.</h3><p><span style="font-family: 돋움;">이 글은 돋움 입니다.</span></p><p><span style="font-size: 48px;">이 글은 48px입니다</span></p><p><strong>이 글은 볼드체입니다</strong></p><p><em>이 글은 이탤릭체입니다</em></p><p><u>이 글은 밑줄입니다</u></p><p><s>이 글은 취소선입니다.</s></p><p><span style="color: rgb(255, 0, 0);">이 글은 빨간글씨 입니다.</span></p><p><mark>이 글은 하이라이트입니다.</mark></p><p style="text-align: left;">이 글은 왼쪽 정렬입니다.</p><p style="text-align: center;">이 글은 가운데 정렬입니다.</p><p style="text-align: right;">이 글은 오른쪽 정렬입니다.</p><p>아래는 표입니다.</p><table><tbody><tr><th>1</th><th>2</th><th>3</th></tr><tr><td>4</td><td>5</td><td>6</td></tr></tbody></table><ol><li><p>번호 매기기 1</p></li><li><p>번호 매기기 2</p></li></ol><ul><li><p>글머리 기호 1</p></li><li><p>글머리 기호 2</p></li></ul>
+    <h1>H1 제목</h1><h2>H2 제목</h2><p><span style="font-family: 돋움;">돋움 글씨</span></p>
+    <p><span style="font-size: 48px;">48px 글씨</span></p><p><strong>볼드체</strong></p>
+    <p><em>이탤릭</em></p><p><u>밑줄</u></p><p><s>취소선</s></p>
+    <p><span style="color: rgb(255,0,0);">빨간 글씨</span></p><p><mark>하이라이트</mark></p>
+    <table><tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></table>
+    <ol><li>번호 1</li><li>번호 2</li></ol>
+    <ul><li>글머리 1</li><li>글머리 2</li></ul>
     '''
     desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-    test_output_path = os.path.join(desktop_path, "test_document_final.docx")
-    
-    print(f"Creating test file at: {test_output_path}")
-    success = convert_html_to_docx(sample_html, test_output_path, title="My Final Test Document")
-    
-    if success:
-        print(f"Test file created successfully.")
-    else:
-        print("Test file creation failed.")
+    test_output = os.path.join(desktop_path, "final_doc.docx")
+    success = convert_html_to_docx(sample_html, test_output, title="완벽 테스트 문서")
+    print("완료!" if success else "실패!")
