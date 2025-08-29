@@ -101,11 +101,11 @@ class HTMLToDocxConverter:
     
     def create_paragraph_container(self, container) -> Paragraph:
         """컨테이너에 새로운 문단 생성"""
-        if isinstance(container, Document):
+        container_type = type(container).__name__
+        
+        if container_type in ['Document', '_Cell'] or hasattr(container, 'add_paragraph'):
             return container.add_paragraph()
-        elif hasattr(container, 'add_paragraph'):  # _Cell 타입 체크
-            return container.add_paragraph()
-        elif isinstance(container, Paragraph):
+        elif container_type == 'Paragraph':
             return container
         else:
             raise TypeError(f"지원하지 않는 컨테이너 타입: {type(container)}")
@@ -116,7 +116,9 @@ class HTMLToDocxConverter:
         if not text:
             return
             
-        if isinstance(container, Paragraph):
+        container_type = type(container).__name__
+        
+        if container_type == 'Paragraph':
             run = container.add_run(text)
             self.apply_text_formatting(run, style)
         elif hasattr(container, 'add_paragraph'):  # Document나 Cell
@@ -168,7 +170,9 @@ class HTMLToDocxConverter:
         col_count = max(len(tr.find_all(['td', 'th'])) for tr in rows)
         
         # 테이블 생성
-        if isinstance(container, Paragraph):
+        container_type = type(container).__name__
+        if container_type == 'Paragraph':
+            # Paragraph 내부에서는 상위 Document에 테이블 추가
             table = container._parent.add_table(rows=len(rows), cols=col_count, style='Table Grid')
         else:
             table = container.add_table(rows=len(rows), cols=col_count, style='Table Grid')
