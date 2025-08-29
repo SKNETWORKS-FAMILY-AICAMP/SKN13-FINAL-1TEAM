@@ -23,8 +23,11 @@ def convert_html_to_docx(html_content: str, output_path: str, title: str) -> boo
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
+        print(f"--- convert_html_to_docx: Input HTML content length: {len(html_content)} ---")
+        print(f"--- convert_html_to_docx: Input HTML (first 500 chars): {html_content[:500]} ---")
         # html2docx function returns a buffer
         buf = html2docx(html_content, title=title)
+        print(f"--- convert_html_to_docx: html2docx returned buffer. Buffer length: {len(buf.getvalue())} ---")
 
         # Write the buffer to a .docx file
         with open(output_path, "wb") as f:
@@ -33,7 +36,9 @@ def convert_html_to_docx(html_content: str, output_path: str, title: str) -> boo
         print(f"Successfully converted HTML to {output_path}")
         return True
     except Exception as e:
+        import traceback
         print(f"An error occurred during DOCX conversion: {e}")
+        traceback.print_exc()
         return False
 
 # Example Usage:
