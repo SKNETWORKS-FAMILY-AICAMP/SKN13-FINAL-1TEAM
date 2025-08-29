@@ -14,7 +14,7 @@ class AgentState(TypedDict):
     document_content: Optional[str]
 
     # 전체 대화 기록 (LangGraph에 의해 관리됨)
-    chat_history: Annotated[List[BaseMessage], add_messages]
+    messages: Annotated[List[BaseMessage], add_messages]
 
     # 라우팅 결과
     intent: Optional[str]
