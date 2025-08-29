@@ -230,7 +230,7 @@ class EventOut(BaseModel):
     color: Optional[str] = None
 
 class ExportDocxRequest(BaseModel):
-    html_content: str
+    html: str
     filename: str = "exported_document.docx"
 
 # --- Helper for Document Conversion ---
@@ -309,7 +309,7 @@ async def export_document_as_docx(req: ExportDocxRequest, request: Request):
     raw_body = await request.body()
     print(raw_body.decode())
 
-    print(f"--- Parsed html_content length: {len(req.html_content)} ---")
+    print(f"--- Parsed html_content length: {len(req.html)} ---")
     print(f"--- Parsed filename: {req.filename} ---")
 
     safe_filename = req.filename.strip()
@@ -320,7 +320,7 @@ async def export_document_as_docx(req: ExportDocxRequest, request: Request):
         temp_filepath = temp_file.name
 
     doc_title = os.path.splitext(safe_filename)[0]
-    success = convert_html_to_docx(req.html_content, temp_filepath, title=doc_title)
+    success = convert_html_to_docx(req.html, temp_filepath, title=doc_title)
 
     if not success:
         raise HTTPException(status_code=500, detail="Failed to convert HTML to DOCX.")
