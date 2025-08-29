@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
+from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile, Request
 from fastapi.responses import Response, StreamingResponse, JSONResponse, FileResponse
 from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Generator, Optional, Any
-import json, uuid, shutil, tempfile, os, re
+from typing import List, Generator, Optional
+import json, uuid, shutil, tempfile, os
 from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -304,46 +304,33 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
     return JSONResponse(content={"doc_id": doc_id, "markdown_content": markdown_content, "message": "Document uploaded and converted successfully"})
 
 @api_router.post("/documents/export/docx")
-async def export_document_as_docx(request: ExportDocxRequest):
-    # Log raw request body before Pydantic validation
-    try:
-        raw_body = await request.body()
-        print(f"--- export_document_as_docx: Raw request body: {raw_body.decode()} ---")
-    except Exception as e:
-        print(f"--- export_document_as_docx: Error reading raw request body: {e} ---")
+async def export_document_as_docx(req: ExportDocxRequest, request: Request):
+    print("--- Raw body ---")
+    raw_body = await request.body()
+    print(raw_body.decode())
 
-    print(f"--- export_document_as_docx: Received request.html_content length: {len(request.html_content)} ---")
-    print(f"--- export_document_as_docx: Received filename: {request.filename} ---")
-    # Sanitize filename to prevent security issues
-    safe_filename = request.filename.replace("\n", "").replace("\r", "").strip()
-    if not safe_filename:
-        safe_filename = "exported_document.docx"
+    print(f"--- Parsed html_content length: {len(req.html_content)} ---")
+    print(f"--- Parsed filename: {req.filename} ---")
+
+    safe_filename = req.filename.strip()
     if not safe_filename.endswith(".docx"):
         safe_filename += ".docx"
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+        temp_filepath = temp_file.name
 
-    # Use a temporary file for the conversion
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
-            temp_filepath = temp_file.name
-        
-        doc_title = os.path.splitext(safe_filename)[0]
-        success = convert_html_to_docx(request.html_content, temp_filepath, title=doc_title)
+    doc_title = os.path.splitext(safe_filename)[0]
+    success = convert_html_to_docx(req.html_content, temp_filepath, title=doc_title)
 
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to convert HTML to DOCX.")
-
-        # Return the file and schedule it for deletion after the response is sent
-        return FileResponse(
-            path=temp_filepath,
-            filename=safe_filename,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            background=BackgroundTask(os.unlink, temp_filepath)
-        )
-    except Exception as e:
-        # Ensure temp file is deleted on error before raising HTTP exception
-        if 'temp_filepath' in locals() and os.path.exists(temp_filepath):
-            os.unlink(temp_filepath)
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to convert HTML to DOCX.")
+    
+    return FileResponse(
+        path=temp_filepath,
+        filename=safe_filename,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        background=BackgroundTask(os.unlink, temp_filepath)
+    )
 
 @api_router.get("/documents/{doc_id}/content")
 async def get_document_content(doc_id: str, db: Session = Depends(get_db)):
