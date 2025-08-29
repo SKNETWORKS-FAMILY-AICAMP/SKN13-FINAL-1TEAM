@@ -566,9 +566,10 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
     initial_state: AgentState = {
         "prompt": prompt,
         "document_content": document_content,
-        "chat_history": messages,
+        "messages": messages,
         # The following fields will be populated by the agents
         "intent": None,
+        "needs_document_content": False,
         "intermediate_steps": [],
         "generation": None,
     }
