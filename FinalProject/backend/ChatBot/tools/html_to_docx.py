@@ -12,7 +12,6 @@ def parse_style_attribute(style_str):
     style_dict = {}
     if not style_str:
         return style_dict
-
     for item in style_str.split(';'):
         if ':' not in item:
             continue
@@ -27,8 +26,6 @@ def parse_style_attribute(style_str):
             m = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', value)
             if m:
                 style_dict['color'] = {'r': int(m.group(1)), 'g': int(m.group(2)), 'b': int(m.group(3))}
-            else:
-                style_dict['color'] = value
         elif key == 'background-color':
             style_dict['highlight'] = value
         elif key == 'text-align':
@@ -49,7 +46,7 @@ def apply_run_formatting(run, style):
         try:
             size_pt = float(re.sub(r'[^\d.]', '', style['font_size']))
             font.size = Pt(size_pt)
-        except ValueError:
+        except:
             pass
     if style.get('color'):
         c = style['color']
@@ -58,13 +55,12 @@ def apply_run_formatting(run, style):
     if style.get('highlight'):
         run.font.highlight_color = WD_COLOR_INDEX.YELLOW  # 기본 노란색
 
-
+# ------------------------ Node Processing ------------------------
 def process_node(node, container, style):
-    """Recursively processes a node safely."""
+    """Recursively processes a node into docx."""
     if isinstance(node, NavigableString):
         text = node.string.strip()
         if text:
-            # Paragraph나 Cell 안에서 run 추가
             if hasattr(container, 'add_run'):
                 run = container.add_run(text)
                 apply_run_formatting(run, style)
@@ -74,6 +70,7 @@ def process_node(node, container, style):
                 apply_run_formatting(run, style)
         return
 
+    # Update style
     new_style = style.copy()
     tag = node.name
     if tag in ['b', 'strong']: new_style['bold'] = True
@@ -91,14 +88,11 @@ def process_node(node, container, style):
             p = container.add_heading(level=level)
         else:
             p = container.add_paragraph()
-
         if new_style.get('text-align'):
             align_map = {'left': WD_ALIGN_PARAGRAPH.LEFT,
                          'center': WD_ALIGN_PARAGRAPH.CENTER,
                          'right': WD_ALIGN_PARAGRAPH.RIGHT}
             p.alignment = align_map.get(new_style['text-align'], WD_ALIGN_PARAGRAPH.LEFT)
-
-        # Paragraph 안에서는 run만 추가
         for child in node.children:
             process_node(child, p, new_style)
 
@@ -123,14 +117,13 @@ def process_node(node, container, style):
                     process_node(child, cell, new_style)
 
     else:
-        # Paragraph 안에서는 run만 추가
+        # Inline elements inside paragraph/run
         for child in node.children:
-            if hasattr(container, 'add_run') or isinstance(container, str):
+            if hasattr(container, 'add_run'):
                 process_node(child, container, new_style)
             else:
                 p = container.add_paragraph()
                 process_node(child, p, new_style)
-
 
 # ------------------------ Main Function ------------------------
 def convert_html_to_docx(html_content: str, output_path: str, title: str = ""):
@@ -156,7 +149,7 @@ def convert_html_to_docx(html_content: str, output_path: str, title: str = ""):
         traceback.print_exc()
         return False
 
-# ------------------------ Example Usage ------------------------
+# ------------------------ Example ------------------------
 if __name__ == '__main__':
     sample_html = '''
     <h1>H1 제목</h1><h2>H2 제목</h2><p><span style="font-family: 돋움;">돋움 글씨</span></p>
