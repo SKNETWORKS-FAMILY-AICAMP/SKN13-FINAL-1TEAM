@@ -67,7 +67,7 @@ def process_node(node, container, style):
                 run = container.add_run(text)
                 apply_run_formatting(run, style)
             else:
-                p = container.add_paragraph()
+                p = container.add_run()
                 run = p.add_run(text)
                 apply_run_formatting(run, style)
         return
@@ -89,7 +89,7 @@ def process_node(node, container, style):
             level = int(tag[1])
             p = container.add_heading(level=level)
         else:
-            p = container.add_paragraph()
+            p = container.add_run()
 
         if new_style.get('text-align'):
             align_map = {'left': WD_ALIGN_PARAGRAPH.LEFT,
@@ -103,7 +103,7 @@ def process_node(node, container, style):
     elif tag in ['ul', 'ol']:
         for li in node.find_all('li', recursive=False):
             style_name = 'List Bullet' if tag == 'ul' else 'List Number'
-            p = container.add_paragraph(style=style_name)
+            p = container.add_run(style=style_name)
             for child in li.children:
                 process_node(child, p, new_style)
 
