@@ -24,19 +24,43 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     DocumentEditAgent의 메인 노드
     
     현재 상태의 메시지를 받아서 LLM을 호출하고 AI의 응답을 반환합니다.
-    시스템 프롬프트가 없는 경우 문서 편집용 시스템 프롬프트를 자동으로 추가합니다.
+    도구 실행 후에는 최종 확인 메시지를 생성하고, 그 외에는 편집 명령을 수행합니다.
     """
     print("--- DocumentEditAgent 노드 실행 중 ---")
     
-    # IMPORTANT: Make a copy so we don't modify the original state list
     messages = state["chat_history"].copy()
     document_content = state.get("document_content")
+    
+    # 마지막 메시지가 ToolMessage인 경우, 도구 실행 결과를 요약하는 최종 응답 생성
+    if isinstance(messages[-1], ToolMessage):
+        print("--- 도구 실행 완료. 최종 확인 메시지 생성 ---")
+        prompt_content = f"""
+        **지시사항**: 이전 단계에서 문서 편집 도구를 성공적으로 실행했습니다.
+        사용자에게 문서가 수정되었음을 알리는 최종 확인 메시지를 생성해주세요. (예: \"요청하신대로 문서를 수정했습니다.\")
+        
+        **수정된 문서 내용 (참고용):**
+        ---
+        {document_content[:1000]}...
+        ---
+        
+        이제 사용자에게 간결하고 친절한 확인 메시지를 전달하세요. 절대로 도구를 다시 호출하지 마세요.
+        """
+        # 도구 없이 순수 응답 생성을 위해 일반 LLM 호출
+        llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
+        response = llm.invoke([SystemMessage(content=prompt_content)])
+        return {"chat_history": [response]}
 
-    # Inject the document content as a system message for the LLM to see
+    # 일반적인 편집 요청 처리
     if document_content:
-        print("--- 문서 내용 포함하여 처리 ---")
+        print("--- 문서 내용 포함하여 편집 처리 ---")
         context_message = SystemMessage(
-            content=f"""## 중요 지시사항 ##\n당신은 문서 편집 전문가입니다. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.\n대화 기록은 단지 맥락 파악용이며, 절대 대화 내용을 편집해서는 안 됩니다.\n오직 아래의 '편집할 문서' 내용만을 수정 대상으로 삼아야 합니다.\n\n--- 편집할 문서 ---\n{document_content}\n--- 문서 끝 ---
+            content=f"""## 중요 지시사항 ##\n당신은 문서 편집 전문가입니다. 아래 제공되는 문서를 사용자의 명령에 따라 수정해야 합니다.
+대화 기록은 단지 맥락 파악용이며, 절대 대화 내용을 편집해서는 안 됩니다.
+오직 아래의 '편집할 문서' 내용만을 수정 대상으로 삼아야 합니다.
+
+--- 편집할 문서 ---
+{document_content}
+--- 문서 끝 ---
 """
         )
         # Insert it before the last user message
@@ -100,7 +124,7 @@ def DocumentEditAgent() -> Any:
         tools_condition,
     )
     
-    # 툴 실행 후 -> 상태 업데이트 -> 다시 에이전트 호출
+    # 툴 실행 후 -> 상태 업데이트 -> 다시 에이전트 호출하여 최종 응답 생성
     graph.add_edge("tools", "update_state")
     graph.add_edge("update_state", "agent")
     
