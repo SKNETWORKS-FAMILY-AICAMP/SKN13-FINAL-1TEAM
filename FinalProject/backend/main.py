@@ -129,9 +129,10 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
 
     # If the editor tool finishes, its output is the new document.
     # Yield a specific event for the frontend to catch and update the editor.
-    if tool_name == ("replace_text_in_document" or "run_document_edit"):
-        print(f"--- Sending document_update for run_document_edit. Content length: {len(raw_output) if isinstance(raw_output, str) else 'N/A'} ---")
-        yield f"data: {json.dumps({'document_update': raw_output}, ensure_ascii=False)}\n\n"
+    if tool_name == "replace_text_in_document":
+        content_to_send = raw_output.content if isinstance(raw_output, ToolMessage) else raw_output
+        print(f"--- Sending document_update for replace_text_in_document. Content length: {len(content_to_send) if isinstance(content_to_send, str) else 'N/A'} ---")
+        yield f"data: {json.dumps({'document_update': content_to_send}, ensure_ascii=False)}\n\n"
 
     formatted_output = "[Tool Output]: "
     tool_raw_json = None
