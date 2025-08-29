@@ -305,6 +305,13 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
 
 @api_router.post("/documents/export/docx")
 async def export_document_as_docx(request: ExportDocxRequest):
+    # Log raw request body before Pydantic validation
+    try:
+        raw_body = await request.body()
+        print(f"--- export_document_as_docx: Raw request body: {raw_body.decode()} ---")
+    except Exception as e:
+        print(f"--- export_document_as_docx: Error reading raw request body: {e} ---")
+
     print(f"--- export_document_as_docx: Received request.html_content length: {len(request.html_content)} ---")
     print(f"--- export_document_as_docx: Received filename: {request.filename} ---")
     # Sanitize filename to prevent security issues
