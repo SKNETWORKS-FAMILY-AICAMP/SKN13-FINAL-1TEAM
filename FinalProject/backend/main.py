@@ -129,7 +129,21 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
 
     # If the editor tool finishes, its output is the new document.
     # Yield a specific event for the frontend to catch and update the editor.
-    if tool_name == "replace_text_in_document":
+    DOCUMENT_UPDATE_TOOLS = {
+    "run_document_edit",  # 메인 편집 도구 (기존)
+    "replace_text_in_document",  # 기존 도구
+    "create_document_structure",  # 문서 구조 생성
+    "create_business_report_template",  # 보고서 템플릿
+    "create_meeting_minutes_template",  # 회의록 템플릿
+    "add_formatted_text",  # 텍스트 스타일링
+    "create_list",  # 리스트 생성
+    "create_table",  # 테이블 생성
+    "add_blockquote",  # 인용문/들여쓰기
+    "format_text_block",  # 텍스트 블록 포맷팅
+    "apply_document_styling",  # 스타일 적용
+    "enhance_document_readability",  # 가독성 향상
+    }
+    if tool_name in DOCUMENT_UPDATE_TOOLS:
         content_to_send = raw_output.content if isinstance(raw_output, ToolMessage) else raw_output
         print(f"--- Sending document_update for replace_text_in_document. Content length: {len(content_to_send) if isinstance(content_to_send, str) else 'N/A'} ---")
         yield f"data: {json.dumps({'document_update': content_to_send}, ensure_ascii=False)}\n\n"

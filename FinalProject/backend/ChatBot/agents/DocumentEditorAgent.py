@@ -99,7 +99,7 @@ def DocumentEditAgent() -> Any:
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
     
     # Agent가 사용할 도구들 정의
-    tools = ALL_EDITOR_TOOLS
+    tools = ALL_EDITOR_TOOLS    
     
     # LLM에 도구들 바인딩
     llm_with_tools = llm.bind_tools(tools)
