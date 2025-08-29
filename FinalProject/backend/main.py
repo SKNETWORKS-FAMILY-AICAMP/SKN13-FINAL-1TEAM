@@ -589,7 +589,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 print("--- 프론트엔드에 문서 요청 신호 전송 ---")
                 tool_call_id = f"req_doc_{uuid.uuid4()}"
                 yield f"data: {json.dumps({'needs_document_content': True, 'agent_context': {'tool_call_id': tool_call_id}}, ensure_ascii=False)}\n\n"
-                return  # 신호 전송 후 스트림 종료
+                
 
         # 'route_question' 체인이 종료되었고, 'request_document'가 트리거되지 않았다면 버퍼된 LLM 출력을 yield
         if kind == "on_chain_end" and name == "route_question":
