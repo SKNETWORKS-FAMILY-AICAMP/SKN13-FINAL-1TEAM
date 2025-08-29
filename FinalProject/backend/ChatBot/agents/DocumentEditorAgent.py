@@ -13,7 +13,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
 from ..core.AgentState import AgentState
-from ..tools.editor_tool import run_document_edit, replace_text_in_document
+from ..tools.editor_tool import ALL_EDITOR_TOOLS
 
 load_dotenv()
 
@@ -99,10 +99,7 @@ def DocumentEditAgent() -> Any:
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
     
     # Agent가 사용할 도구들 정의
-    tools = [
-        run_document_edit,
-        replace_text_in_document,
-    ]
+    tools = ALL_EDITOR_TOOLS
     
     # LLM에 도구들 바인딩
     llm_with_tools = llm.bind_tools(tools)
