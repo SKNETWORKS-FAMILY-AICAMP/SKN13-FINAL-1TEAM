@@ -22,13 +22,13 @@ load_dotenv()
 
 def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """Calls the LLM with the current state and returns the AI's response."""
-    messages = state["chat_history"]
+    messages = state["messages"]
     if not any(isinstance(msg, SystemMessage) for msg in messages):
         system_prompt_content = get_document_search_system_prompt()
         messages = [SystemMessage(content=system_prompt_content)] + messages
 
     response = llm_with_tools.invoke(messages)
-    return {"chat_history": [response]}
+    return {"messages": [response]}
 
 # --- Graph Factory ---
 

@@ -28,7 +28,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     """
     print("--- DocumentEditAgent 노드 실행 중 ---")
     
-    messages = state["chat_history"].copy()
+    messages = state["messages"].copy()
     document_content = state.get("document_content")
     
     # 마지막 메시지가 ToolMessage인 경우, 도구 실행 결과를 요약하는 최종 응답 생성
@@ -48,7 +48,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
         # 도구 없이 순수 응답 생성을 위해 일반 LLM 호출
         llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
         response = llm.invoke([SystemMessage(content=prompt_content)])
-        return {"chat_history": [response]}
+        return {"messages": [response]}
 
     # 일반적인 편집 요청 처리
     if document_content:
@@ -72,7 +72,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
     # LLM 호출 및 응답 반환
     prompt = ChatPromptTemplate.from_messages(messages)
     response = llm_with_tools.invoke(prompt.format())
-    return {"chat_history": [response]}
+    return {"messages": [response]}
 
 # --- State Update Node ---
 
@@ -81,7 +81,7 @@ def update_document_state(state: AgentState) -> dict:
     ToolNode 실행 후, 도구의 출력(수정된 문서)으로 상태를 업데이트합니다.
     """
     print("--- 문서 상태 업데이트 중 ---")
-    last_message = state["chat_history"][-1]
+    last_message = state["messages"][-1]
     if not isinstance(last_message, ToolMessage):
         return {}
 

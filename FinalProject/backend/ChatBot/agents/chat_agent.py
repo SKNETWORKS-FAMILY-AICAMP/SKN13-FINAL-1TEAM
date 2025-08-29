@@ -4,11 +4,10 @@ from typing import TypedDict, Annotated
 from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 
 from ..core.AgentState import AgentState
@@ -25,8 +24,8 @@ def prompt_node(state: AgentState) -> AgentState:
     """Injects the system prompt at the beginning of the conversation."""
     system_msg = SystemMessage(content=get_system_prompt())
     # Check if system message already exists
-    if not any(isinstance(msg, SystemMessage) for msg in state["chat_history"]):
-        return {"chat_history": [system_msg] + state["chat_history"]}
+    if not any(isinstance(msg, SystemMessage) for msg in state["messages"]):
+        return {"messages": [system_msg] + state["messages"]}
     return state
 
 async def chatbot(state: AgentState) -> dict:
@@ -41,8 +40,8 @@ async def chatbot(state: AgentState) -> dict:
     config = RunnableConfig(configurable={"tool_choice": "auto"})
 
     # Invoke the LLM to get the full AI message, which might contain tool calls
-    ai_message = await llm_with_tools.ainvoke(state["chat_history"], config=config)
-    return {"chat_history": [ai_message]}
+    ai_message = await llm_with_tools.ainvoke(state["messages"], config=config)
+    return {"messages": [ai_message]}
 
 # --- Graph Definition ---
 
