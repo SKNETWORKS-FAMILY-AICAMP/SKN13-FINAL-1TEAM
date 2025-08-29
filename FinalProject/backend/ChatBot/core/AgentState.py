@@ -2,6 +2,7 @@ from typing import TypedDict, List, Optional, Annotated
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
+# AgentState
 class AgentState(TypedDict):
     """
     에이전트 그래프의 상태를 나타냅니다.
