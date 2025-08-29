@@ -21,7 +21,7 @@ import React, { useState } from "react";
 // 기존 패널들 (네 프로젝트 구조에 맞춰 경로 유지)
 import FeatureHome from "./panels/FeatureHome";
 import FeatureDocs from "./panels/FeatureDocs";
-import FeatureCalendar from "./panels/FeatureCalendar";
+import FeatureCalendar from "./panels/calendar/FeatureCalendar";
 import FeatureMypage from "./panels/mypage/FeatureMypage";
 import FeatureEmployees from "./panels/admin/FeatureEmployees"
 

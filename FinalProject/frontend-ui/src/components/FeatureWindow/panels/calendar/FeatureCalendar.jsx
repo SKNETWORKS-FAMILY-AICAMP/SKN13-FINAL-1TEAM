@@ -1,4 +1,7 @@
 import React from "react";
+// 아이콘
+import { FiCalendar } from "react-icons/fi";  // calendar형태 아이콘
+import { LuChartGantt } from "react-icons/lu";  // gantt형태 아이콘
 
 export default function FeatureMypage() {
     return (
