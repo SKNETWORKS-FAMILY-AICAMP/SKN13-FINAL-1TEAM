@@ -125,10 +125,12 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
     tool_name = event.get("name")
     raw_output = event.get("data", {}).get("output", "")
+    print(f"--- _handle_tool_end called. tool_name: {tool_name}, raw_output type: {type(raw_output)} ---")
 
     # If the editor tool finishes, its output is the new document.
     # Yield a specific event for the frontend to catch and update the editor.
     if tool_name == "run_document_edit":
+        print(f"--- Sending document_update for run_document_edit. Content length: {len(raw_output) if isinstance(raw_output, str) else 'N/A'} ---")
         yield f"data: {json.dumps({'document_update': raw_output}, ensure_ascii=False)}\n\n"
 
     formatted_output = "[Tool Output]: "
