@@ -6,7 +6,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
-from docx.table import _Cell, Table
+from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 
@@ -101,7 +101,9 @@ class HTMLToDocxConverter:
     
     def create_paragraph_container(self, container) -> Paragraph:
         """컨테이너에 새로운 문단 생성"""
-        if isinstance(container, (Document, _Cell)):
+        if isinstance(container, Document):
+            return container.add_paragraph()
+        elif hasattr(container, 'add_paragraph'):  # _Cell 타입 체크
             return container.add_paragraph()
         elif isinstance(container, Paragraph):
             return container
@@ -117,7 +119,7 @@ class HTMLToDocxConverter:
         if isinstance(container, Paragraph):
             run = container.add_run(text)
             self.apply_text_formatting(run, style)
-        elif isinstance(container, (_Cell, Document)):
+        elif hasattr(container, 'add_paragraph'):  # Document나 Cell
             paragraph = container.add_paragraph()
             run = paragraph.add_run(text)
             self.apply_text_formatting(run, style)
