@@ -149,6 +149,9 @@ function createFeatureWindow(role = "employee") {
   if (isDev) featureWindow.loadURL(`${DEV_URL}?feature=1&role=${encodeURIComponent(role)}`);
   else featureWindow.loadFile(PROD_INDEX, { query: { feature: "1", role } });
 
+  // 기능부 개발자 도구 나오는 기능
+  if (isDev) featureWindow.webContents.openDevTools({ mode: "detach" });
+
   Menu.setApplicationMenu(null);
 
   featureWindow.on("closed", () => { featureWindow = null; });
@@ -256,7 +259,7 @@ ipcMain.handle("window:close", (event) => { getSenderWindow(event)?.close(); ret
 
 /* 에디터 content IPC */
 // 기능 창 → TipTap 내용 조회
-ipcMain.handle("get-editor-content", async () => {
+ipcMain.handle("editor:get-content", async () => {
   try {
     if (featureWindow && !featureWindow.webContents.isLoading()) {
       // 렌더러의 window.getTiptapEditorContent()를 실행해서 HTML 가져오기
@@ -272,9 +275,9 @@ ipcMain.handle("get-editor-content", async () => {
   }
 });
 // 렌더러(챗봇) → 기능창 편집기에 업데이트 적용
-ipcMain.on("update-editor-content", (_event, content) => {
+ipcMain.on("editor:update-content", (_event, content) => {
   if (featureWindow) {
-    featureWindow.webContents.send("apply-editor-update", content);
+    featureWindow.webContents.send("editor:apply-update", content);
   }
 });
 

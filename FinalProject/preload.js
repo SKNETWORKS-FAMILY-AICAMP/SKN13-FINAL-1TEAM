@@ -75,6 +75,19 @@ const electronAPI = {
     // 최대화 해제
     unmaximize: () => ipcRenderer.invoke("window:unmaximize"),
   },
+
+  // (추가) 에디터 콘텐츠 요청
+  getEditorContent: () => ipcRenderer.invoke("editor:get-content"),
+  
+  // (추가) 에디터 업데이트 수신
+  onEditorUpdate: (callback) => {
+    const handler = (_event, html) => callback(html);
+    ipcRenderer.on("editor:apply-update", handler);
+    return () => ipcRenderer.removeListener("editor:apply-update", handler);
+  },
+
+  // (추가) 에디터 콘텐츠 업데이트 요청 (다른 창에 브로드캐스트)
+  updateEditor: (htmlContent) => ipcRenderer.send("editor:update-content", htmlContent),
 };
 
 // (추가) 메인 로그인 창 다시 띄우기
@@ -95,37 +108,29 @@ const authAPI = {
 };
 
 // 파일시스템 Bridge (원본 유지)
-// 파일명/경로에서 파일명 추출
-function toName(arg) {
-  if (!arg) return "";
-  if (typeof arg === "string") {
-    const parts = arg.split(/[\\/]/);
-    return parts[parts.length - 1];
-  }
-  if (typeof arg === "object") {
-    if (arg.name) return toName(arg.name);
-    if (arg.path) return toName(arg.path);
-  }
-  return "";
-}
 const fsBridge = {
   // 문서 목록
   listDocs: () => ipcRenderer.invoke("fs:listDocs"),
   // 문서 읽기
-  readDoc: (arg) => ipcRenderer.invoke("fs:readDoc", { name: toName(arg) }),
+  readDoc: (payload) => ipcRenderer.invoke("fs:readDoc", payload),
   // 문서 삭제
-  deleteDoc: (arg) => ipcRenderer.invoke("fs:deleteDoc", { name: toName(arg) }),
-  // OS 기본 열기
-  open: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
-  // 저장 (name or {name, content})
-  saveDoc: (nameOrObj, maybeContent) => {
-    let name = "", content = "";
-    if (typeof nameOrObj === "object") { name = toName(nameOrObj); content = nameOrObj?.content ?? ""; }
-    else { name = toName(nameOrObj); content = maybeContent ?? ""; }
-    return ipcRenderer.invoke("fs:saveDoc", { name, content });
+  deleteDoc: (path) => {
+    const name = path.split(/[\\/]/).pop();
+    return ipcRenderer.invoke("fs:deleteDoc", {name});
   },
-  // 문서 열기(별칭)
-  openDoc: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
+  // OS 기본 열기
+  openDoc: (path) => {
+    const name = path.split(/[\\]/).pop();
+    return ipcRenderer.invoke("fs:open", { name });
+  },
+  // 저장 (name or {name, content})
+  saveDoc: (payload) => ipcRenderer.invoke("fs:saveDoc", payload),
+
+  // (추가) 파일 저장 대화상자
+  showSaveDialog: (options) => ipcRenderer.invoke("fs:showSaveDialog", options),
+
+  // (추가) 파일 열기 대화상자
+  showOpenDialog: (options) => ipcRenderer.invoke("fs:showOpenDialog", options),
 };
 
 // 전역 노출

@@ -83,7 +83,7 @@ export default function DocEditor({ onClose }) {
 
   // 다른 창에서 오는 문서 업데이트 반영 (preload의 onEditorUpdate 사용)
   useEffect(() => {
-    const off = window?.electron?.onEditorUpdate?.((html) => {
+    const off = window.electron.onEditorUpdate((html) => {
       if (editorRef.current && !editorRef.current.isDestroyed) {
         editorRef.current.commands.setContent(html || "", false);
         setEditorContent(html || "");

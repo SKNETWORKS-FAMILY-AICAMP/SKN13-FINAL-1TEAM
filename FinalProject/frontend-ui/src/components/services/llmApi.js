@@ -14,6 +14,7 @@
       sessionId, prompt, documentContent,
       onDelta: (chunk, full) => ...,
       onToolMessage: (msg) => ...,
+      onDocumentUpdate: (html) => ...,
       onDone: (full) => ...,
       onError: (err) => ...
     });
@@ -23,23 +24,15 @@
 import { LLM_API_BASE } from './env';
 
 /* 
-  streamLLM({ sessionId, prompt, documentContent, onDelta, onToolMessage, onDone, onError })
+  streamLLM({ sessionId, prompt, documentContent, onDelta, onToolMessage, onDocumentUpdate, onDone, onError })
   목적: SSE로 토큰 스트리밍을 수신하고 적절한 콜백을 호출한다.
 
   인자:
-    - sessionId: 세션 ID (쿼리스트링로 전달)
-    - prompt: 사용자 입력 프롬프트
-    - documentContent (옵션): 문서 편집 내용 HTML. 제공 시 ?document_content= 로 함께 전송
-    - onDelta(token, full): 토큰 단위 증분이 오면 호출 (full은 누적 텍스트)
-    - onToolMessage(msg): 도구 메시지 수신 시 호출
-    - onDone(full): 스트림 종료 시 호출
-    - onError(err): 에러 발생 시 호출
-
-  반환:
-    - stop(): 현재 SSE 연결을 종료하는 함수
+    - ... (기존 인자 생략)
+    - onDocumentUpdate(html): 문서 업데이트 이벤트 수신 시 호출
+    - ...
 */
-export function streamLLM({ sessionId, prompt, documentContent, onDelta, onToolMessage, onDone, onError }) {
-  // 기존 구현 유지 + document_content만 옵션으로 추가
+export function streamLLM({ sessionId, prompt, documentContent, onDelta, onToolMessage, onDocumentUpdate, onDone, onError }) {
   const base = `${LLM_API_BASE}/llm/stream`;
   const qs = [
     `session_id=${encodeURIComponent(sessionId)}`,
@@ -55,10 +48,15 @@ export function streamLLM({ sessionId, prompt, documentContent, onDelta, onToolM
 
   es.onmessage = (e) => {
     try {
-      const data = JSON.parse(e.data);
-      if (data.done) {
+      if (e.data === '[DONE]') {
         es.close();
         onDone?.(full);
+        return;
+      }
+      const data = JSON.parse(e.data);
+      
+      if (data.document_update) {
+        onDocumentUpdate?.(data.document_update);
       } else if (data.tool_message) {
         onToolMessage?.(data.tool_message);
       } else if (data.content) {
@@ -66,7 +64,7 @@ export function streamLLM({ sessionId, prompt, documentContent, onDelta, onToolM
         onDelta?.(data.content, full);
       }
     } catch (err) {
-      console.error('SSE parse error', err);
+      console.error('SSE parse error', err, 'raw data:', e.data);
     }
   };
 

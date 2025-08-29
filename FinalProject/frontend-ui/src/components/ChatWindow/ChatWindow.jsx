@@ -217,7 +217,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
           // ② 서버가 실시간 문서 업데이트(html) 지시
           if (data.document_update) {
-            window.electron.ipcRenderer.send('update-editor-content', data.document_update);
+            window.electron.ipcRenderer.send('editor:update-content', data.document_update);
           }
 
           // ③ 첨부 파일
@@ -332,7 +332,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
         // 실시간 문서 업데이트 지시가 오면 기능창 에디터에 반영
         if (data.document_update) {
-          window.electron.ipcRenderer.send('update-editor-content', data.document_update);
+          window.electron.ipcRenderer.send('editor:update-content', data.document_update);
         }
 
         // 첨부 수신 시 마지막 AI 메시지에 결합
