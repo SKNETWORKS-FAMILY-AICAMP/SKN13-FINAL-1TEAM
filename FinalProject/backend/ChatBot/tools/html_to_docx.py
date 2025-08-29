@@ -6,6 +6,20 @@ from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 
+
+def safe_add_paragraph(container):
+    from docx.text.paragraph import Paragraph
+    from docx.table import _Cell
+    from docx.document import Document
+
+    if isinstance(container, (Document, _Cell)):
+        return container.add_paragraph()
+    elif isinstance(container, Paragraph):
+        # Paragraph 안에서는 새로운 Paragraph를 만들 수 없으므로 그냥 run 사용
+        return container
+    else:
+        raise TypeError(f"Unsupported container type: {type(container)}")
+
 # ------------------------ Helpers ------------------------
 def parse_style_attribute(style_str):
     """Parses inline CSS style string into a dict."""
@@ -68,7 +82,7 @@ def process_node(node, container, style):
                 run = container.add_run(text)
                 apply_run_formatting(run, style)
             else:
-                p = container.add_paragraph()
+                p = safe_add_paragraph(container)
                 run = p.add_run(text)
                 apply_run_formatting(run, style)
         return
