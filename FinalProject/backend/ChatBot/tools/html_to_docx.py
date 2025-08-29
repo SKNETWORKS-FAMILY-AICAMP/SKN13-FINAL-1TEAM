@@ -57,9 +57,11 @@ def apply_run_formatting(run, style):
 
 # ------------------------ Node Processing ------------------------
 def process_node(node, container, style):
-    """Recursively processes a node into docx."""
+    """Recursively process node into docx safely."""
+    from bs4 import Tag
+
     if isinstance(node, NavigableString):
-        text = node.string.strip()
+        text = node.strip()
         if text:
             if hasattr(container, 'add_run'):
                 run = container.add_run(text)
@@ -70,9 +72,12 @@ def process_node(node, container, style):
                 apply_run_formatting(run, style)
         return
 
-    # Update style
+    if not isinstance(node, Tag):
+        return
+
     new_style = style.copy()
     tag = node.name
+
     if tag in ['b', 'strong']: new_style['bold'] = True
     if tag in ['i', 'em']: new_style['italic'] = True
     if tag == 'u': new_style['underline'] = True
@@ -81,49 +86,52 @@ def process_node(node, container, style):
     if node.has_attr('style'):
         new_style.update(parse_style_attribute(node['style']))
 
-    # ----------------- Block Elements -----------------
+    # Block elements
     if tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
         if tag.startswith('h'):
             level = int(tag[1])
             p = container.add_heading(level=level)
         else:
             p = container.add_paragraph()
+
         if new_style.get('text-align'):
             align_map = {'left': WD_ALIGN_PARAGRAPH.LEFT,
                          'center': WD_ALIGN_PARAGRAPH.CENTER,
                          'right': WD_ALIGN_PARAGRAPH.RIGHT}
             p.alignment = align_map.get(new_style['text-align'], WD_ALIGN_PARAGRAPH.LEFT)
-        for child in node.children:
-            process_node(child, p, new_style)
 
-    elif tag in ['ul', 'ol']:
+        for child in node.children:
+            # Paragraph 내부에서는 run만 추가
+            if isinstance(child, NavigableString) or (hasattr(child, 'name') and child.name not in ['p','h1','h2','h3','h4','h5','h6','table','ul','ol']):
+                process_node(child, p, new_style)
+            else:
+                # 블록 요소라면 container로 재귀
+                process_node(child, container, new_style)
+
+    elif tag in ['ul','ol']:
         for li in node.find_all('li', recursive=False):
-            style_name = 'List Bullet' if tag == 'ul' else 'List Number'
+            style_name = 'List Bullet' if tag=='ul' else 'List Number'
             p = container.add_paragraph(style=style_name)
             for child in li.children:
                 process_node(child, p, new_style)
 
-    elif tag == 'table':
+    elif tag=='table':
         rows = node.find_all('tr')
         if not rows: return
-        col_count = max(len(tr.find_all(['td', 'th'])) for tr in rows)
+        col_count = max(len(tr.find_all(['td','th'])) for tr in rows)
         table = container.add_table(rows=len(rows), cols=col_count, style='Table Grid')
         for i, tr in enumerate(rows):
-            cells = tr.find_all(['td', 'th'])
+            cells = tr.find_all(['td','th'])
             for j, td in enumerate(cells):
-                cell = table.cell(i, j)
-                cell.text = ''  # clear default
+                cell = table.cell(i,j)
+                cell.text = ''
                 for child in td.children:
                     process_node(child, cell, new_style)
 
     else:
-        # Inline elements inside paragraph/run
         for child in node.children:
-            if hasattr(container, 'add_run'):
-                process_node(child, container, new_style)
-            else:
-                p = container.add_paragraph()
-                process_node(child, p, new_style)
+            process_node(child, container, new_style)
+
 
 # ------------------------ Main Function ------------------------
 def convert_html_to_docx(html_content: str, output_path: str, title: str = ""):
