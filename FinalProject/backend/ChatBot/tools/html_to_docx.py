@@ -57,13 +57,14 @@ def apply_run_formatting(run, style):
 
 # ------------------------ Node Processing ------------------------
 def process_node(node, container, style):
-    """Recursively process node into docx safely."""
-    from bs4 import Tag
+    from bs4 import Tag, NavigableString
+    from docx.text.paragraph import Paragraph
+    from docx.table import _Cell
 
     if isinstance(node, NavigableString):
         text = node.strip()
         if text:
-            if hasattr(container, 'add_run'):
+            if isinstance(container, (Paragraph, _Cell)):
                 run = container.add_run(text)
                 apply_run_formatting(run, style)
             else:
@@ -76,7 +77,7 @@ def process_node(node, container, style):
         return
 
     new_style = style.copy()
-    tag = node.name
+    tag = node.name.lower()
 
     if tag in ['b', 'strong']: new_style['bold'] = True
     if tag in ['i', 'em']: new_style['italic'] = True
@@ -87,25 +88,24 @@ def process_node(node, container, style):
         new_style.update(parse_style_attribute(node['style']))
 
     # Block elements
-    if tag in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-        if tag.startswith('h'):
-            level = int(tag[1])
-            p = container.add_heading(level=level)
+    if tag in ['p', 'h1','h2','h3','h4','h5','h6']:
+        if isinstance(container, Paragraph):
+            # 이미 Paragraph라면 새 Paragraph 만들기
+            container_parent = getattr(container, '_element').getparent()
+            doc = container_parent
+            p = doc.add_paragraph()
         else:
-            p = container.add_paragraph()
-
+            p = container.add_paragraph() if tag=='p' else container.add_heading(level=int(tag[1]))
         if new_style.get('text-align'):
-            align_map = {'left': WD_ALIGN_PARAGRAPH.LEFT,
-                         'center': WD_ALIGN_PARAGRAPH.CENTER,
-                         'right': WD_ALIGN_PARAGRAPH.RIGHT}
-            p.alignment = align_map.get(new_style['text-align'], WD_ALIGN_PARAGRAPH.LEFT)
+            align_map = {'left': 0, 'center': 1, 'right': 2}
+            p.alignment = align_map.get(new_style['text-align'], 0)
 
         for child in node.children:
-            # Paragraph 내부에서는 run만 추가
-            if isinstance(child, NavigableString) or (hasattr(child, 'name') and child.name not in ['p','h1','h2','h3','h4','h5','h6','table','ul','ol']):
+            # inline 요소만 Paragraph에 넣기
+            if isinstance(child, NavigableString) or (hasattr(child,'name') and child.name not in ['p','h1','h2','h3','h4','h5','h6','ul','ol','table']):
                 process_node(child, p, new_style)
             else:
-                # 블록 요소라면 container로 재귀
+                # block-level이면 container로 재귀
                 process_node(child, container, new_style)
 
     elif tag in ['ul','ol']:
