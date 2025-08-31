@@ -70,8 +70,7 @@ def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
             messages.append(context_message)
 
     # LLM 호출 및 응답 반환
-    prompt = ChatPromptTemplate.from_messages(messages)
-    response = llm_with_tools.invoke(prompt.format())
+    response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 
 # --- State Update Node ---

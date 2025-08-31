@@ -214,7 +214,7 @@ export async function listRecentDocs({ limit = 50, page = 1, sort = "-updated_at
 export async function exportToDocx(html, filename = "document.docx") {
   // 1) 서버에 DOCX 변환 API가 있을 경우: 사용
   try {
-    const url = `${BASE_URL}/documents/export-docx`;
+    const url = `${BASE_URL}/documents/export/docx`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
