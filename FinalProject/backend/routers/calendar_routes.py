@@ -3,7 +3,9 @@ from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
-from ..database import get_db, Calendar, Event
+from ..database import get_db, Calendar, Event, User # Import User model
+from .auth_routes import get_current_user # Import get_current_user
+import status
 
 # APIRouter 인스턴스 생성
 router = APIRouter()
@@ -57,9 +59,8 @@ def get_or_create_default_calendar(db: Session, user_id: int) -> Calendar:
 # --- 캘린더 API 엔드포인트 ---
 # 새로운 캘린더 이벤트 생성 엔드포인트
 @router.post("/events", response_model=EventOut)
-def create_event(event: EventCreate, db: Session = Depends(get_db)):
-    default_user_id = 1  # 임시 사용자 ID (실제 환경에서는 인증된 사용자 ID 사용)
-    calendar = get_or_create_default_calendar(db, default_user_id) # 기본 캘린더 가져오기 또는 생성
+def create_event(event: EventCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)): # current_user 추가
+    calendar = get_or_create_default_calendar(db, current_user.id) # current_user.id 사용
     
     db_event = Event( # 새 이벤트 객체 생성
         **event.dict(), # EventCreate 모델의 데이터를 딕셔너리로 변환하여 사용
@@ -81,10 +82,8 @@ def create_event(event: EventCreate, db: Session = Depends(get_db)):
 
 # 특정 기간의 캘린더 이벤트 조회 엔드포인트
 @router.get("/events", response_model=List[EventOut])
-def get_events(start: datetime, end: datetime, db: Session = Depends(get_db)):
-    default_user_id = 1 # 임시 사용자 ID
-    
-    calendar = get_or_create_default_calendar(db, default_user_id) # 기본 캘린더 가져오기 또는 생성
+def list_events(start: datetime, end: datetime, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)): # current_user 추가
+    calendar = get_or_create_default_calendar(db, current_user.id) # current_user.id 사용
     
     events = db.query(Event).filter( # 캘린더 ID와 기간으로 이벤트 필터링
         Event.calendar_id == calendar.id,
@@ -106,14 +105,13 @@ def get_events(start: datetime, end: datetime, db: Session = Depends(get_db)):
 
 # 캘린더 이벤트 업데이트 엔드포인트
 @router.put("/events/{event_id}", response_model=EventOut)
-def update_event(event_id: int, event: EventUpdate, db: Session = Depends(get_db)):
+def update_event(event_id: int, event: EventUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)): # current_user 추가
     db_event = db.query(Event).filter(Event.id == event_id).first() # 이벤트 ID로 이벤트 조회
     if not db_event: # 이벤트가 없으면 404 에러
         raise HTTPException(status_code=404, detail="Event not found")
 
-    default_user_id = 1 # 임시 사용자 ID
-    # 이벤트 소유권 확인 (실제 환경에서는 인증된 사용자 ID와 비교)
-    if db_event.calendar.user_id != default_user_id:
+    # 이벤트 소유권 확인 (current_user.id와 비교)
+    if db_event.calendar.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this event")
 
     # EventUpdate 모델의 데이터를 사용하여 이벤트 필드 업데이트
@@ -135,14 +133,13 @@ def update_event(event_id: int, event: EventUpdate, db: Session = Depends(get_db
 
 # 캘린더 이벤트 삭제 엔드포인트
 @router.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT) # 204 No Content 반환
-def delete_event(event_id: int, db: Session = Depends(get_db)):
+def delete_event(event_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)): # current_user 추가
     db_event = db.query(Event).filter(Event.id == event_id).first() # 이벤트 ID로 이벤트 조회
     if not db_event: # 이벤트가 없으면 404 에러
         raise HTTPException(status_code=404, detail="Event not found")
 
-    default_user_id = 1 # 임시 사용자 ID
     # 이벤트 소유권 확인
-    if db_event.calendar.user_id != default_user_id:
+    if db_event.calendar.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this event")
 
     db.delete(db_event) # 이벤트 삭제
