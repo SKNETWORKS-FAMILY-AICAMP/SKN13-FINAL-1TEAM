@@ -19,16 +19,15 @@ def get_password_hash(password):
 class UserCreate(BaseModel):
     username: str # 사용자 이름 (필수)
     email: str # 이메일 (필수)
-    password: str # 비밀번호 (필수)
     is_active: Optional[bool] = True # 계정 활성화 여부 (기본값: True)
-    is_admin: Optional[bool] = False # 관리자 권한 여부 (기본값: False)
+    is_manager: Optional[bool] = False # 관리자 권한 여부 (기본값: False)
 
 # Pydantic 모델: 사용자 정보 업데이트 요청을 위한 데이터 모델
 class UserUpdate(BaseModel):
     username: Optional[str] = None # 사용자 이름 (선택적)
     email: Optional[str] = None # 이메일 (선택적)
     is_active: Optional[bool] = None # 계정 활성화 여부 (선택적)
-    is_admin: Optional[bool] = None # 관리자 권한 여부 (선택적)
+    is_manager: Optional[bool] = None # 관리자 권한 여부 (선택적)
 
 # 새로운 사용자 생성 엔드포인트 (관리자용)
 @router.post("/users", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -42,15 +41,16 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # 비밀번호 해싱
-    hashed_password = get_password_hash(user.password)
+    # 비밀번호를 '1234'로 고정하여 해싱
+    hashed_password = get_password_hash("1234")
     # 새 사용자 객체 생성
     new_user = User(
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
         is_active=user.is_active,
-        is_admin=user.is_admin
+        is_manager=user.is_manager,
+        must_change_password=True
     )
     db.add(new_user) # DB 세션에 추가
     db.commit() # 변경사항 커밋
@@ -62,7 +62,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 def get_all_users(db: Session = Depends(get_db)):
     users = db.query(User).all() # 모든 사용자 조회
     # 사용자 목록 반환 (민감 정보 제외)
-    return [{"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_admin": user.is_admin} for user in users]
+    return [{"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_manager": user.is_manager} for user in users]
 
 # 특정 사용자 조회 엔드포인트 (관리자용)
 @router.get("/users/{user_id}", response_model=dict)
@@ -71,7 +71,7 @@ def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
     if not user: # 사용자 없으면 404 에러
         raise HTTPException(status_code=404, detail="User not found")
     # 사용자 정보 반환 (민감 정보 제외)
-    return {"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_admin": user.is_admin}
+    return {"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_manager": user.is_manager}
 
 # 사용자 삭제 엔드포인트 (관리자용)
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT) # 204 No Content 반환
@@ -99,4 +99,21 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
     db.commit() # 변경사항 커밋
     db.refresh(user) # DB에서 사용자 정보 새로고침
     # 업데이트된 사용자 정보 반환 (민감 정보 제외)
-    return {"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_admin": user.is_admin}
+    return {"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_manager": user.is_manager}
+
+# 사용자의 비밀번호를 초기화하는 엔드포인트 (관리자용)
+@router.put("/users/{user_id}/reset-password", response_model=dict)
+def reset_user_password(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 비밀번호를 '1234'로 재설정하고 해싱
+    hashed_password = get_password_hash("1234")
+    user.hashed_password = hashed_password
+    user.must_change_password = True  # 비밀번호 변경 필요 상태로 설정
+
+    db.commit()
+    db.refresh(user)
+
+    return {"message": f"Password for user {user.username} has been reset successfully."}
