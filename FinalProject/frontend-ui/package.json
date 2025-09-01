@@ -29,7 +29,7 @@
     "@tiptap/extension-text-align": "^3.3.0",
     "@tiptap/extension-text-style": "^3.3.0",
     "@tiptap/extension-underline": "^3.3.0",
-    "@tiptap/react": "^3.2.0",
+    "@tiptap/react": "^3.3.0",
     "@tiptap/starter-kit": "^3.2.0",
     "dotenv": "^17.2.1",
     "event-source-polyfill": "^1.0.31",

@@ -285,3 +285,11 @@ class EmailTemplate(Base):
 def create_db_and_tables():
     """데이터베이스에 모든 테이블을 생성하는 함수"""
     Base.metadata.create_all(engine)
+    
+# DB 세션 의존성
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
