@@ -19,7 +19,7 @@ DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT", "3306")
 DB_USER = os.getenv("DB_USER", "root")
 DB_PASS = os.getenv("DB_PASS")
-DB = os.getenv("DB", "final")
+DB = os.getenv("DB", "FINAL")
 
 # --- DB 연결 ---
 engine = create_engine(
