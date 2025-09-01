@@ -59,6 +59,7 @@ class User(Base):
     
     # 보안/운영 필드
     is_active = Column(Boolean, default=True, nullable=False)              # 계정 활성화 상태
+    must_change_password = Column(Boolean, nullable=False, server_default='1', default=True) # 초기 비밀번호 변경 필요 여부
     last_login_at = Column(DateTime, nullable=True, index=True)           # 마지막 로그인 시간
     
     # 관계 정의
