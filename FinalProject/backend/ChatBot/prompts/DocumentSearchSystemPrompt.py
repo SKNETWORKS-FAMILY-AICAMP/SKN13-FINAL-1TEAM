@@ -50,5 +50,12 @@ def get_document_search_system_prompt() -> str:
     -   **입력:** 사용자의 원본 질문 (문자열), 검색된 문서 청크 리스트 (`retrieved_docs`).
     -   **출력:** `final_answer` (문자열, 최종 답변), `sources` (문자열 리스트, 사용된 문서 출처).
 
-사용자의 질문에 대해 최선을 다해 지원해주세요.
+6. **get_presigned_download_url(file_key: str)**
+   - **목적:** 벡터DB 메타데이터의 `s3_path`에 저장된 파일을 다운로드할 수 있는 presigned URL을 생성합니다.
+   - **출력:** `downloadUrl`
+
+[답변 원칙]
+- 문서 기반 질문은 반드시 `RAG_search_tool`을 통해 처리하세요.
+- 파일 접근 요청이 있을 경우, `metadata["s3_path"]`를 `file_key`로 하여 presigned URL 관련 도구를 호출하세요.
+- 답변은 반드시 한국어로 작성하세요.
 """

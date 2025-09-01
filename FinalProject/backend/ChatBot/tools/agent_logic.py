@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from ..core.AgentState import AgentState
+from ...presigned import get_download_url
 
 class AgentTools:
     """Encapsulates the logical tools for the document search agent."""
@@ -115,4 +116,13 @@ class AgentTools:
             "sources": unique_sources
         }
 
-    
+    @tool
+    def get_presigned_download_url(self, file_key: str) -> Dict[str, Any]:
+        """
+        파일 다운로드용 presigned URL 생성.
+        """
+        try:
+            url = get_download_url(file_key)
+            return {"downloadUrl": url}
+        except Exception as e:
+            return {"error": str(e)}

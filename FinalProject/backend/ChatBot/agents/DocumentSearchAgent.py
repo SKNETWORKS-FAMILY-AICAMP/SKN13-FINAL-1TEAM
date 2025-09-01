@@ -44,7 +44,8 @@ def DocumentSearchAgent() -> Any:
         tool_executor.expand_query_tool,
         tool_executor.route_query_tool,
         tool_executor.handle_follow_up_tool,
-        tool_executor.summarize_tool
+        tool_executor.summarize_tool,
+        tool_executor.get_presigned_download_url # Add the new tool here
     ]
     
     llm_with_tools = llm.bind_tools(tools)
