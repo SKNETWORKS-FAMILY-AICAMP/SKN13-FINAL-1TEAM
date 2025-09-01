@@ -122,6 +122,7 @@ class AgentTools:
         파일 다운로드용 presigned URL 생성.
         """
         try:
+            print(f"도구 호출 성공! 다운로드용 서명된 URL 생성 시도: {file_key}")
             url = get_download_url(file_key)
             return {"downloadUrl": url}
         except Exception as e:
