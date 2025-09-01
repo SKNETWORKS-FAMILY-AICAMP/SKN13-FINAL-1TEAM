@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, stauts
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 from ..database import get_db, Calendar, Event, User # Import User model
 from .auth_routes import get_current_user # Import get_current_user
-import status
 
 # APIRouter 인스턴스 생성
 router = APIRouter()
