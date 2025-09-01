@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # AWS_SECRET_ACCESS_KEY  
 # AWS_REGION
 # AWS_S3_BUCKET
-load_dotenv(r"/home/ubuntu/SKN13-FINAL-1TEAM/FinalProject/backend/.env")
+load_dotenv(dotenv_path="/home/ubuntu/SKN13-FINAL-1TEAM/FinalProject/backend/.env")
 
 # S3 클라이언트 생성
 s3_client = boto3.client('s3')
@@ -74,6 +74,7 @@ def get_download_url(file_key: str, expires_in: int = 3600) -> str:
         ClientError: AWS S3 클라이언트 오류
     """
     try:
+        print(f"다운로드용 서명된 URL 생성 시도: {file_key}")
         signed_url = s3_client.generate_presigned_url(
             'get_object',
             Params={
