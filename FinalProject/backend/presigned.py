@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # AWS_SECRET_ACCESS_KEY  
 # AWS_REGION
 # AWS_S3_BUCKET
-load_dotenv("/home/ubuntu/SKN13-FINAL-1TEAM/FinalProject/backend/.env")
+load_dotenv(r"/home/ubuntu/SKN13-FINAL-1TEAM/FinalProject/backend/.env")
 
 # S3 클라이언트 생성
 s3_client = boto3.client('s3')
