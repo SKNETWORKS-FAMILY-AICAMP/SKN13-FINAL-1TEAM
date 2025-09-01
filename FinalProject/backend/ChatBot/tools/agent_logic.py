@@ -125,4 +125,5 @@ class AgentTools:
             url = get_download_url(file_key)
             return {"downloadUrl": url}
         except Exception as e:
+            print(str(e))
             return {"error": str(e)}
