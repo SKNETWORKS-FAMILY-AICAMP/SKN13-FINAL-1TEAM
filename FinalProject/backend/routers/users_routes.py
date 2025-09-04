@@ -34,7 +34,7 @@ class UserUpdate(BaseModel):
     is_manager: Optional[bool] = None # 관리자 권한 여부 (선택적)
 
 # 새로운 사용자 생성 엔드포인트 (관리자용)
-@router.post("/users", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     # 사원번호 중복 확인
     db_user = db.query(User).filter(User.unique_auth_number == user.unique_auth_number).first()
@@ -77,7 +77,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     } # 성공 메시지 및 생성된 사용자 정보 반환
 
 # 모든 사용자 조회 엔드포인트 (관리자용)
-@router.get("/users", response_model=List[dict])
+@router.get("", response_model=List[dict])
 def get_all_users(db: Session = Depends(get_db)):
     users = db.query(User).all() # 모든 사용자 조회
     # 사용자 목록 반환 (민감 정보 제외)
@@ -96,7 +96,7 @@ def get_all_users(db: Session = Depends(get_db)):
     ]
 
 # 특정 사용자 조회 엔드포인트 (관리자용)
-@router.get("/users/{user_id}", response_model=dict)
+@router.get("/{user_id}", response_model=dict)
 def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first() # ID로 사용자 조회
     if not user: # 사용자 없으면 404 에러
@@ -105,7 +105,7 @@ def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
     return {"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_manager": user.is_manager}
 
 # 사용자 삭제 엔드포인트 (관리자용)
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT) # 204 No Content 반환
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT) # 204 No Content 반환
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first() # ID로 사용자 조회
     if not user: # 사용자 없으면 404 에러
@@ -115,7 +115,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     return # 204 응답 반환
 
 # 사용자 정보 업데이트 엔드포인트 (관리자용)
-@router.put("/users/{user_id}", response_model=dict)
+@router.put("/{user_id}", response_model=dict)
 def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first() # ID로 사용자 조회
     if not user: # 사용자 없으면 404 에러
@@ -133,7 +133,7 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
     return {"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_manager": user.is_manager}
 
 # 사용자의 비밀번호를 초기화하는 엔드포인트 (관리자용)
-@router.put("/users/{user_id}/reset-password", response_model=dict)
+@router.put("/{user_id}/reset-password", response_model=dict)
 def reset_user_password(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
