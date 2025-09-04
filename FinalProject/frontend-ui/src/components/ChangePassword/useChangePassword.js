@@ -70,7 +70,10 @@ export default function useChangePassword({
             setPending(true);
             setServerError(null);
 
-            await svc.changeMyPassword({ currentPassword, newPassword: newPw });
+            await svc.changeMyPassword({
+                current_password: currentPassword,
+                new_password: newPw,
+            });
 
             if (beforeStep === "login") {
                 routeTo?.(role === "admin" ? "admin-main" : "employee-main");

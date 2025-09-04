@@ -3,6 +3,7 @@ import useChangePassword from "./useChangePassword.js";
 import PasswordTextField from "./PasswordTextField.jsx";
 import ConfirmModal from "../Modal/ConfirmModal.jsx";
 import HeaderBar from "../shared/HeaderBar.jsx";
+import userApi from "../services/userApi.js";
 
 const PASSWORD_HINT =
     "8~20자, 영문 대/소문자/숫자/특수문자( . ! @ # $ % ) 포함";
@@ -36,6 +37,9 @@ export default function ChangePasswordView({
         routeTo,
         goLogin,
         goMyPage,
+        api: {
+            changeMyPassword: userApi.updatePassword.bind(userApi),
+        },
     });
 
     // 패널 모드 또는 마이페이지 경유면 화면 래퍼 없이 본문만 렌더

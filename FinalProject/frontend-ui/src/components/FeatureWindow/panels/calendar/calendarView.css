@@ -1,91 +1,100 @@
-/* 바깥 배경과 카드 프레임(스크린샷의 둥근 모서리 + 얇은 테두리) */
-.calendar-shell {
-  background: transparent;
-}
-.calendar-card {
-  border: 1px solid #e6e7eb;
-  border-radius: 18px;
-  overflow: hidden;                 /* 둥근 모서리에 그리드 깔끔하게 */
-  background: #fafafa;             /* 스샷처럼 카드 주변 아주 연한 회색 */
-}
-
-/* 캘린더 기본 */
-.custom-rbc .rbc-calendar,
-.custom-rbc .rbc-month-view {
-  border: none;
-  background: #fff;
+/* ================================
+   Gantt(Fallback) 레이아웃/스크롤
+   - 기본 높이: 560px (변수로 제어)
+   - 세로 스크롤 가능
+   - 행 높이: 56px
+================================ */
+.fgantt {
+    --fg-height: 560px; /* 기본 높이 (필요 시 컴포넌트 props로 덮어씀) */
+    --fg-dayw: 110px; /* 일 칼럼 너비 */
+    --fg-row-h: 56px; /* 한 행 높이 */
+    background: #fff;
+    border: 1px solid #e9eef5;
+    border-radius: 18px;
+    overflow: hidden; /* 컨테이너 라운드 유지 */
 }
 
-/* 요일 헤더 라인 (얇은 하단선만) */
-.custom-rbc .rbc-month-header {
-  border: 0;
-}
-.custom-rbc .rbc-header {
-  font-weight: 500;
-  font-size: 13px;
-  color: #6b7280;                   /* text-gray-500 */
-  padding: 12px 0;
-  border-bottom: 1px solid #e9ecef; /* 얇은 구분선 */
+/* 가로/세로 스크롤 컨테이너 */
+.fgantt-scroll {
+    max-height: var(--fg-height);
+    overflow-x: auto;
+    overflow-y: auto; /* ← 세로 스크롤 활성화 */
 }
 
-/* 가로 줄만 보이도록 (세로 경계 제거) */
-.custom-rbc .rbc-month-row {
-  border-top: 1px solid #eef2f6;    /* very light */
-}
-.custom-rbc .rbc-month-row:first-of-type {
-  border-top: none;
-}
-.custom-rbc .rbc-day-bg + .rbc-day-bg {
-  border-left: 0;                   /* 세로 보더 제거 */
+/* 내부 전체 폭 */
+.fgantt-content {
+    position: relative;
 }
 
-/* 날짜 숫자 */
-.custom-rbc .rbc-date-cell {
-  padding: 6px 8px;
-  font-size: 12px;
-  color: #9ca3af;                   /* text-gray-400 */
+/* 상단 날짜 헤더 */
+.fgantt-header {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: var(--fg-dayw);
+    border-bottom: 1px solid #f1f5f9;
+    background: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
-/* 이전/다음달 칸(상단/하단) 흐리게 */
-.custom-rbc .rbc-off-range-bg {
-  background: #f6f7f9;
+/* 날짜 셀 */
+.fgantt-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    font-size: 12px;
+    color: #6b7280;
 }
 
-/* 오늘 칸 연노랑 하이라이트 */
-.custom-rbc .is-today,
-.custom-rbc .rbc-today {
-  background: #fff3d6;              /* very soft amber */
+/* 막대들이 올라가는 캔버스 */
+.fgantt-canvas {
+    position: relative;
+    /* 높이는 JS에서 행 수만큼 인라인 style로 주입됨
+     (없더라도 min-height로 1행은 보이게) */
+    min-height: var(--fg-row-h);
 }
 
-/* 이벤트 칩(알약) 내부 텍스트 */
-.rbc-chip-inner { display: flex; align-items: center; }
-.rbc-chip-text {
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* 한 행(절대배치) */
+.fgantt-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: var(--fg-row-h);
 }
 
-/* 기본 이벤트 라벨(시간) 숨김: 제목만 보이게 */
-.custom-rbc .rbc-event-label { display: none; }
-
-/* 팝업 드롭다운도 깔끔하게 */
-.custom-rbc .rbc-overlay {
-  border: 1px solid #e6e7eb;
-  border-radius: 12px;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+/* 바(일정) */
+.fgantt-bar {
+    position: absolute;
+    top: 8px;
+    height: calc(var(--fg-row-h) - 16px);
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #a5b4fc; /* 기본 색(보라톤) */
 }
 
-/* 월 하단 row 배경선 살짝 */
-.custom-rbc .rbc-month-view .rbc-row-bg {
-  border-top: 1px solid #eef2f6;
+/* 타입별 색(선택사항) */
+.bar--meeting {
+    background: #a5b4fc;
+}
+.bar--project {
+    background: #fcd34d;
+}
+.bar--training {
+    background: #fda4af;
+}
+.bar--etc {
+    background: #fde68a;
 }
 
-/* 포커스/선택 강조 제거(스샷처럼 최소화) */
-.custom-rbc .rbc-selected,
-.custom-rbc .rbc-event:focus,
-.custom-rbc .rbc-day-slot .rbc-selected {
-  outline: none;
-  box-shadow: none;
+/* 바 텍스트 */
+.fgantt-bar-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

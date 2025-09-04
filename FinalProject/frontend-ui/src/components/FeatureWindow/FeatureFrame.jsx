@@ -23,24 +23,23 @@ import FeatureHome from "./panels/FeatureHome";
 import FeatureDocs from "./panels/FeatureDocs";
 import FeatureCalendar from "./panels/calendar/FeatureCalendar";
 import FeatureMypage from "./panels/mypage/FeatureMypage";
-import FeatureEmployees from "./panels/admin/FeatureEmployees"
+import FeatureEmployees from "./panels/admin/FeatureEmployees";
 
 export default function FeatureFrame({ defaultTab }) {
+    const [empDefaultTab, setEmpDefaultTab] = useState("docs");
+    const [adminDefaultTab, setAdminDefaultTab] = useState("employees");
 
-  const [empDefaultTab, setEmpDefaultTab] = useState("docs");
-  const [adminDefaultTab, setAdminDefaultTab] = useState("employees")
+    /** 탭 키에 따른 패널 선택 */
+    // 관리자용
+    if (defaultTab === "employees") return <FeatureEmployees />; // 사원 관리 페이지
+    // 사원용
+    if (defaultTab === "docs") return <FeatureDocs />; // 문서 관리 페이지
+    if (defaultTab === "calendar") return <FeatureCalendar />; // 일정 관리 페이지
 
-  /** 탭 키에 따른 패널 선택 */
-  // 관리자용
-  if (defaultTab === "employees") return <FeatureEmployees />  // 사원 관리 페이지
-  // 사원용
-  if (defaultTab === "docs") return <FeatureDocs />;  // 문서 관리 페이지
-  if (defaultTab === "calendar") return <FeatureCalendar />;  // 일정 관리 페이지
-  
-  // 공통
-  if (defaultTab === "mypage") return <FeatureMypage />  // 마이페이지
+    // 공통
+    if (defaultTab === "mypage") return <FeatureMypage />; // 마이페이지
 
-  // if (defaultTab === "forms") {
+    // if (defaultTab === "forms") {
     //   return (
     //     <div className="rounded-xl border border-gray-200 bg-white p-6">
     //       <p className="text-gray-600">양식 관리 패널(미구현)</p>
@@ -48,13 +47,13 @@ export default function FeatureFrame({ defaultTab }) {
     //   );
     // }
 
-  // 필요하면 home 처리 (선택)
-  if (defaultTab === "home") return <FeatureHome />;
+    // 필요하면 home 처리 (선택)
+    if (defaultTab === "home") return <FeatureHome />;
 
-  // 안전망
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6">
-      <p className="text-gray-600">선택된 탭이 없어요.</p>
-    </div>
-  );
+    // 안전망
+    return (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+            <p className="text-gray-600">선택된 탭이 없어요.</p>
+        </div>
+    );
 }

@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-// ✅ 공용 비번 변경 컴포넌트 재사용 (경로 주의)
+import React, { useState, useEffect } from "react";
 import ChangePasswordView from "../../../ChangePassword/ChangePasswordView.jsx";
+import userApi from "../../../services/userApi.js";
+import useToast from "../../../shared/toast/useToast.js";
 
 /** 공용 Row */
 function Row({
@@ -55,13 +56,26 @@ function Row({
 
 /** 메인 프로필 화면 */
 function FeatureMypage({ onChangePage }) {
-    const emp = {
-        name: "홍길동",
-        dept: "인사부",
-        rank: "팀장",
-        email: "hgd1234@clicka.co.kr",
-        accountId: "230519875",
+    const [emp, setEmp] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const toast = useToast();
+
+    const fetchUser = async () => {
+        try {
+            setLoading(true);
+            const userData = await userApi.getUser();
+            setEmp(userData);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
     };
+
+    useEffect(() => {
+        fetchUser();
+    }, []);
 
     const maskedPassword = "•".repeat(10);
 
@@ -74,9 +88,16 @@ function FeatureMypage({ onChangePage }) {
         return `${visible} ${dots} @ ${domain}`;
     };
 
-    const [currentEmail, setCurrentEmail] = useState(emp.email);
+    const [currentEmail, setCurrentEmail] = useState("");
     const [isEmailEditing, setIsEmailEditing] = useState(false);
-    const [emailInput, setEmailInput] = useState(emp.email);
+    const [emailInput, setEmailInput] = useState("");
+
+    useEffect(() => {
+        if (emp) {
+            setCurrentEmail(emp.email);
+            setEmailInput(emp.email);
+        }
+    }, [emp]);
 
     const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
     const isEmailValid = emailRegex.test(emailInput);
@@ -106,22 +127,42 @@ function FeatureMypage({ onChangePage }) {
         maskEmail(currentEmail)
     );
 
-    const handleEmailApply = () => {
+    const handleEmailApply = async () => {
         if (!isEmailEditing) {
             setIsEmailEditing(true);
             setEmailInput(currentEmail);
             return;
         }
         if (!canApplyEmail) return;
-        console.log("[이메일 변경 요청]", { newEmail: emailInput }); // TODO: API 연동
-        setCurrentEmail(emailInput);
-        setIsEmailEditing(false);
+
+        try {
+            await userApi.updateEmail(emp.id, emailInput);
+            toast.success("이메일이 성공적으로 변경되었습니다.");
+            setIsEmailEditing(false);
+            // Refetch user data to get the latest info
+            fetchUser();
+        } catch (err) {
+            console.log(err);
+            toast.error("이메일 변경에 실패했습니다.");
+        }
     };
 
     const handleEmailCancel = () => {
         setEmailInput(currentEmail);
         setIsEmailEditing(false);
     };
+
+    if (loading) {
+        return <div>Loading...</div>;
+    }
+
+    if (error) {
+        return <div>Error: {error}</div>;
+    }
+
+    if (!emp) {
+        return <div>No user data found.</div>;
+    }
 
     return (
         <section>
@@ -134,14 +175,14 @@ function FeatureMypage({ onChangePage }) {
                     <h2 className="text-lg font-semibold text-black mb-4">
                         사원 정보
                     </h2>
-                    <Row label="이름" value={emp.name} />
+                    <Row label="이름" value={emp.username} />
                     <Row label="부서" value={emp.dept} />
-                    <Row label="직급" value={emp.rank} />
+                    <Row label="직급" value={emp.position} />
 
                     <h2 className="text-lg font-semibold text-black mt-10 mb-4">
                         계정
                     </h2>
-                    <Row label="아이디" value={emp.accountId} />
+                    <Row label="아이디" value={emp.unique_auth_number} />
                     <Row
                         label="비밀번호"
                         value={maskedPassword}

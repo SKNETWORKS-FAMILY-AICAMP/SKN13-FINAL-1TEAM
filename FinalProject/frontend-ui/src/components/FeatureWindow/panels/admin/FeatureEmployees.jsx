@@ -35,9 +35,9 @@ function uiCreateToApi(payload) {
         username: payload.name,
         email: payload.email,
         is_manager: !!payload.isAdmin,
-        // usernum: payload.accountId,
-        // dept: payload.dept || null,
-        // position: payload.rank || null,
+        unique_auth_number: payload.accountId, // 이 부분을 수정
+        dept: payload.dept || null,
+        position: payload.rank || null,
     };
 }
 
@@ -47,9 +47,10 @@ function uiEditToApi(patch) {
     if (patch.name !== undefined) body.username = patch.name;
     if (patch.email !== undefined) body.email = patch.email;
     if (patch.isAdmin !== undefined) body.is_manager = !!patch.isAdmin;
-    // if (patch.accountId !== undefined) body.usernum = patch.accountId;
-    // if (patch.dept !== undefined) body.dept = patch.dept || null;
-    // if (patch.rank !== undefined) body.position = patch.rank || null;
+    if (patch.accountId !== undefined)
+        body.unique_auth_number = patch.accountId;
+    if (patch.dept !== undefined) body.dept = patch.dept || null;
+    if (patch.rank !== undefined) body.position = patch.rank || null;
     return body;
 }
 

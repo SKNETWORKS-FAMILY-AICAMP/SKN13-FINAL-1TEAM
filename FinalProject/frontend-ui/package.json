@@ -15,6 +15,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
     "event-source-polyfill": "^1.0.31",
+    "gantt-schedule-timeline-calendar": "^3.41.1",
     "lucide-react": "^0.535.0",
     "react": "^19.1.0",
     "react-big-calendar": "^1.19.4",

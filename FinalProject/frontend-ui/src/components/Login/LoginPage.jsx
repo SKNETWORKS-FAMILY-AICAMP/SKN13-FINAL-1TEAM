@@ -1,11 +1,11 @@
 // ✅ components/Login/LoginPage.jsx
 import React, { useState, useEffect } from "react";
 import HeaderBar from "../shared/HeaderBar";
+import { login } from "../services/authApi";
+import { saveUser } from "../services/authStore";
 
 const EMP_ID_KEY = "employee_saved_id";
 const ADM_ID_KEY = "admin_saved_id";
-// const USER_KEY = "currentUserId";
-const USER_KEY = "user";
 const TOKEN_KEY = "userToken";
 
 export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
@@ -35,51 +35,40 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
         if (e.key === "Enter") handleLogin();
     };
 
-    // LoginPage.jsx (핵심 부분 교체)
     const handleLogin = async () => {
-        const isEmployee = role === "employee";
-        const ok =
-            (isEmployee && userId === "test" && password === "1234") ||
-            (!isEmployee && userId === "admin" && password === "admin123");
+        setErrorMessage("");
 
-        if (!ok) {
-            setErrorMessage("아이디, 비밀번호 또는 역할이 올바르지 않습니다.");
-            return;
-        }
-
-        const mustChange = isEmployee && password === "1234"; // ★ 초기비번 판정
-        const normalizedRole = isEmployee ? "employee" : "admin";
-        const userPayload = {
-            id: userId,
-            role: normalizedRole,
-            initialPassword: mustChange,
-        };
-
-        localStorage.setItem(
-            "userToken",
-            normalizedRole === "admin" ? "admin-token" : "employee-token"
-        );
-        localStorage.setItem("user", JSON.stringify(userPayload));
-
-        // ⛔ 초기비번이면 'auth:success' IPC를 보내지 않는다 (창 열리지 않게)
         try {
-            if (!mustChange) {
-                window?.electron?.ipcRenderer?.send(
-                    "auth:success",
-                    userPayload
-                );
-                console.log("[Login] sent auth:success (no force change)");
-            } else {
-                console.log(
-                    "[Login] SKIP auth:success (force-change required)"
-                );
-            }
-        } catch (e) {
-            console.warn("[Login] ipc send failed:", e);
-        }
+            const data = await login(userId, password);
+            console.log("로그인 성공:", data);
 
-        // App에 결과 전달 → App이 change-password로 전환
-        onLoginSuccess(userPayload);
+            const userPayload = {
+                ...data.user_info,
+                role: data.user_info.is_manager ? "admin" : "employee",
+                mustChangePassword: data.must_change_password,
+            };
+
+            // 토큰과 사용자 정보 저장
+            localStorage.setItem(TOKEN_KEY, data.access_token);
+            saveUser(userPayload);
+
+            // 아이디 저장 로직
+            const key = userPayload.role === "admin" ? ADM_ID_KEY : EMP_ID_KEY;
+            if (saveId) {
+                localStorage.setItem(key, userId);
+            } else {
+                localStorage.removeItem(key);
+            }
+
+            // App으로 로그인 성공 전달
+            onLoginSuccess(userPayload);
+        } catch (error) {
+            console.error("로그인 실패:", error);
+            setErrorMessage(
+                // error.response?.data?.detail ||
+                "아이디 또는 비밀번호가 올바르지 않습니다."
+            );
+        }
     };
 
     return (

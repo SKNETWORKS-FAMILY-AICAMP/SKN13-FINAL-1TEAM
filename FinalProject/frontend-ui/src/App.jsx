@@ -105,7 +105,7 @@ export default function App() {
     const handleNewChat = () => {
         const newId = `session-${Date.now()}`;
         console.log("[App] new chat ->", newId);
-        setCurrentSession({ id: newId, title: "새로운 대화" });
+        setCurrentSession({ id: newId, title: "새로운 대화", isNew: true });
     };
 
     const handleSelectChat = (target) => {
