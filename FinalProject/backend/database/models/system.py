@@ -2,7 +2,7 @@
 """
 시스템 관련 모델들
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, func
 from sqlalchemy.orm import relationship
 from ..base import Base, now_utc
 
@@ -26,5 +26,5 @@ class EmailTemplate(Base):
     sample_vars_json = Column(JSON, nullable=True, comment="샘플 변수 데이터")
     
     # ✅ 3. 시간 컬럼
-    created_at = Column(DateTime, nullable=False, default=now_utc, index=True, comment="템플릿 생성시간")
-    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc, comment="템플릿 수정시간")
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True, comment="템플릿 생성시간")
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now(), comment="템플릿 수정시간")

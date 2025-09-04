@@ -2,7 +2,7 @@
 """
 채팅 관련 모델들
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Index, func
 from sqlalchemy.orm import relationship
 from ..base import Base, now_utc
 
@@ -26,10 +26,10 @@ class ChatSession(Base):
     title = Column(String(200), nullable=False, default="새로운 대화", comment="세션 제목")
     
     # ✅ 4. 상태 컬럼
-    is_deleted = Column(Boolean, nullable=False, default=False, comment="소프트 삭제 여부")
+    is_deleted = Column(Boolean, nullable=False, server_default='0', comment="소프트 삭제 여부")
     
     # ✅ 5. 시간 컬럼
-    created_at = Column(DateTime, nullable=False, default=now_utc, index=True, comment="세션 생성시간")
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True, comment="세션 생성시간")
     
     # 관계 정의
     user = relationship("User", back_populates="chat_sessions", passive_deletes=True)  # 세션 소유자
@@ -57,7 +57,7 @@ class ChatMessage(Base):
     message_id = Column(String(100), nullable=True, unique=True, index=True, comment="외부 시스템 메시지 ID (멱등성용)")
     
     # ✅ 4. 시간 컬럼  
-    timestamp = Column(DateTime, nullable=False, default=now_utc, index=True, comment="메시지 생성시간")
+    timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True, comment="메시지 생성시간")
     
     # 관계 정의
     session = relationship("ChatSession", back_populates="messages")       # 소속 세션

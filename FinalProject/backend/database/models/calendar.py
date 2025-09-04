@@ -2,7 +2,7 @@
 """
 캘린더 관련 모델들
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, CheckConstraint, UniqueConstraint, Index, Computed
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, CheckConstraint, UniqueConstraint, Index, func
 from sqlalchemy.orm import relationship
 from ..base import Base, now_utc
 
@@ -27,24 +27,20 @@ class Calendar(Base):
     description = Column(Text, nullable=True, comment="캘린더 설명")
     
     # ✅ 4. 상태 컬럼
-    is_default = Column(Boolean, nullable=False, default=False, comment="기본 캘린더 여부")
+    is_default = Column(Boolean, nullable=False, server_default='0', comment="기본 캘린더 여부")
     
     # ✅ 5. 시간 컬럼
-    created_at = Column(DateTime, nullable=False, default=now_utc, index=True, comment="캘린더 생성시간")
-    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc, comment="캘린더 수정시간")
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True, comment="캘린더 생성시간")
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now(), comment="캘린더 수정시간")
     
     # 관계 정의
     user = relationship("User", back_populates="calendars")                # 캘린더 소유자
     events = relationship("Event", back_populates="calendar", cascade="all, delete-orphan")  # 캘린더의 이벤트들
     
-    # 제약 조건 (사용자별 이름 유니크 + 사용자당 기본 캘린더 1개)
-    default_owner_for_unique = Column(
-        Integer,
-        Computed("CASE WHEN is_default THEN user_id ELSE NULL END", persisted=True)  # 기본 캘린더 소유자 식별용
-    )
+    # 제약 조건 (사용자별 이름 유니크)
     __table_args__ = (
         UniqueConstraint("user_id", "name", name="uq_calendars_user_name"),           # 사용자별 캘린더 이름 유니크
-        UniqueConstraint("default_owner_for_unique", name="uq_one_default_calendar_per_user"),  # 사용자당 기본 캘린더 1개
+        Index("idx_calendars_user_default", "user_id", "is_default"),                 # 기본 캘린더 검색용 인덱스
     )
 
 
@@ -72,18 +68,18 @@ class Event(Base):
     # ✅ 4. 시간 관련 컬럼
     start = Column(DateTime, nullable=False, index=True, comment="시작 시간")
     end = Column(DateTime, nullable=True, comment="종료 시간")
-    all_day = Column(Boolean, nullable=False, default=False, comment="종일 이벤트 여부")
+    all_day = Column(Boolean, nullable=False, server_default='0', comment="종일 이벤트 여부")
     
     # ✅ 5. 표시/설정 컬럼
     color = Column(String(20), nullable=True, comment="이벤트 색상 (HEX 코드)")
-    created_via = Column(String(20), nullable=False, default="user", comment="생성 경로: user/assistant/system")
-    status = Column(String(20), nullable=False, default="confirmed", comment="이벤트 상태: confirmed/cancelled")
+    created_via = Column(String(20), nullable=False, server_default="user", comment="생성 경로: user/assistant/system")
+    status = Column(String(20), nullable=False, server_default="confirmed", comment="이벤트 상태: confirmed/cancelled")
     reminder_minutes_before = Column(Integer, nullable=True, comment="알림 시간 (분 단위)")
     recurrence_rule = Column(String(500), nullable=True, comment="반복 규칙 (iCalendar RFC 5545 형식)")
     
     # ✅ 6. 시간 컬럼
-    created_at = Column(DateTime, nullable=False, default=now_utc, index=True, comment="이벤트 생성시간")
-    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc, comment="이벤트 수정시간")
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True, comment="이벤트 생성시간")
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now(), comment="이벤트 수정시간")
     
     # 관계 정의
     calendar = relationship("Calendar", back_populates="events")            # 소속 캘린더

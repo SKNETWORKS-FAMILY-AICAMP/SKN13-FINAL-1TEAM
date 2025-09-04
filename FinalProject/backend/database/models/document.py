@@ -2,7 +2,7 @@
 """
 문서 관련 모델들
 """
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, func
 from sqlalchemy.orm import relationship
 from ..base import Base, now_utc
 
@@ -34,8 +34,8 @@ class Document(Base):
     vector_namespace = Column(String(100), nullable=True, comment="벡터DB 네임스페이스")
     
     # ✅ 5. 시간 컬럼
-    created_at = Column(DateTime, nullable=False, default=now_utc, index=True, comment="문서 업로드시간")
-    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc, comment="문서 수정시간")
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True, comment="문서 업로드시간")
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now(), comment="문서 수정시간")
     
     # 관계 정의
     owner = relationship("User", back_populates="documents", passive_deletes=True)  # 문서 소유자

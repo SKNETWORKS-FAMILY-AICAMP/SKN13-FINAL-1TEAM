@@ -2,7 +2,7 @@
 """
 사용자 관련 모델들
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Index, func
 from sqlalchemy.orm import relationship
 from ..base import Base, now_utc
 
@@ -31,13 +31,13 @@ class User(Base):
     dept = Column(String(100), nullable=True, index=True, comment="부서명")
     position = Column(String(100), nullable=True, index=True, comment="직책/직급")
     
-    # ✅ 5. 상태/권한 컬럼
-    is_active = Column(Boolean, nullable=False, default=True, comment="계정 활성화 상태")
-    is_manager = Column(Boolean, nullable=False, default=False, comment="관리자 권한 여부") 
-    must_change_password = Column(Boolean, nullable=False, default=True, comment="초기 비밀번호 변경 필요")
+    # ✅ 5. 상태/권한 컬럼 (MySQL TINYINT(1)로 매핑)
+    is_active = Column(Boolean, nullable=False, server_default='0', comment="계정 활성화 상태")
+    is_manager = Column(Boolean, nullable=False, server_default='0', comment="관리자 권한 여부") 
+    must_change_password = Column(Boolean, nullable=False, server_default='0', comment="초기 비밀번호 변경 필요")
     
-    # ✅ 6. 시간 컬럼 (항상 마지막)
-    created_at = Column(DateTime, nullable=False, default=now_utc, index=True, comment="계정 생성시간")
+    # ✅ 6. 시간 컬럼 (항상 마지막) - MySQL 기본값 사용
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True, comment="계정 생성시간")
     last_login_at = Column(DateTime, nullable=True, index=True, comment="마지막 로그인시간")
     
     # 관계 정의
@@ -68,7 +68,7 @@ class RefreshToken(Base):
     revoked_at = Column(DateTime, nullable=True, index=True, comment="토큰 폐기시간 (재사용 탐지)")
     
     # ✅ 4. 시간 컬럼
-    created_at = Column(DateTime, nullable=False, default=now_utc, comment="토큰 생성시간")
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), comment="토큰 생성시간")
     
     # 관계 정의 (back_populates로 통일)
     user = relationship("User", back_populates="refresh_tokens")
