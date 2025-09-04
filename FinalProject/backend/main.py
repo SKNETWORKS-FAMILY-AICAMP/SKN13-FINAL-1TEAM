@@ -1,19 +1,30 @@
-from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import FastAPI, Depends, APIRouter, HTTPException, File, UploadFile, Body
+from fastapi.responses import Response, StreamingResponse, JSONResponse, FileResponse
+from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Generator, Optional
-import json, uuid, shutil
+from typing import List, Generator, Optional, Any
+import json, uuid, shutil, tempfile, os, re
 from pathlib import Path
 from sqlalchemy.orm import Session
 from datetime import datetime
-
 import fitz # PyMuPDF
 from docx import Document as DocxDocument # python-docx
-
-from .RoutingAgent import RoutingAgent, generate_config
-from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, User, Calendar, Event, Document
-from .llm_tools.read_hwpx import read_hwpx # Assuming this function name
+from langchain_core.messages.tool import ToolMessage
+import time
+from .ChatBot.agents.RoutingAgent import RoutingAgent, generate_config
+from .ChatBot.core.AgentState import AgentState
+from .database import create_db_and_tables, SessionLocal, ChatSession, ChatMessage, ToolMessageRecord, User, Calendar, Event, Document
+from .ChatBot.tools.html_to_docx import convert_html_to_docx
+from backend.ChatBot.chat_api.routes_chat_delete import router as chat_delete_router
+from backend.ChatBot.tools.presigned import (
+    get_upload_url,
+    get_download_url,
+    get_public_url,
+    upload_file_directly,
+    OneTimePresignedURLManager,
+)
+from backend.ChatBot.tools import presigned
 
 # FastAPI 인스턴스 생성
 app = FastAPI()
@@ -35,6 +46,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 👇 추가: 채팅 삭제 API 라우터 등록
+app.include_router(chat_delete_router)
+
+# 📌 Presigned 업로드 URL 발급 라우트 추가
+@api_router.post("/files/presigned")
+async def create_presigned(body: dict = Body(...)):
+    """
+    프론트엔드가 presigned URL을 요청할 때 사용하는 엔드포인트.
+    요청 예시:
+    {
+      "filename": "example.pdf",
+      "contentType": "application/pdf"
+    }
+    응답 예시:
+    {
+      "uploadUrl": "...",     # PUT presigned URL
+      "fileKey": "uploads/1725347283-example.pdf",
+      "displayName": "example.pdf"
+    }
+    """
+    filename = body.get("filename")
+    content_type = body.get("contentType", "application/octet-stream")
+
+    if not filename:
+        raise HTTPException(status_code=400, detail="filename is required")
+
+    try:
+        result = presigned.get_upload_url(filename, content_type)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"presigned 발급 실패: {str(e)}")
+
+
 # --- Document Storage Paths ---
 UPLOAD_DIR = Path("uploaded_files")
 EDITABLE_MD_DIR = Path("editable_markdown")
@@ -54,56 +98,139 @@ def get_db():
     finally:
         db.close()
 
-# --- Chat Message Handling (Existing) ---
-def _create_chat_message(db: Session, session_id: str, role: str, content: str):
-    message = ChatMessage(session_id=session_id, role=role, content=content)
+# --- Chat Message Handling ---
+def _create_chat_message(db: Session, session_id: str, role: str, content: str, message_id: str = None):
+    message = ChatMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        message_id=message_id,
+        timestamp=datetime.now()
+    )
     db.add(message)
     db.commit()
     db.refresh(message)
     return message
 
+def _create_tool_message(
+    db: Session,
+    chat_msg_id: int,
+    tool_call_id: str | None = None,
+    status: str | None = None,
+    artifact: dict | None = None,
+    raw_content: dict | str | None = None,
+) -> ToolMessageRecord:
+    """ToolMessageRecord를 DB에 저장하고 반환"""
+    tool_record = ToolMessageRecord(
+        chat_message_id=chat_msg_id,
+        tool_call_id=tool_call_id,
+        tool_status=status,
+        tool_artifact=artifact,
+        tool_raw_content=raw_content,
+    )
+    db.add(tool_record)
+    db.commit()
+    db.refresh(tool_record)
+    return tool_record
+
+
 async def _handle_tool_start(event: dict, session_id: str, db: Session):
     tool_name = event.get("name", "Unknown Tool")
-    tool_input = event["data"].get("input", {})
-    print(f"DEBUG: on_tool_start event data: {event}")
-    
-    # Format as Markdown
-    thinking_message = f"[AI Thinking]: Using tool '{tool_name}' with input: '{tool_input}'"
-    yield f"data: {json.dumps({'thinking_message': thinking_message})}\n\n"
-    
-    _create_chat_message(db, session_id, "assistant", thinking_message)
+    tool_input = event.get("data", {}).get("input", {})
+    tool_call_id = event.get("tool_call_id")
+    tool_artifact = event.get("artifact")
+
+    # 사용자 화면용 메시지
+    thinking_message = (
+        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
+        f"```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
+    )
+
+    # 1. ChatMessage 저장
+    chat_msg = _create_chat_message(db, session_id, "assistant", thinking_message)
+
+    # 2. ToolMessageRecord 저장
+    tool_raw_content = {"tool_name": tool_name, "input": tool_input}
+    _create_tool_message(
+        db,
+        chat_msg.id,
+        tool_call_id=tool_call_id,
+        status="started",
+        artifact=tool_artifact,
+        raw_content=tool_raw_content,
+    )
+
+    # 3. SSE 전송
+    yield f"data: {json.dumps({'thinking_message': thinking_message}, ensure_ascii=False)}\n\n"
+
 
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
-    raw_output = event["data"].get("output", "")
-    
+    tool_name = event.get("name")
+    raw_output = event.get("data", {}).get("output", "")
+
+    # If the editor tool finishes, its output is the new document.
+    # Yield a specific event for the frontend to catch and update the editor.
+    if tool_name == "run_document_edit":
+        yield f"data: {json.dumps({'document_update': raw_output}, ensure_ascii=False)}\n\n"
+
     formatted_output = "[Tool Output]: "
-    
+    tool_raw_json = None
+
     try:
-        # Attempt to parse raw_output as JSON
-        if isinstance(raw_output, str):
-            parsed_output = json.loads(raw_output)
-        elif isinstance(raw_output, dict):
-            parsed_output = raw_output
+        if isinstance(raw_output, ToolMessage):
+            tool_raw_json = {
+                "content": raw_output.content,
+                "type": getattr(raw_output, "type", None),
+                "tool_call_id": getattr(raw_output, "tool_call_id", None),
+                "artifact": getattr(raw_output, "artifact", None),
+                "status": getattr(raw_output, "status", None),
+            }
+            parsed_output = raw_output.content
         else:
-            parsed_output = None # Not a JSON string or dict
+            parsed_output = str(raw_output)
+            tool_raw_json = {"raw": parsed_output}
 
-        if parsed_output:
-            # If it's JSON, pretty-print it in a Markdown code block
-            formatted_output += f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+        # 사용자용 포맷팅
+        if isinstance(parsed_output, str):
+            try:
+                parsed_json = json.loads(parsed_output)
+                formatted_output += (
+                    f"\n```json\n{json.dumps(parsed_json, indent=2, ensure_ascii=False)}\n```"
+                )
+            except json.JSONDecodeError:
+                formatted_output += f"\n```\n{parsed_output}\n```"
+        elif isinstance(parsed_output, dict):
+            formatted_output += (
+                f"\n```json\n{json.dumps(parsed_output, indent=2, ensure_ascii=False)}\n```"
+            )
         else:
-            # Otherwise, just put the string in backticks
-            formatted_output += f"`{str(raw_output)}`"
-    except json.JSONDecodeError:
-        # If it's a string but not valid JSON, treat as plain string
-        formatted_output += f"`{str(raw_output)}`"
+            formatted_output += f"`{str(parsed_output)}`"
+
     except Exception as e:
-        # Catch any other errors during processing
-        formatted_output += f"`Error processing tool output: {e}`"
-        print(f"Error processing tool output: {raw_output} - {e}") # Log error for debugging
+        formatted_output += f"`Error processing output: {e}`"
+        print(f"[Error] raw_output={raw_output} -> {e}")
 
-    yield f"data: {json.dumps({'tool_message': formatted_output})}\n\n"
-    
-    _create_chat_message(db, session_id, "tool", formatted_output)
+    # 1. SSE 전송
+    yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
+
+    # 2. ChatMessage 저장
+    chat_msg = _create_chat_message(
+        db,
+        session_id,
+        "tool",
+        content=json.dumps(tool_raw_json, ensure_ascii=False),
+    )
+
+    # 3. ToolMessageRecord 저장
+    _create_tool_message(
+        db,
+        chat_msg.id,
+        tool_call_id=tool_raw_json.get("tool_call_id"),
+        status=tool_raw_json.get("status", "finished"),
+        artifact=tool_raw_json.get("artifact"),
+        raw_content=tool_raw_json,
+    )
+
 
 # --- Pydantic Models (Existing) ---
 class MessageSaveRequest(BaseModel):
@@ -140,6 +267,10 @@ class EventOut(BaseModel):
     end: Optional[str] = None
     allDay: bool
     color: Optional[str] = None
+
+class ExportDocxRequest(BaseModel):
+    html_content: str
+    filename: str = "exported_document.docx"
 
 # --- Helper for Document Conversion ---
 def _convert_to_markdown(file_path: Path, file_type: str) -> str:
@@ -210,6 +341,39 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
     db.refresh(db_document)
 
     return JSONResponse(content={"doc_id": doc_id, "markdown_content": markdown_content, "message": "Document uploaded and converted successfully"})
+
+@api_router.post("/documents/export/docx")
+async def export_document_as_docx(request: ExportDocxRequest):
+    # Sanitize filename to prevent security issues
+    safe_filename = request.filename.replace("\n", "").replace("\r", "").strip()
+    if not safe_filename:
+        safe_filename = "exported_document.docx"
+    if not safe_filename.endswith(".docx"):
+        safe_filename += ".docx"
+
+    # Use a temporary file for the conversion
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+            temp_filepath = temp_file.name
+        
+        doc_title = os.path.splitext(safe_filename)[0]
+        success = convert_html_to_docx(request.html_content, temp_filepath, title=doc_title)
+
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to convert HTML to DOCX.")
+
+        # Return the file and schedule it for deletion after the response is sent
+        return FileResponse(
+            path=temp_filepath,
+            filename=safe_filename,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            background=BackgroundTask(os.unlink, temp_filepath)
+        )
+    except Exception as e:
+        # Ensure temp file is deleted on error before raising HTTP exception
+        if 'temp_filepath' in locals() and os.path.exists(temp_filepath):
+            os.unlink(temp_filepath)
+        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
 
 @api_router.get("/documents/{doc_id}/content")
 async def get_document_content(doc_id: str, db: Session = Depends(get_db)):
@@ -406,14 +570,27 @@ async def get_messages(session_id: str, db: Session = Depends(get_db)):
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]}
 
 @api_router.get("/llm/stream")
-async def llm_stream(session_id: str, prompt: str, db: Session = Depends(get_db)):
+async def llm_stream(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
     config = generate_config(session_id)
     chat_agent = RoutingAgent()
 
-    return StreamingResponse(_stream_llm_response(session_id, prompt, chat_agent, config, db), media_type="text/event-stream")
+    return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
 
-async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config, db: Session) -> Generator:
+async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
+    # Get or create the chat session to prevent foreign key violations
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        default_user_id = 1
+        user = db.query(User).filter(User.id == default_user_id).first()
+        if not user:
+            user = User(id=default_user_id, unique_auth_number="default_auth", username="default_user", hashed_password="", email="default@example.com")
+            db.add(user)
+        session = ChatSession(id=session_id, user_id=default_user_id, title="새로운 대화")
+        db.add(session)
+        db.commit()
+
     full_response_content = ""
+    llm_output_buffer = "" # 라우팅 LLM 출력을 위한 버퍼
     
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
     
@@ -427,10 +604,39 @@ async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config,
     if not messages or messages[-1] != ("user", prompt):
         messages.append(("user", prompt))
 
-    input_data = {"messages": messages}
+    # ✅ Create the initial state object
+    initial_state: AgentState = {
+        "prompt": prompt,
+        "document_content": document_content,
+        "chat_history": messages,
+        # The following fields will be populated by the agents
+        "intent": None,
+        "intermediate_steps": [],
+        "generation": None,
+    }
 
-    async for event in chat_agent.astream_events(input_data, config=config):
+    # Pass the state object to the agent stream
+    async for event in chat_agent.astream_events(initial_state, config=config):
+        
         kind = event["event"]
+        name = event.get("name")
+
+        # 'request_document' 노드가 종료되었는지 확인
+        if kind == "on_chain_end" and name == "request_document":
+            node_output = event.get("data", {}).get("output", {})
+            if node_output and node_output.get("needs_document_content"):
+                print("--- 프론트엔드에 문서 요청 신호 전송 ---")
+                tool_call_id = f"req_doc_{uuid.uuid4()}"
+                yield f"data: {json.dumps({'needs_document_content': True, 'agent_context': {'tool_call_id': tool_call_id}}, ensure_ascii=False)}\n\n"
+                return  # 신호 전송 후 스트림 종료
+
+        # 'route_question' 체인이 종료되었고, 'request_document'가 트리거되지 않았다면 버퍼된 LLM 출력을 yield
+        if kind == "on_chain_end" and name == "route_question":
+            if llm_output_buffer:
+                yield f"data: {json.dumps({'content': llm_output_buffer}, ensure_ascii=False)}\n\n"
+                llm_output_buffer = "" # 버퍼 비우기
+
+        # 일반적인 LLM 스트림 처리 (라우팅 LLM 제외)
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
             if content:
@@ -444,18 +650,24 @@ async def _stream_llm_response(session_id: str, prompt: str, chat_agent, config,
         elif kind == "on_tool_end":
             async for chunk in _handle_tool_end(event, session_id, db):
                 yield chunk
+        
+        elif kind == "on_end":
+            final_state = event.get("data", {}).get("output", {})
+            # ... (rest of the logic)
+            yield "data: [DONE]\n\n"
 
     if full_response_content:
-        new_message = ChatMessage(session_id=session_id, role="assistant", content=full_response_content)
-        db.add(new_message)
-        db.commit()
-        db.refresh(new_message)
-        
-    yield "data: [DONE]\n\n"
+        _create_chat_message(db, session_id, "assistant", full_response_content)
 
 @api_router.get("/open")
 async def open_document(url):
     pass
+
+
+@api_router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(key="refresh_token")
+    return {"message": "Logout successful"}
 
 
 # API 라우터를 앱에 포함

@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-dotenv
 pydantic
 SQLAlchemy
@@ -14,3 +14,6 @@ requests
 mysql-connector-python
 passlib[bcrypt]
 python-jose[cryptography]
+html2docx
+python-docx
+beautifulsoup4
