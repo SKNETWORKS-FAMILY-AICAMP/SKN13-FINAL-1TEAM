@@ -4,7 +4,7 @@ from .database import create_db_and_tables
 from pathlib import Path
 
 # Import routers
-from .routers import document_routes, chat_routes, auth_routes, calendar_routes, admin_routes
+from .routers import document_routes, chat_routes, auth_routes, calendar_routes, users_routes
 
 # FastAPI 인스턴스 생성
 app = FastAPI()
@@ -34,9 +34,9 @@ def on_startup():
     Path("editable_markdown").mkdir(parents=True, exist_ok=True)
 
 
-# API 라우터를 앱에 포함
-app.include_router(document_routes.router, prefix="/api/v1")
-app.include_router(chat_routes.router, prefix="/api/v1")
-app.include_router(auth_routes.router, prefix="/api/v1")
-app.include_router(calendar_routes.router, prefix="/api/v1")
-app.include_router(admin_routes.router, prefix="/api/v1")
+# API 라우터를 앱에 포함 - 5가지 깔끔한 구조
+app.include_router(auth_routes.router, prefix="/api/v1/auth", tags=["인증"])
+app.include_router(users_routes.router, prefix="/api/v1/users", tags=["사용자 관리"])  
+app.include_router(document_routes.router, prefix="/api/v1/files", tags=["파일/문서"])
+app.include_router(chat_routes.router, prefix="/api/v1/chat", tags=["채팅/AI"])
+app.include_router(calendar_routes.router, prefix="/api/v1/calendar", tags=["캘린더"])

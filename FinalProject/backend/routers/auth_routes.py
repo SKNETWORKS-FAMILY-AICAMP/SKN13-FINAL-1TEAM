@@ -22,11 +22,15 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 # --- Pydantic 스키마 ---
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    unique_auth_number: Optional[str] = None
+
+class LoginRequest(BaseModel):
+    unique_auth_number: str
+    password: str
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
@@ -78,30 +82,34 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        unique_auth_number: str = payload.get("sub")
+        if unique_auth_number is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenData(unique_auth_number=unique_auth_number)
     except JWTError:
         raise credentials_exception
     
-    user = db.query(User).filter(User.username == token_data.username).first()
+    user = db.query(User).filter(User.unique_auth_number == token_data.unique_auth_number).first()
     if user is None:
         raise credentials_exception
     return user
 
 # --- 엔드포인트 ---
-@router.post("/token", summary="로그인 및 토큰 발급")
-async def login_for_access_token(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+@router.post("/login", summary="사원번호와 비밀번호로 로그인 및 토큰 발급")
+async def login_for_access_token(response: Response, login_data: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.unique_auth_number == login_data.unique_auth_number).first()
+    if not user or not verify_password(login_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect employee number or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(data={"sub": user.username})
+    # 마지막 로그인 시간 업데이트
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
+
+    access_token = create_access_token(data={"sub": user.unique_auth_number})
     refresh_token = await create_refresh_token(user_id=user.id, db=db)
 
     response.set_cookie(
@@ -116,7 +124,16 @@ async def login_for_access_token(response: Response, form_data: OAuth2PasswordRe
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "must_change_password": user.must_change_password
+        "must_change_password": user.must_change_password,
+        "user_info": {
+            "id": user.id,
+            "unique_auth_number": user.unique_auth_number,
+            "username": user.username,
+            "email": user.email,
+            "dept": user.dept,
+            "position": user.position,
+            "is_manager": user.is_manager
+        }
     }
 
 @router.post("/refresh", summary="액세스 토큰 재발급 (토큰 회전 및 재사용 탐지)")
@@ -169,7 +186,7 @@ async def refresh_access_token(request: Request, response: Response, db: Session
 
     # 2. 새로운 액세스 토큰과 리프레시 토큰 발급
     user = db.query(User).filter(User.id == user_id).first()
-    new_access_token = create_access_token(data={"sub": user.username})
+    new_access_token = create_access_token(data={"sub": user.unique_auth_number})
     new_refresh_token = await create_refresh_token(user_id=user.id, db=db)
 
     # 3. 새로운 리프레시 토큰을 쿠키에 설정
@@ -202,7 +219,7 @@ async def logout(request: Request, response: Response, db: Session = Depends(get
     response.delete_cookie(key="refresh_token")
     return {"message": "Logout successful"}
 
-@router.put("/auth/change-password", summary="사용자 비밀번호 변경")
+@router.put("/password", summary="사용자 비밀번호 변경")
 async def change_password(request: ChangePasswordRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not verify_password(request.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect current password")
@@ -217,8 +234,12 @@ async def change_password(request: ChangePasswordRequest, db: Session = Depends(
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return {
         "id": current_user.id,
+        "unique_auth_number": current_user.unique_auth_number,
         "username": current_user.username,
         "email": current_user.email,
+        "dept": current_user.dept,
+        "position": current_user.position,
         "is_manager": current_user.is_manager,
-        "must_change_password": current_user.must_change_password
+        "must_change_password": current_user.must_change_password,
+        "last_login_at": current_user.last_login_at
     }

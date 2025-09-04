@@ -1,17 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
-from typing import List, Generator, Optional
-import json, uuid
+from typing import List, Generator, Optional, Sequence
+import json, uuid, os
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from ..database import get_db, ChatSession, ChatMessage, ToolMessageRecord, User
+from ..routers.auth_routes import get_current_user
+import boto3
+from botocore.config import Config
 from ..ChatBot.agents.RoutingAgent import RoutingAgent, generate_config
 from ..ChatBot.core.AgentState import AgentState
 from langchain_core.messages.tool import ToolMessage
 
 # APIRouter 인스턴스 생성
 router = APIRouter()
+
+# S3 설정
+DOCS_BUCKET = os.getenv("DOCS_BUCKET", "your-docs-bucket-name")
+_s3 = boto3.client("s3", config=Config(retries={"max_attempts": 3, "mode": "standard"}))
 
 # --- Pydantic 모델 ---
 # 메시지 저장 요청을 위한 데이터 모델
@@ -28,7 +35,7 @@ def _create_chat_message(db: Session, session_id: str, role: str, content: str, 
         role=role,
         content=content,
         message_id=message_id,
-        timestamp=datetime.now() # 현재 시간으로 타임스탬프 설정
+        timestamp=datetime.now(timezone.utc) # 현재 시간을 UTC로 타임스탬프 설정
     )
     db.add(message) # DB 세션에 추가
     db.commit() # 변경사항 커밋
@@ -260,19 +267,20 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
 
 # --- 채팅 API 엔드포인트 ---
 # 메시지 저장 엔드포인트
-@router.post("/chat/save")
-async def save_message(request: MessageSaveRequest, db: Session = Depends(get_db)):
-    default_user_id = 1 # 임시 사용자 ID
-    user = db.query(User).filter(User.id == default_user_id).first()
-    if not user: # 사용자가 없으면 새로 생성
-        user = User(id=default_user_id, unique_auth_number="default_auth", username="default_user", hashed_password="", email="default@example.com")
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+@router.post("/save")
+async def save_message(
+    request: MessageSaveRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 실제 로그인 사용자 사용
 
-    session = db.query(ChatSession).filter(ChatSession.id == request.session_id).first()
+    session = db.query(ChatSession).filter(
+        ChatSession.id == request.session_id,
+        ChatSession.user_id == current_user.id  # 보안: 자신의 세션만
+    ).first()
     if not session: # 세션이 없으면 새로 생성
-        session = ChatSession(id=request.session_id, user_id=user.id, title="새로운 대화")
+        session = ChatSession(id=request.session_id, user_id=current_user.id, title="새로운 대화")
         db.add(session)
         db.commit()
         db.refresh(session)
@@ -289,26 +297,196 @@ async def save_message(request: MessageSaveRequest, db: Session = Depends(get_db
     return {"status": "success"} # 성공 상태 반환
 
 # 채팅 세션 목록 조회 엔드포인트
-@router.get("/chat/sessions")
-async def get_chat_sessions(db: Session = Depends(get_db)):
-    default_user_id = 1 # 임시 사용자 ID
-    sessions = db.query(ChatSession).filter(ChatSession.user_id == default_user_id).order_by(ChatSession.created_at.desc()).all() # 사용자 ID로 세션 조회
+@router.get("/sessions")
+async def get_chat_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 자신의 세션만 조회
+    sessions = db.query(ChatSession).filter(
+        ChatSession.user_id == current_user.id
+    ).order_by(ChatSession.created_at.desc()).all()
     sessions_list = []
     for session in sessions: # 세션 정보를 딕셔너리 형태로 변환
         sessions_list.append({"id": session.id, "title": session.title})
     return {"sessions": sessions_list} # 세션 목록 반환
 
 # 특정 세션의 메시지 목록 조회 엔드포인트
-@router.get("/chat/messages/{session_id}")
-async def get_messages(session_id: str, db: Session = Depends(get_db)):
-    messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all() # 세션 ID로 메시지 조회
+@router.get("/{session_id}/messages")
+async def get_messages(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 자신의 세션인지 확인
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id,
+        ChatSession.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found or access denied")
+    
+    messages = db.query(ChatMessage).filter(
+        ChatMessage.session_id == session_id
+    ).order_by(ChatMessage.timestamp).all()
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]} # 메시지 목록 반환
 
 # LLM 응답 스트리밍 엔드포인트
-@router.get("/llm/stream")
+@router.get("/stream")
 async def llm_stream(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
     config = generate_config(session_id) # 세션 ID로 설정 생성
     chat_agent = RoutingAgent() # 라우팅 에이전트 인스턴스 생성
 
     # LLM 응답을 스트리밍 형태로 반환
     return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
+
+# --- S3 파일 삭제 유틸리티 ---
+def delete_s3_objects(bucket: str, keys: list[str]) -> None:
+    """S3에서 파일들을 삭제하는 함수"""
+    if not keys:
+        return
+    # 1000개 단위로 삭제
+    for i in range(0, len(keys), 1000):
+        chunk = keys[i : i + 1000]
+        _s3.delete_objects(
+            Bucket=bucket,
+            Delete={"Objects": [{"Key": k} for k in chunk], "Quiet": True},
+        )
+
+def _collect_attachment_keys(messages: Sequence[ChatMessage]) -> list[str]:
+    """메시지들에서 첨부파일 S3 키들을 추출하는 함수"""
+    keys: list[str] = []
+    for msg in messages:
+        # 메시지 content에서 첨부파일 정보 추출 (JSON 파싱 필요시)
+        try:
+            if hasattr(msg, 'tool_message') and msg.tool_message:
+                artifact = msg.tool_message.tool_artifact
+                if artifact and isinstance(artifact, dict):
+                    # S3 키 추출 로직 (프로젝트에 맞게 수정 필요)
+                    s3_key = artifact.get('s3_key') or artifact.get('key')
+                    if s3_key:
+                        keys.append(s3_key)
+        except Exception:
+            # 파싱 실패시 무시
+            pass
+    return keys
+
+# --- 삭제 엔드포인트들 ---
+@router.delete("/messages/{message_id}")
+async def delete_message(
+    message_id: str,
+    hard: bool = Query(False, description="하드 삭제 여부 (True: 완전삭제, False: 소프트삭제)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """메시지 삭제 (소프트/하드 삭제 지원)"""
+    # 메시지 조회 및 권한 확인
+    message = db.query(ChatMessage).filter(ChatMessage.message_id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # 세션 소유자 확인
+    session = db.query(ChatSession).filter(ChatSession.id == message.session_id).first()
+    if not session or session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if hard:
+        # 하드 삭제: S3 파일도 함께 삭제
+        keys = _collect_attachment_keys([message])
+        if keys:
+            delete_s3_objects(DOCS_BUCKET, keys)
+        db.delete(message)
+    else:
+        # 소프트 삭제: is_deleted 플래그 설정 (향후 구현)
+        # message.is_deleted = True  # 현재 ChatMessage 모델에 is_deleted 필드가 없음
+        db.delete(message)  # 임시로 하드 삭제
+    
+    db.commit()
+    return {"ok": True, "message": "Message deleted successfully"}
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    hard: bool = Query(False, description="하드 삭제 여부"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """세션 삭제 (세션의 모든 메시지 포함)"""
+    # 세션 조회 및 권한 확인
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if hard:
+        # 하드 삭제: 세션의 모든 메시지와 S3 파일 삭제
+        messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).all()
+        keys = _collect_attachment_keys(messages)
+        if keys:
+            delete_s3_objects(DOCS_BUCKET, keys)
+        
+        # 메시지들 삭제 (CASCADE로 인해 자동 삭제되지만 명시적으로)
+        db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+        db.delete(session)
+    else:
+        # 소프트 삭제
+        session.is_deleted = True
+    
+    db.commit()
+    return {"ok": True, "message": "Session deleted successfully"}
+
+@router.delete("/sessions/{session_id}/messages")
+async def delete_older_messages_in_session(
+    session_id: str,
+    before: Optional[str] = Query(None, description="이 날짜 이전 메시지 삭제 (ISO8601 형식, 예: 2025-01-01T00:00:00Z)"),
+    keep_last: Optional[int] = Query(None, ge=0, description="최신 N개 메시지만 보존"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """세션 내 특정 조건의 오래된 메시지들 삭제"""
+    # 세션 권한 확인
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    deleted_count = 0
+    
+    if before:
+        # 특정 날짜 이전 메시지 삭제
+        try:
+            before_datetime = datetime.fromisoformat(before.replace('Z', '+00:00'))
+            messages_to_delete = db.query(ChatMessage).filter(
+                ChatMessage.session_id == session_id,
+                ChatMessage.timestamp < before_datetime
+            ).all()
+            deleted_count = len(messages_to_delete)
+            
+            for msg in messages_to_delete:
+                db.delete(msg)
+                
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use ISO8601 format.")
+    
+    elif keep_last is not None:
+        # 최신 N개만 보존하고 나머지 삭제
+        all_messages = db.query(ChatMessage).filter(
+            ChatMessage.session_id == session_id
+        ).order_by(ChatMessage.timestamp.desc()).all()
+        
+        if len(all_messages) > keep_last:
+            messages_to_delete = all_messages[keep_last:]
+            deleted_count = len(messages_to_delete)
+            
+            for msg in messages_to_delete:
+                db.delete(msg)
+    
+    else:
+        raise HTTPException(status_code=400, detail="Either 'before' or 'keep_last' parameter is required")
+    
+    db.commit()
+    return {"ok": True, "soft_deleted": deleted_count, "message": f"Deleted {deleted_count} messages"}

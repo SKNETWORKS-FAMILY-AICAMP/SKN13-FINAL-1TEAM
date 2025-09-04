@@ -49,5 +49,5 @@ session.add_all([admin_user, employee_user])
 session.commit()
 
 print("✅ 테스트 계정(관리자/사원) 생성 완료")
-print(f"관리자 로그인 → 사번: AUTH001 / 비밀번호: {admin_plain_password}")
-print(f"사원 로그인 → 사번: AUTH002 / 비밀번호: {employee_plain_password}")
+print(f"관리자 로그인 → 사번: ADM20250904 / 비밀번호: {admin_plain_password}")
+print(f"사원 로그인 → 사번: EMP20250904 / 비밀번호: {employee_plain_password}")

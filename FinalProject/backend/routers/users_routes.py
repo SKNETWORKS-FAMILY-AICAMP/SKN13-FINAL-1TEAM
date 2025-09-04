@@ -17,52 +17,83 @@ def get_password_hash(password):
 
 # Pydantic 모델: 사용자 생성 요청을 위한 데이터 모델
 class UserCreate(BaseModel):
+    unique_auth_number: str # 사원번호 (필수)
     username: str # 사용자 이름 (필수)
     email: str # 이메일 (필수)
-    is_active: Optional[bool] = True # 계정 활성화 여부 (기본값: True)
+    dept: Optional[str] = None # 부서 (선택적)
+    position: Optional[str] = None # 직급 (선택적)
     is_manager: Optional[bool] = False # 관리자 권한 여부 (기본값: False)
 
 # Pydantic 모델: 사용자 정보 업데이트 요청을 위한 데이터 모델
 class UserUpdate(BaseModel):
+    unique_auth_number: Optional[str] = None # 사원번호 (선택적)
     username: Optional[str] = None # 사용자 이름 (선택적)
     email: Optional[str] = None # 이메일 (선택적)
-    is_active: Optional[bool] = None # 계정 활성화 여부 (선택적)
+    dept: Optional[str] = None # 부서 (선택적)
+    position: Optional[str] = None # 직급 (선택적)
     is_manager: Optional[bool] = None # 관리자 권한 여부 (선택적)
 
 # 새로운 사용자 생성 엔드포인트 (관리자용)
 @router.post("/users", response_model=dict, status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    # 사원번호 중복 확인
+    db_user = db.query(User).filter(User.unique_auth_number == user.unique_auth_number).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Employee number already registered")
     # 사용자 이름 중복 확인
     db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    # 이메일 중복 확인
-    db_user = db.query(User).filter(User.email == user.email).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+    # 이메일 중복 확인 (이메일이 제공된 경우)
+    if user.email:
+        db_user = db.query(User).filter(User.email == user.email).first()
+        if db_user:
+            raise HTTPException(status_code=400, detail="Email already registered")
 
     # 비밀번호를 '1234'로 고정하여 해싱
     hashed_password = get_password_hash("1234")
     # 새 사용자 객체 생성
     new_user = User(
+        unique_auth_number=user.unique_auth_number,
         username=user.username,
         email=user.email,
+        dept=user.dept,
+        position=user.position,
         hashed_password=hashed_password,
-        is_active=user.is_active,
         is_manager=user.is_manager,
         must_change_password=True
     )
     db.add(new_user) # DB 세션에 추가
     db.commit() # 변경사항 커밋
     db.refresh(new_user) # DB에서 사용자 정보 새로고침
-    return {"message": "User created successfully", "id": new_user.id, "username": new_user.username, "email": new_user.email} # 성공 메시지 및 생성된 사용자 정보 반환
+    return {
+        "message": "User created successfully", 
+        "id": new_user.id, 
+        "unique_auth_number": new_user.unique_auth_number,
+        "username": new_user.username, 
+        "email": new_user.email,
+        "dept": new_user.dept,
+        "position": new_user.position
+    } # 성공 메시지 및 생성된 사용자 정보 반환
 
 # 모든 사용자 조회 엔드포인트 (관리자용)
 @router.get("/users", response_model=List[dict])
 def get_all_users(db: Session = Depends(get_db)):
     users = db.query(User).all() # 모든 사용자 조회
     # 사용자 목록 반환 (민감 정보 제외)
-    return [{"id": user.id, "username": user.username, "email": user.email, "is_active": user.is_active, "is_manager": user.is_manager} for user in users]
+    return [
+        {
+            "id": user.id, 
+            "unique_auth_number": user.unique_auth_number,
+            "username": user.username, 
+            "email": user.email, 
+            "dept": user.dept,
+            "position": user.position,
+            "is_manager": user.is_manager,
+            "created_at": user.created_at,
+            "last_login_at": user.last_login_at
+        } for user in users
+    ]
 
 # 특정 사용자 조회 엔드포인트 (관리자용)
 @router.get("/users/{user_id}", response_model=dict)
