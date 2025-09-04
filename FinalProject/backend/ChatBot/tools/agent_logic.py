@@ -5,7 +5,11 @@ from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from ..core.AgentState import AgentState
+from ...presigned import get_download_url
+import logging
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 class AgentTools:
     """Encapsulates the logical tools for the document search agent."""
     def __init__(self, llm: Any):
@@ -115,4 +119,15 @@ class AgentTools:
             "sources": unique_sources
         }
 
-    
+    @tool
+    def get_presigned_download_url(self, file_key: str) -> Dict[str, Any]:
+        """
+        파일 다운로드용 presigned URL 생성.
+        """
+        try:
+            logger.info(f"도구 호출 성공! 다운로드용 서명된 URL 생성 시도: {file_key}")
+            url = get_download_url(file_key)
+            return {"downloadUrl": url}
+        except Exception as e:
+            logger.error(f"error: {e}")
+            return {"error": str(e)}

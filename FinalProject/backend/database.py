@@ -68,6 +68,20 @@ class User(Base):
     documents = relationship("Document", back_populates="owner", passive_deletes=True)         # 사용자의 문서들
     events_created = relationship("Event", back_populates="creator", foreign_keys="Event.created_by")  # 사용자가 생성한 이벤트들
 
+class RefreshToken(Base):
+    """
+    사용자 리프레시 토큰을 관리하는 테이블
+    """
+    __tablename__ = "refresh_tokens"
+
+    id = Column(String(36), primary_key=True, index=True)  # JWT jti(UUID)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)  # 토큰이 폐기된 시간 (재사용 탐지용)
+    
+    # 관계
+    user = relationship("User", backref="refresh_tokens")
+
 class ChatSession(Base):
     """
     채팅 세션을 관리하는 테이블
