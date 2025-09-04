@@ -2,7 +2,8 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timezone
 from passlib.context import CryptContext
 
-from .database import User,engine  # get_db 대신 직접 세션 생성
+from database.base import engine  # get_db 대신 직접 세션 생성
+from database.models.user import User
 
 # bcrypt 해시 설정 (FastAPI 인증 로직과 동일하게 맞춤)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
