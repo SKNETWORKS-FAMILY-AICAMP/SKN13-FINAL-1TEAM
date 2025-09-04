@@ -1,6 +1,6 @@
 import React from "react";
 import useChangePassword from "./useChangePassword.js";
-import PasswordTextField from "../common/PasswordTextField.jsx";
+import PasswordTextField from "./PasswordTextField.jsx";
 import ConfirmModal from "../Modal/ConfirmModal.jsx";
 import HeaderBar from "../shared/HeaderBar.jsx";
 
