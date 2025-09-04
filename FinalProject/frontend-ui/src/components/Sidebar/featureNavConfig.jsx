@@ -22,8 +22,8 @@ export const employeeSections = [
     title: null,
     items: [
       { key: "docs",     label: "문서 목록" },   // FeatureWindow: defaultTab="docs"
-      { key: "docseditor",    label: "문서 편집" },  // FeatureWindow: defaultTab="docseditor"
       { key: "calendar", label: "캘린더" },     // FeatureWindow: defaultTab="calendar"
+      // { key: "forms",    label: "문서 작성" },  // FeatureWindow: defaultTab="forms" (label만 변경)
       { key: "mypage",   label: "마이페이지" }, // 공용
     ],
   },
