@@ -21,9 +21,10 @@ import React, { useState } from "react";
 // 기존 패널들 (네 프로젝트 구조에 맞춰 경로 유지)
 import FeatureHome from "./panels/FeatureHome";
 import FeatureDocs from "./panels/FeatureDocs";
-import FeatureCalendar from "./panels/calendar/FeatureCalendar";
+import FeatureCalendar from "./panels/FeatureCalendar";
 import FeatureMypage from "./panels/mypage/FeatureMypage";
 import FeatureEmployees from "./panels/admin/FeatureEmployees"
+import DocumentEditor from "./panels/DocumentEditor"
 
 export default function FeatureFrame({ defaultTab }) {
 
@@ -35,6 +36,7 @@ export default function FeatureFrame({ defaultTab }) {
   if (defaultTab === "employees") return <FeatureEmployees />  // 사원 관리 페이지
   // 사원용
   if (defaultTab === "docs") return <FeatureDocs />;  // 문서 관리 페이지
+  if (defaultTab === "docseditor") return <DocumentEditor/> // 문서 편집 페이지
   if (defaultTab === "calendar") return <FeatureCalendar />;  // 일정 관리 페이지
   
   // 공통

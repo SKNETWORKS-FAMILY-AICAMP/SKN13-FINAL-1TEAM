@@ -32,7 +32,7 @@ import React from "react";
  *  - 내부에서 defaultTab에 따라 "문서 목록 / 캘린더 / 문서 작성(forms) / 마이페이지"를 출력.
  *  - 즉, 사원 쪽은 라우팅 없이도 탭 전환으로 UI를 구성하는 컴포넌트 구조.
  */
-import FeatureFrame from "./FeatureFrame.jsx";
+import FeatureFrame from "../FeatureWindow/FeatureFrame.jsx";
 
 /** [관리자 전용] 사원관리 페이지
  *  - 팀원 구현 파일 위치에 맞춰 경로 조정 필요.
@@ -41,37 +41,37 @@ import FeatureFrame from "./FeatureFrame.jsx";
 import AdminPage from "./panels/admin/FeatureEmployees.jsx";
 
 export default function RoleRouter({ userType, activeKey }) {
-    /** 관리자(Admin) 분기
-     *  - 현재 요구사항: "사원 관리(employees)"와 "마이페이지(mypage)" 두 개만 노출.
-     *  - employees → AdminEmployeePage (라우팅 대상)
-     *  - mypage   → 공용 FeatureWindow의 mypage 탭 재사용
-     */
-    if (userType === "admin") {
-        if (activeKey === "employees") return <AdminPage />;
-        if (activeKey === "mypage") return <FeatureFrame defaultTab="mypage" />;
-        return <EmptyHint />;
-    } else if (userType === "employee") {
-        if (activeKey === "docs") return <FeatureFrame defaultTab="docs" />;
-        if (activeKey === "calendar")
-            return <FeatureFrame defaultTab="calendar" />;
-        if (activeKey === "mypage") return <FeatureFrame defaultTab="mypage" />;
-        // if (activeKey === "forms")    return <FeatureFrame defaultTab="forms" />; // "문서 작성"
-    }
-
-    /** 사원(User) 분기
-     *  - 요구사항: "문서 목록(docs) / 캘린더(calendar) / 문서 작성(forms) / 마이페이지(mypage)"
-     *  - key 값은 navconfig.js의 userSections와 1:1 매칭 필수.
-     */
-
-    /** 안전망: 연결되지 않은 메뉴 키 */
+  /** 관리자(Admin) 분기
+   *  - 현재 요구사항: "사원 관리(employees)"와 "마이페이지(mypage)" 두 개만 노출.
+   *  - employees → AdminEmployeePage (라우팅 대상)
+   *  - mypage   → 공용 FeatureWindow의 mypage 탭 재사용
+   */
+  if (userType === "admin") {
+    if (activeKey === "employees") return <AdminPage />;
+    if (activeKey === "mypage")   return <FeatureFrame defaultTab="mypage" />;
     return <EmptyHint />;
+  } else if (userType === "employee") {
+    if (activeKey === "docs")     return <FeatureFrame defaultTab="docs" />;
+    if (activeKey === "docseditor")     return <FeatureFrame defaultTab="docseditor" />;
+    if (activeKey === "calendar") return <FeatureFrame defaultTab="calendar" />;
+    if (activeKey === "mypage")   return <FeatureFrame defaultTab="mypage" />;
+  }
+
+  /** 사원(User) 분기
+   *  - 요구사항: "문서 목록(docs) / 캘린더(calendar) / 문서 작성(forms) / 마이페이지(mypage)"
+   *  - key 값은 navconfig.js의 userSections와 1:1 매칭 필수.
+   */
+  
+  
+  /** 안전망: 연결되지 않은 메뉴 키 */
+  return <EmptyHint />;
 }
 
 /** 빈 화면 안내 (UX 보조용) */
 function EmptyHint() {
-    return (
-        <div className="h-full flex items-center justify-center text-gray-500">
-            메뉴를 선택하세요
-        </div>
-    );
+  return (
+    <div className="h-full flex items-center justify-center text-gray-500">
+      메뉴를 선택하세요
+    </div>
+  );
 }
