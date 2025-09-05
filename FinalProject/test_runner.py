@@ -35,11 +35,18 @@ def test_imports():
         except ImportError as e:
             import_results.append((test_module, False, str(e)))
             print(f"[ERROR] {test_module} - 임포트 실패: {e}")
+            assert False, f"테스트 모듈 임포트 실패: {test_module} - {e}"
         except Exception as e:
             import_results.append((test_module, False, f"Unexpected error: {e}"))
             print(f"[WARN] {test_module} - 예상치 못한 오류: {e}")
+            assert False, f"예상치 못한 오류: {test_module} - {e}"
     
-    return import_results
+    # 모든 임포트가 성공했는지 확인
+    successful_imports = sum(1 for _, success, _ in import_results if success)
+    total_imports = len(import_results)
+    
+    print(f"[RESULT] 임포트 성공: {successful_imports}/{total_imports}")
+    assert successful_imports == total_imports, f"일부 모듈 임포트 실패: {successful_imports}/{total_imports}"
 
 def run_basic_test():
     """기본 테스트 실행"""
@@ -120,33 +127,38 @@ def main():
     print("\n" + "-" * 60)
     
     # 2. 임포트 확인
-    import_results = test_imports()
+    imports_ok = True
+    try:
+        test_imports()
+        print("[OK] 모든 테스트 모듈 임포트 성공")
+    except AssertionError as e:
+        imports_ok = False
+        print(f"[ERROR] 임포트 실패: {e}")
+    except Exception as e:
+        imports_ok = False
+        print(f"[ERROR] 예상치 못한 임포트 오류: {e}")
     
     print("\n" + "-" * 60)
     
     # 3. 기본 테스트 실행 (환경이 OK인 경우에만)
     test_ok = False
-    if env_ok:
+    if env_ok and imports_ok:
         test_ok = run_basic_test()
     else:
-        print("[SKIP] 환경 설정 문제로 테스트를 건너뜁니다.")
+        print("[SKIP] 환경 설정 또는 임포트 문제로 테스트를 건너뜁니다.")
     
     print("\n" + "=" * 60)
     print("최종 결과")
     print("=" * 60)
     
-    # 결과 요약
-    successful_imports = sum(1 for _, success, _ in import_results if success)
-    total_imports = len(import_results)
-    
     print(f"환경 설정: {'[OK]' if env_ok else '[ERROR] 문제 있음'}")
-    print(f"임포트 성공: {successful_imports}/{total_imports}")
+    print(f"모듈 임포트: {'[OK]' if imports_ok else '[ERROR] 문제 있음'}")
     print(f"기본 테스트: {'[OK] 성공' if test_ok else '[ERROR] 실패 또는 건너뜀'}")
     
-    if successful_imports == total_imports and (test_ok or not env_ok):
+    if env_ok and imports_ok and test_ok:
         print("\n[SUCCESS] 테스트 시스템이 준비되었습니다!")
-        if not env_ok:
-            print("[INFO] 환경 설정을 완료한 후 실제 테스트를 실행해보세요.")
+    elif env_ok and imports_ok:
+        print("\n[INFO] 테스트 시스템은 준비되었지만 기본 테스트에서 문제가 있습니다.")
     else:
         print("\n[WARN] 일부 문제가 발견되었습니다. 위의 오류를 확인해주세요.")
     
