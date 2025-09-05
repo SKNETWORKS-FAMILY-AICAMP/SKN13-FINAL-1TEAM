@@ -1,4 +1,4 @@
-// ✅ components/Login/LoginPage.jsx
+/// 수정 완료한 파일 // ✅ components/Login/LoginPage.jsx
 import React, { useState, useEffect } from "react";
 import HeaderBar from "../shared/HeaderBar";
 import { login } from "../services/authApi";
@@ -42,32 +42,48 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
             const data = await login(userId, password);
             console.log("로그인 성공:", data);
 
+            // ⬇️ 서버 권한과 현재 선택한 역할의 일치 여부 검증
+            const serverIsManager = !!data?.user_info?.is_manager;
+            const selectedIsManager = role === "admin";
+
+            // (사원 선택)인데 관리자 계정이면 거부
+            if (!selectedIsManager && serverIsManager) {
+                setErrorMessage("선택한 역할(사원)과 계정 권한(관리자)이 일치하지 않습니다.");
+                return;
+            }
+            // (관리자 선택)인데 사원 계정이면 거부
+            if (selectedIsManager && !serverIsManager) {
+                setErrorMessage("선택한 역할(관리자)과 계정 권한(사원)이 일치하지 않습니다.");
+                return;
+            }
+
             const userPayload = {
                 ...data.user_info,
-                role: data.user_info.is_manager ? "admin" : "employee",
+                role: serverIsManager ? "admin" : "employee",
                 mustChangePassword: data.must_change_password,
             };
 
-            // 토큰과 사용자 정보 저장
+            console.log(data);
+
+            // ⬇️ 검증 통과 후에만 토큰/유저 저장
             localStorage.setItem(TOKEN_KEY, data.access_token);
             saveUser(userPayload);
 
-            // 아이디 저장 로직
+            // 아이디 저장 로직 (선택한 역할 기준으로 저장)
             const key = userPayload.role === "admin" ? ADM_ID_KEY : EMP_ID_KEY;
             if (saveId) {
                 localStorage.setItem(key, userId);
+                console.log("success: ", key);
             } else {
                 localStorage.removeItem(key);
+                console.log("error!!!:", key);
             }
 
             // App으로 로그인 성공 전달
             onLoginSuccess(userPayload);
         } catch (error) {
             console.error("로그인 실패:", error);
-            setErrorMessage(
-                // error.response?.data?.detail ||
-                "아이디 또는 비밀번호가 올바르지 않습니다."
-            );
+            setErrorMessage("아이디 또는 비밀번호가 올바르지 않습니다.");
         }
     };
 

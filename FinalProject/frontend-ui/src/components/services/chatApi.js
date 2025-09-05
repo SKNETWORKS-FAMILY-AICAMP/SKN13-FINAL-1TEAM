@@ -11,9 +11,12 @@ async function request(path, { method = 'GET', headers = {}, body, timeout = 800
   const { signal, done } = withTimeout(timeout);
   const reqId = crypto.randomUUID();
   try {
+    const token = localStorage.getItem('userToken');
+    const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+
     const res = await fetch(`${BASE_URL}${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json', 'X-Request-ID': reqId, ...headers },
+      headers: { 'Content-Type': 'application/json', 'X-Request-ID': reqId, ...headers, ...authHeaders },
       body,
       signal,
     });
@@ -29,7 +32,7 @@ export async function getChatSessions({ page = 1, size = 30 } = {}) {
 }
 
 export async function getMessages(sessionId, { page = 1, size = 50 } = {}) {
-  const data = await request(`/chat/messages/${sessionId}?page=${page}&size=${size}`);
+  const data = await request(`/chat/${sessionId}/messages?page=${page}&size=${size}`);
   return data?.messages ?? [];
 }
 

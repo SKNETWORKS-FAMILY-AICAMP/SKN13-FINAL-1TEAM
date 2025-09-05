@@ -1,100 +1,100 @@
 /* ================================
-   Gantt(Fallback) 레이아웃/스크롤
-   - 기본 높이: 560px (변수로 제어)
-   - 세로 스크롤 가능
-   - 행 높이: 56px
+   CalendarView (weekday bar + rbc skin)
+================================ */
+
+/* 캘린더 래퍼 */
+.calendar-shell {
+  width: 100%;
+}
+
+/* 외부 요일 바 (가로 7등분, 한글) */
+.weekday-bar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  margin: 0 8px 10px 8px; /* 요일과 달력 사이 간격 */
+}
+
+.weekday-cell {
+  text-align: center;
+  font-weight: 600;
+  font-size: 12px;     /* 요구: 12px */
+  color: #727272;      /* 요구: #727272 */
+  padding: 4px 0;
+}
+
+/* 달력 카드 (바깥 보더 + 라운드만) */
+.calendar-card .rbc-month-view {
+  background: #fff;
+  border: 1px solid #e9eef5;
+  border-radius: 18px;
+  overflow: hidden; /* 모서리 라운드 유지 */
+  font-size: 14px;  /* 내부 폰트 14px */
+}
+
+/* 지난/다음달 날짜 색 연하게 */
+.custom-rbc .rbc-off-range-bg,
+.custom-rbc .rbc-off-range {
+  color: #c0c0c0;
+}
+
+/* 오늘 표시(선택 사항) */
+.custom-rbc .is-today .rbc-button-link {
+  font-weight: 700;
+}
+
+/* ================================
+   Gantt(Fallback) 기존 스타일
 ================================ */
 .fgantt {
-    --fg-height: 560px; /* 기본 높이 (필요 시 컴포넌트 props로 덮어씀) */
-    --fg-dayw: 110px; /* 일 칼럼 너비 */
-    --fg-row-h: 56px; /* 한 행 높이 */
-    background: #fff;
-    border: 1px solid #e9eef5;
-    border-radius: 18px;
-    overflow: hidden; /* 컨테이너 라운드 유지 */
+  --fg-height: 560px;
+  --fg-dayw: 110px;
+  --fg-row-h: 56px;
+  background: #fff;
+  border: 1px solid #e9eef5;
+  border-radius: 18px;
+  overflow: hidden;
 }
-
-/* 가로/세로 스크롤 컨테이너 */
 .fgantt-scroll {
-    max-height: var(--fg-height);
-    overflow-x: auto;
-    overflow-y: auto; /* ← 세로 스크롤 활성화 */
+  max-height: var(--fg-height);
+  overflow-x: auto;
+  overflow-y: auto;
 }
-
-/* 내부 전체 폭 */
-.fgantt-content {
-    position: relative;
-}
-
-/* 상단 날짜 헤더 */
+.fgantt-content { position: relative; }
 .fgantt-header {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: var(--fg-dayw);
-    border-bottom: 1px solid #f1f5f9;
-    background: #fff;
-    position: sticky;
-    top: 0;
-    z-index: 1;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--fg-dayw);
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
-
-/* 날짜 셀 */
 .fgantt-day {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 36px;
-    font-size: 12px;
-    color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  font-size: 12px;
+  color: #6b7280;
 }
-
-/* 막대들이 올라가는 캔버스 */
-.fgantt-canvas {
-    position: relative;
-    /* 높이는 JS에서 행 수만큼 인라인 style로 주입됨
-     (없더라도 min-height로 1행은 보이게) */
-    min-height: var(--fg-row-h);
-}
-
-/* 한 행(절대배치) */
-.fgantt-row {
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: var(--fg-row-h);
-}
-
-/* 바(일정) */
+.fgantt-canvas { position: relative; min-height: var(--fg-row-h); }
+.fgantt-row { position: absolute; left: 0; right: 0; height: var(--fg-row-h); }
 .fgantt-bar {
-    position: absolute;
-    top: 8px;
-    height: calc(var(--fg-row-h) - 16px);
-    border-radius: 9999px;
-    display: flex;
-    align-items: center;
-    padding: 0 10px;
-    font-size: 12px;
-    font-weight: 600;
-    background: #a5b4fc; /* 기본 색(보라톤) */
+  position: absolute;
+  top: 8px;
+  height: calc(var(--fg-row-h) - 16px);
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #a5b4fc;
 }
-
-/* 타입별 색(선택사항) */
-.bar--meeting {
-    background: #a5b4fc;
-}
-.bar--project {
-    background: #fcd34d;
-}
-.bar--training {
-    background: #fda4af;
-}
-.bar--etc {
-    background: #fde68a;
-}
-
-/* 바 텍스트 */
-.fgantt-bar-text {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+.bar--meeting { background: #a5b4fc; }
+.bar--project { background: #fcd34d; }
+.bar--training { background: #fda4af; }
+.bar--etc { background: #fde68a; }
+.fgantt-bar-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
