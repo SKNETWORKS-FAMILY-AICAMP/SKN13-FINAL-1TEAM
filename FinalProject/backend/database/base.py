@@ -3,6 +3,7 @@
 데이터베이스 기본 설정 및 공통 유틸리티
 """
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from datetime import datetime, timezone
 
 # SQLAlchemy Base 클래스

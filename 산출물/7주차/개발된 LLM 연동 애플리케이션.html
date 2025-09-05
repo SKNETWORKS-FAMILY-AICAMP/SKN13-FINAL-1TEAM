@@ -1,0 +1,262 @@
+<!DOCTYPE html><html><head>
+      <title>개발된 LLM 연동 애플리케이션</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      
+      <link rel="stylesheet" href="file:///c:\Users\Playdata\.cursor\extensions\shd101wyy.markdown-preview-enhanced-0.8.19-universal\crossnote\dependencies\katex\katex.min.css">
+      
+      
+      
+      
+      
+      <style>
+      code[class*=language-],pre[class*=language-]{color:#333;background:0 0;font-family:Consolas,"Liberation Mono",Menlo,Courier,monospace;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.4;-moz-tab-size:8;-o-tab-size:8;tab-size:8;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:.8em;overflow:auto;border-radius:3px;background:#f5f5f5}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal;background:#f5f5f5}.token.blockquote,.token.comment{color:#969896}.token.cdata{color:#183691}.token.doctype,.token.macro.property,.token.punctuation,.token.variable{color:#333}.token.builtin,.token.important,.token.keyword,.token.operator,.token.rule{color:#a71d5d}.token.attr-value,.token.regex,.token.string,.token.url{color:#183691}.token.atrule,.token.boolean,.token.code,.token.command,.token.constant,.token.entity,.token.number,.token.property,.token.symbol{color:#0086b3}.token.prolog,.token.selector,.token.tag{color:#63a35c}.token.attr-name,.token.class,.token.class-name,.token.function,.token.id,.token.namespace,.token.pseudo-class,.token.pseudo-element,.token.url-reference .token.variable{color:#795da3}.token.entity{cursor:help}.token.title,.token.title .token.punctuation{font-weight:700;color:#1d3e81}.token.list{color:#ed6a43}.token.inserted{background-color:#eaffea;color:#55a532}.token.deleted{background-color:#ffecec;color:#bd2c00}.token.bold{font-weight:700}.token.italic{font-style:italic}.language-json .token.property{color:#183691}.language-markup .token.tag .token.punctuation{color:#333}.language-css .token.function,code.language-css{color:#0086b3}.language-yaml .token.atrule{color:#63a35c}code.language-yaml{color:#183691}.language-ruby .token.function{color:#333}.language-markdown .token.url{color:#795da3}.language-makefile .token.symbol{color:#795da3}.language-makefile .token.variable{color:#183691}.language-makefile .token.builtin{color:#0086b3}.language-bash .token.keyword{color:#0086b3}pre[data-line]{position:relative;padding:1em 0 1em 3em}pre[data-line] .line-highlight-wrapper{position:absolute;top:0;left:0;background-color:transparent;display:block;width:100%}pre[data-line] .line-highlight{position:absolute;left:0;right:0;padding:inherit 0;margin-top:1em;background:hsla(24,20%,50%,.08);background:linear-gradient(to right,hsla(24,20%,50%,.1) 70%,hsla(24,20%,50%,0));pointer-events:none;line-height:inherit;white-space:pre}pre[data-line] .line-highlight:before,pre[data-line] .line-highlight[data-end]:after{content:attr(data-start);position:absolute;top:.4em;left:.6em;min-width:1em;padding:0 .5em;background-color:hsla(24,20%,50%,.4);color:#f4f1ef;font:bold 65%/1.5 sans-serif;text-align:center;vertical-align:.3em;border-radius:999px;text-shadow:none;box-shadow:0 1px #fff}pre[data-line] .line-highlight[data-end]:after{content:attr(data-end);top:auto;bottom:.4em}html body{font-family:'Helvetica Neue',Helvetica,'Segoe UI',Arial,freesans,sans-serif;font-size:16px;line-height:1.6;color:#333;background-color:#fff;overflow:initial;box-sizing:border-box;word-wrap:break-word}html body>:first-child{margin-top:0}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{line-height:1.2;margin-top:1em;margin-bottom:16px;color:#000}html body h1{font-size:2.25em;font-weight:300;padding-bottom:.3em}html body h2{font-size:1.75em;font-weight:400;padding-bottom:.3em}html body h3{font-size:1.5em;font-weight:500}html body h4{font-size:1.25em;font-weight:600}html body h5{font-size:1.1em;font-weight:600}html body h6{font-size:1em;font-weight:600}html body h1,html body h2,html body h3,html body h4,html body h5{font-weight:600}html body h5{font-size:1em}html body h6{color:#5c5c5c}html body strong{color:#000}html body del{color:#5c5c5c}html body a:not([href]){color:inherit;text-decoration:none}html body a{color:#08c;text-decoration:none}html body a:hover{color:#00a3f5;text-decoration:none}html body img{max-width:100%}html body>p{margin-top:0;margin-bottom:16px;word-wrap:break-word}html body>ol,html body>ul{margin-bottom:16px}html body ol,html body ul{padding-left:2em}html body ol.no-list,html body ul.no-list{padding:0;list-style-type:none}html body ol ol,html body ol ul,html body ul ol,html body ul ul{margin-top:0;margin-bottom:0}html body li{margin-bottom:0}html body li.task-list-item{list-style:none}html body li>p{margin-top:0;margin-bottom:0}html body .task-list-item-checkbox{margin:0 .2em .25em -1.8em;vertical-align:middle}html body .task-list-item-checkbox:hover{cursor:pointer}html body blockquote{margin:16px 0;font-size:inherit;padding:0 15px;color:#5c5c5c;background-color:#f0f0f0;border-left:4px solid #d6d6d6}html body blockquote>:first-child{margin-top:0}html body blockquote>:last-child{margin-bottom:0}html body hr{height:4px;margin:32px 0;background-color:#d6d6d6;border:0 none}html body table{margin:10px 0 15px 0;border-collapse:collapse;border-spacing:0;display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all}html body table th{font-weight:700;color:#000}html body table td,html body table th{border:1px solid #d6d6d6;padding:6px 13px}html body dl{padding:0}html body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:700}html body dl dd{padding:0 16px;margin-bottom:16px}html body code{font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:.85em;color:#000;background-color:#f0f0f0;border-radius:3px;padding:.2em 0}html body code::after,html body code::before{letter-spacing:-.2em;content:'\00a0'}html body pre>code{padding:0;margin:0;word-break:normal;white-space:pre;background:0 0;border:0}html body .highlight{margin-bottom:16px}html body .highlight pre,html body pre{padding:1em;overflow:auto;line-height:1.45;border:#d6d6d6;border-radius:3px}html body .highlight pre{margin-bottom:0;word-break:normal}html body pre code,html body pre tt{display:inline;max-width:initial;padding:0;margin:0;overflow:initial;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}html body pre code:after,html body pre code:before,html body pre tt:after,html body pre tt:before{content:normal}html body blockquote,html body dl,html body ol,html body p,html body pre,html body ul{margin-top:0;margin-bottom:16px}html body kbd{color:#000;border:1px solid #d6d6d6;border-bottom:2px solid #c7c7c7;padding:2px 4px;background-color:#f0f0f0;border-radius:3px}@media print{html body{background-color:#fff}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{color:#000;page-break-after:avoid}html body blockquote{color:#5c5c5c}html body pre{page-break-inside:avoid}html body table{display:table}html body img{display:block;max-width:100%;max-height:100%}html body code,html body pre{word-wrap:break-word;white-space:pre}}.markdown-preview{width:100%;height:100%;box-sizing:border-box}.markdown-preview ul{list-style:disc}.markdown-preview ul ul{list-style:circle}.markdown-preview ul ul ul{list-style:square}.markdown-preview ol{list-style:decimal}.markdown-preview ol ol,.markdown-preview ul ol{list-style-type:lower-roman}.markdown-preview ol ol ol,.markdown-preview ol ul ol,.markdown-preview ul ol ol,.markdown-preview ul ul ol{list-style-type:lower-alpha}.markdown-preview .newpage,.markdown-preview .pagebreak{page-break-before:always}.markdown-preview pre.line-numbers{position:relative;padding-left:3.8em;counter-reset:linenumber}.markdown-preview pre.line-numbers>code{position:relative}.markdown-preview pre.line-numbers .line-numbers-rows{position:absolute;pointer-events:none;top:1em;font-size:100%;left:0;width:3em;letter-spacing:-1px;border-right:1px solid #999;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}.markdown-preview pre.line-numbers .line-numbers-rows>span{pointer-events:none;display:block;counter-increment:linenumber}.markdown-preview pre.line-numbers .line-numbers-rows>span:before{content:counter(linenumber);color:#999;display:block;padding-right:.8em;text-align:right}.markdown-preview .mathjax-exps .MathJax_Display{text-align:center!important}.markdown-preview:not([data-for=preview]) .code-chunk .code-chunk-btn-group{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .status{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .output-div{margin-bottom:16px}.markdown-preview .md-toc{padding:0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link div,.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}.markdown-preview .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}.scrollbar-style::-webkit-scrollbar{width:8px}.scrollbar-style::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}.scrollbar-style::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode]){position:relative;width:100%;height:100%;top:0;left:0;margin:0;padding:0;overflow:auto}html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{position:relative;top:0;min-height:100vh}@media screen and (min-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em calc(50% - 457px + 2em)}}@media screen and (max-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{font-size:14px!important;padding:1em}}@media print{html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{display:none}}html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{position:fixed;bottom:8px;left:8px;font-size:28px;cursor:pointer;color:inherit;z-index:99;width:32px;text-align:center;opacity:.4}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] #sidebar-toc-btn{opacity:1}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc{position:fixed;top:0;left:0;width:300px;height:100%;padding:32px 0 48px 0;font-size:14px;box-shadow:0 0 4px rgba(150,150,150,.33);box-sizing:border-box;overflow:auto;background-color:inherit}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar{width:8px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc a{text-decoration:none}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc{padding:0 16px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link div,html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{left:300px;width:calc(100% - 300px);padding:2em calc(50% - 457px - 300px / 2);margin:0;box-sizing:border-box}@media screen and (max-width:1274px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{width:100%}}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .markdown-preview{left:50%;transform:translateX(-50%)}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .md-sidebar-toc{display:none}
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+      </style>
+      <!-- The content below will be included at the end of the <head> element. --><script type="text/javascript">
+  document.addEventListener("DOMContentLoaded", function () {
+    // your code here
+  });
+</script></head><body for="html-export">
+    
+    
+      <div class="crossnote markdown-preview  ">
+      
+<h3 id="1-프로젝트-개요">1. 프로젝트 개요 </h3>
+<ul>
+<li><strong>프로젝트명</strong>: CLICKA (Click + Assistant)</li>
+<li><strong>작성일</strong>: 2025.09.04</li>
+<li><strong>작성자</strong>: 남궁건우</li>
+<li><strong>버전</strong>: v1.0</li>
+</ul>
+<hr>
+<h3 id="2-시스템-개요">2. 시스템 개요 </h3>
+<ul>
+<li>
+<p><strong>목표</strong>: 단순 검색을 넘어 문서, 회의, 일정까지 통합 관리하는 올인원 AI 비서 구축. RAG + LLM 기반의 조직 내 정보 통합·자동화 시스템 제공.</p>
+</li>
+<li>
+<p><strong>기능</strong>:</p>
+<ul>
+<li><strong>문서 검색 및 분석</strong>: 내부 문서 벡터 검색 및 RAG 기반 질의응답</li>
+<li><strong>문서 편집</strong>: AI 에이전트를 통한 문서 내용 수정 및 편집</li>
+<li><strong>일정 관리</strong>: 캘린더 연동 및 이벤트 자동 생성</li>
+<li><strong>멀티 에이전트 시스템</strong>: 질문 유형별 전문 에이전트 라우팅</li>
+<li><strong>실시간 채팅</strong>: Electron 기반 데스크톱 애플리케이션</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3 id="3-시스템-아키텍처">3. 시스템 아키텍처 </h3>
+<ul>
+<li>
+<p><strong>백엔드 (FastAPI + LangGraph)</strong>:</p>
+<ul>
+<li><strong>언어</strong>: Python 3.11+</li>
+<li><strong>웹 프레임워크</strong>: FastAPI (비동기 처리, 자동 API 문서화)</li>
+<li><strong>AI 프레임워크</strong>: LangGraph (멀티 에이전트 시스템)</li>
+<li><strong>LLM</strong>: OpenAI GPT-4o (스트리밍 응답 지원)</li>
+<li><strong>벡터 데이터베이스</strong>: ChromaDB (문서 임베딩 저장)</li>
+<li><strong>관계형 데이터베이스</strong>: MySQL (사용자, 세션, 문서 메타데이터)</li>
+<li><strong>문서 처리</strong>: Docling (PDF/HWP → Markdown 변환)</li>
+</ul>
+</li>
+<li>
+<p><strong>프론트엔드 (Electron + React)</strong>:</p>
+<ul>
+<li><strong>데스크톱 프레임워크</strong>: Electron (크로스 플랫폼)</li>
+<li><strong>UI 프레임워크</strong>: React 18 + Vite</li>
+<li><strong>스타일링</strong>: TailwindCSS</li>
+<li><strong>상태 관리</strong>: React Hooks + Context API</li>
+<li><strong>실시간 통신</strong>: Server-Sent Events (SSE)</li>
+</ul>
+</li>
+<li>
+<p><strong>주요 화면 구성</strong>:</p>
+<ul>
+<li><strong>로그인/인증</strong>: JWT 기반 사용자 인증</li>
+<li><strong>채팅 인터페이스</strong>: 실시간 AI 대화 및 문서 검색</li>
+<li><strong>문서 편집기</strong>: Rich Text Editor (TipTap 기반)</li>
+<li><strong>캘린더</strong>: 일정 관리 및 이벤트 생성</li>
+<li><strong>관리자 패널</strong>: 사용자 및 시스템 관리</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3 id="4-llm-연동-및-벡터-데이터베이스-구현">4. LLM 연동 및 벡터 데이터베이스 구현 </h3>
+<ul>
+<li>
+<p><strong>연동 목적</strong>: 사용자의 질의에 대해 내부 문서·회의록·일정 데이터를 벡터 검색으로 불러오고, LLM이 이를 요약·응답.</p>
+</li>
+<li>
+<p><strong>구현 방식</strong>:</p>
+<ul>
+<li>
+<p><strong>문서 처리 파이프라인</strong>:</p>
+<ul>
+<li>PDF/HWP → Docling을 통한 Markdown 변환</li>
+<li>텍스트 청킹 및 임베딩 생성 (OpenAI Embeddings)</li>
+<li>ChromaDB에 벡터 저장 및 메타데이터 관리</li>
+</ul>
+</li>
+<li>
+<p><strong>멀티 에이전트 시스템</strong>:</p>
+<ul>
+<li><strong>RoutingAgent</strong>: 사용자 질문을 분석하여 적절한 전문 에이전트로 라우팅</li>
+<li><strong>DocumentSearchAgent</strong>: 내부 문서 검색 및 RAG 기반 질의응답</li>
+<li><strong>DocumentEditorAgent</strong>: 문서 편집 및 수정 작업 처리</li>
+<li><strong>GeneralChatAgent</strong>: 일반 대화 및 문서 내용 질문 처리</li>
+</ul>
+</li>
+<li>
+<p><strong>실시간 스트리밍</strong>: FastAPI StreamingResponse를 통한 실시간 응답 전송</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>실제 구현된 프롬프트 시스템</strong>:</p>
+<ul>
+<li><strong>라우팅 에이전트 프롬프트</strong>:</li>
+</ul>
+<pre data-role="codeBlock" data-info="python" class="language-python python"><code>system_prompt <span class="token operator">=</span> <span class="token string-interpolation"><span class="token string">f"""당신은 사용자의 질문을 가장 적절한 전문가에게 전달하는 라우팅 전문가입니다.
+정확한 라우팅 결정을 위해 전체 대화 기록을 반드시 고려해야 합니다.
+
+세 명의 전문가가 있습니다:
+1. DocumentSearchAgent: 재무 보고서, 감사 결과, 내부 규정 등 내부 문서 검색이 필요한 질문
+2. DocumentEditorAgent: 사용자가 현재 작업중인 문서의 내용을 수정, 변경, 추가, 삭제하는 명령
+3. GeneralChatAgent: 일반적인 대화, 인사, 혹은 위 두 전문가의 역할을 제외한 모든 질문
+
+오직 'DocumentSearchAgent', 'DocumentEditorAgent', 'GeneralChatAgent' 중 하나로만 대답하십시오.
+"""</span></span>
+</code></pre><ul>
+<li><strong>문서 검색 에이전트 프롬프트</strong>:</li>
+</ul>
+<pre data-role="codeBlock" data-info="python" class="language-python python"><code><span class="token keyword keyword-def">def</span> <span class="token function">get_document_search_system_prompt</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword keyword-return">return</span> <span class="token triple-quoted-string string">"""당신은 한국방송광고진흥공사의 내부 문서 검색 전문가입니다.
+    사용자의 질문에 대해 관련 문서를 검색하고, 정확하고 유용한 정보를 제공해야 합니다.
+    검색된 문서의 내용을 바탕으로 답변하며, 가능한 경우 원문 링크나 출처를 제공하세요."""</span>
+</code></pre><ul>
+<li><strong>문서 편집 에이전트 프롬프트</strong>:</li>
+</ul>
+<pre data-role="codeBlock" data-info="python" class="language-python python"><code><span class="token keyword keyword-def">def</span> <span class="token function">get_document_editor_system_prompt</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword keyword-return">return</span> <span class="token triple-quoted-string string">"""당신은 문서 편집 전문가입니다.
+    사용자가 제공한 문서 내용을 바탕으로 요청된 편집 작업을 수행합니다.
+    문서의 구조와 형식을 유지하면서 정확하게 편집하세요."""</span>
+</code></pre></li>
+</ul>
+<hr>
+<h3 id="5-예외-처리-및-보안">5. 예외 처리 및 보안 </h3>
+<ul>
+<li>
+<p><strong>예외 처리</strong>:</p>
+<ul>
+<li>파일 업로드시, 파일목록에서 전송실패시 안내 메시지 반환</li>
+<li>챗봇에서 기존 채팅 세션 삭제 실패시 안내메시지 반환</li>
+</ul>
+</li>
+<li>
+<p><strong>보안 관리</strong>:</p>
+<ul>
+<li>API 키 및 DB 접속 정보는 환경 변수로 관리</li>
+<li>JWT 인증, HTTPS 통신 적용</li>
+<li>사내 내부문서 접근 제한 고려 → 한국광고진흥공사 공공데이터 활용</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3 id="6-코드-모듈화-및-주석">6. 코드 모듈화 및 주석 </h3>
+<ul>
+<li>
+<p><strong>실제 모듈화 구조</strong>:</p>
+<ul>
+<li>
+<p><strong>백엔드 (FastAPI + LangGraph)</strong>:</p>
+<ul>
+<li><code>main.py</code> → FastAPI 애플리케이션 진입점</li>
+<li><code>ChatBot/agents/</code> → AI 에이전트 모듈
+<ul>
+<li><code>RoutingAgent.py</code> → 질문 분류 및 라우팅</li>
+<li><code>DocumentSearchAgent.py</code> → 문서 검색 전용 에이전트</li>
+<li><code>DocumentEditorAgent.py</code> → 문서 편집 전용 에이전트</li>
+<li><code>chat_agent.py</code> → 일반 대화 에이전트</li>
+</ul>
+</li>
+<li><code>ChatBot/tools/</code> → 에이전트 도구 모듈
+<ul>
+<li><code>retriever_tool.py</code> → 벡터 검색 도구</li>
+<li><code>editor_tool.py</code> → 문서 편집 도구</li>
+<li><code>agent_logic.py</code> → 에이전트 로직 도구</li>
+</ul>
+</li>
+<li><code>routers/</code> → API 라우터 모듈
+<ul>
+<li><code>users_routes.py</code> →  사원관리용 API</li>
+<li><code>chat_routes.py</code> → 채팅 API 엔드포인트</li>
+<li><code>document_routes.py</code> → 문서 관리 API</li>
+<li><code>auth_routes.py</code> → 인증 API</li>
+<li><code>calendar_routes.py</code> → 캘린더 API</li>
+</ul>
+</li>
+<li><code>database/</code> → SQLAlchemy 데이터베이스 모델</li>
+</ul>
+</li>
+<li>
+<p><strong>프론트엔드 (React + Electron)</strong>:</p>
+<ul>
+<li><code>src/components/</code> → React 컴포넌트
+<ul>
+<li><code>ChatWindow/</code> → 채팅 UI 컴포넌트</li>
+<li><code>FeatureWindow/</code> → 기능별 윈도우 컴포넌트</li>
+<li><code>services/</code> → API 통신 서비스</li>
+</ul>
+</li>
+<li><code>main.js</code> → Electron 메인 프로세스</li>
+<li><code>preload.js</code> → Electron 프리로드 스크립트</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>실제 주석 예시</strong>:</p>
+<pre data-role="codeBlock" data-info="python" class="language-python python"><code><span class="token comment"># 라우팅 에이전트 - 질문 분류 함수</span>
+<span class="token keyword keyword-def">def</span> <span class="token function">route_question</span><span class="token punctuation">(</span>state<span class="token punctuation">:</span> AgentState<span class="token punctuation">)</span> <span class="token operator">-</span><span class="token operator">&gt;</span> Literal<span class="token punctuation">[</span><span class="token string">"document_search"</span><span class="token punctuation">,</span> <span class="token string">"general_chat"</span><span class="token punctuation">,</span> <span class="token string">"document_edit"</span><span class="token punctuation">]</span><span class="token punctuation">:</span>
+    <span class="token triple-quoted-string string">"""
+    사용자의 질문을 분석하여 가장 적절한 전문가 에이전트로 라우팅한다.
+    
+    Args:
+        state: 현재 에이전트 상태 (메시지 히스토리, 문서 내용 등)
+    
+    Returns:
+        Literal: 라우팅할 에이전트 타입
+            - "document_search": 내부 문서 검색이 필요한 경우
+            - "document_edit": 문서 편집/수정이 필요한 경우  
+            - "general_chat": 일반 대화 또는 문서 내용 질문
+    """</span>
+</code></pre><pre data-role="codeBlock" data-info="javascript" class="language-javascript javascript"><code><span class="token comment">// 채팅 API 서비스 - 메시지 저장 함수</span>
+<span class="token keyword keyword-async">async</span> <span class="token keyword keyword-function">function</span> <span class="token function">saveMessage</span><span class="token punctuation">(</span><span class="token parameter"><span class="token punctuation">{</span> sessionId<span class="token punctuation">,</span> role<span class="token punctuation">,</span> content <span class="token punctuation">}</span></span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+  <span class="token doc-comment comment">/**
+   * 채팅 메시지를 백엔드에 저장한다.
+   * 
+   * <span class="token keyword keyword-@param">@param</span> <span class="token class-name"><span class="token punctuation">{</span>Object<span class="token punctuation">}</span></span> <span class="token parameter">params</span> - 메시지 저장 파라미터
+   * <span class="token keyword keyword-@param">@param</span> <span class="token class-name"><span class="token punctuation">{</span>string<span class="token punctuation">}</span></span> <span class="token parameter">params<span class="token punctuation">.</span>sessionId</span> - 채팅 세션 ID
+   * <span class="token keyword keyword-@param">@param</span> <span class="token class-name"><span class="token punctuation">{</span>string<span class="token punctuation">}</span></span> <span class="token parameter">params<span class="token punctuation">.</span>role</span> - 메시지 역할 (user/assistant)
+   * <span class="token keyword keyword-@param">@param</span> <span class="token class-name"><span class="token punctuation">{</span>string<span class="token punctuation">}</span></span> <span class="token parameter">params<span class="token punctuation">.</span>content</span> - 메시지 내용
+   * <span class="token keyword keyword-@returns">@returns</span> <span class="token class-name"><span class="token punctuation">{</span>Promise<span class="token punctuation">&lt;</span>Object<span class="token punctuation">&gt;</span><span class="token punctuation">}</span></span> 저장 결과
+   */</span>
+<span class="token punctuation">}</span>
+</code></pre></li>
+</ul>
+
+      </div>
+      
+      
+    
+    
+    
+    
+    
+    
+  
+    </body></html>
