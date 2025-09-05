@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+SQLAlchemy
+pymysql
+
+langchain
+langgraph
+langchain-openai
+langchain-chroma
+
+requests
+mysql-connector-python
+passlib[bcrypt]
+python-jose[cryptography]

@@ -150,6 +150,11 @@ export default function App() {
     //     console.log("[App] auto-login check ->", !!userRaw);
     //     setCurrentPage(userRaw ? "chat" : "login");
     // }, []);
+  useEffect(() => {
+    const userRaw = localStorage.getItem(USER_KEY);
+    console.log("[App] auto-login check ->", !!userRaw);
+    setCurrentPage(userRaw ? 'chat' : 'login');
+  }, []);
 
     // const handleLoginSuccess = (userData) => {
     //     console.log("[App] login success", userData);
