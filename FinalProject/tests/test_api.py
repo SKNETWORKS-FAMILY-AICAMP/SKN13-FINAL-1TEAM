@@ -178,7 +178,7 @@ class TestErrorHandling:
         headers = {"Content-Type": "application/json"}
         response = client.post(
             "/api/v1/auth/login",
-            data="invalid json",
+            content="invalid json",
             headers=headers
         )
         assert response.status_code in [400, 422]
