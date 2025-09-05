@@ -1,3 +1,4 @@
+
 /**
  * main.js
  * ------------------------------------------------------------------
@@ -5,21 +6,8 @@
  *  - Electron 메인 프로세스: 창 생성/제어, IPC 라우팅, FS/S3 유틸 등
  *  - [변경] 로그아웃 기능을 "명시 요청"으로만 브로드캐스트하도록 분리
  */
-
-require("dotenv").config();
-/**
- * main.js
- * ------------------------------------------------------------------
- * 목적:
- *  - Electron 메인 프로세스: 창 생성/제어, IPC 라우팅, FS/S3 유틸 등
- *  - [변경] 로그아웃 기능을 "명시 요청"으로만 브로드캐스트하도록 분리
- */
-
 require("dotenv").config();
 
-const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
-const path = require("path");
-const fs = require("fs");
 const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
