@@ -466,3 +466,209 @@ class TestDatabaseOperations:
         assert len(result.messages) == 1
         assert result.messages[0].content == "테스트 메시지"
 
+@pytest.mark.database
+class TestAdvancedDatabaseOperations:
+    """고급 데이터베이스 연산 테스트"""
+    
+    def test_bulk_user_operations(self, db_session):
+        """대량 사용자 작업 테스트"""
+        # 여러 사용자 생성
+        users_data = []
+        for i in range(5):
+            user = User(
+                unique_auth_number=f"BULK_TEST_{i:03d}",
+                username=f"bulkuser_{i}",
+                hashed_password=f"password_{i}",
+                email=f"bulk{i}@test.com",
+                is_active=True,
+                is_manager=False,
+                must_change_password=False,
+                created_at=datetime.now(timezone.utc)
+            )
+            users_data.append(user)
+            db_session.add(user)
+        
+        db_session.commit()
+        
+        # 생성된 사용자 수 확인
+        user_count = db_session.query(User).filter(
+            User.unique_auth_number.like("BULK_TEST_%")
+        ).count()
+        assert user_count == 5
+        
+        # 일괄 업데이트 시뮬레이션 (SQLAlchemy Core 방식)
+        for user in users_data:
+            user.is_manager = True
+        db_session.commit()
+        
+        # 업데이트 확인
+        manager_count = db_session.query(User).filter(
+            User.unique_auth_number.like("BULK_TEST_%"),
+            User.is_manager == True
+        ).count()
+        assert manager_count == 5
+    
+    def test_complex_queries(self, db_session):
+        """복합 쿼리 테스트"""
+        # 테스트 데이터 생성
+        user = User(
+            unique_auth_number="COMPLEX_TEST",
+            username="complexuser",
+            hashed_password="password",
+            email="complex@test.com",
+            is_active=True,
+            is_manager=False,
+            must_change_password=False,
+            created_at=datetime.now(timezone.utc)
+        )
+        db_session.add(user)
+        db_session.commit()
+        
+        # 여러 채팅 세션 생성
+        sessions = []
+        for i in range(3):
+            session = ChatSession(
+                id=f"complex-session-{i}",
+                user_id=user.id,
+                title=f"복합 테스트 세션 {i}",
+                is_deleted=False,
+                created_at=datetime.now(timezone.utc)
+            )
+            sessions.append(session)
+            db_session.add(session)
+        
+        db_session.commit()
+        
+        # 각 세션에 메시지 추가
+        for i, session in enumerate(sessions):
+            for j in range(2):  # 각 세션마다 2개씩 메시지
+                message = ChatMessage(
+                    session_id=session.id,
+                    role="user" if j % 2 == 0 else "assistant",
+                    content=f"메시지 {i}-{j}",
+                    timestamp=datetime.now(timezone.utc)
+                )
+                db_session.add(message)
+        
+        db_session.commit()
+        
+        # 복합 쿼리 실행
+        # 1. 사용자별 세션 수 조회
+        session_count = db_session.query(ChatSession).filter(
+            ChatSession.user_id == user.id,
+            ChatSession.is_deleted == False
+        ).count()
+        assert session_count == 3
+        
+        # 2. 사용자별 총 메시지 수 조회
+        total_messages = db_session.query(ChatMessage).join(ChatSession).filter(
+            ChatSession.user_id == user.id
+        ).count()
+        assert total_messages == 6  # 3 세션 × 2 메시지
+        
+        # 3. 특정 역할의 메시지만 조회
+        user_messages = db_session.query(ChatMessage).join(ChatSession).filter(
+            ChatSession.user_id == user.id,
+            ChatMessage.role == "user"
+        ).count()
+        assert user_messages == 3  # 각 세션마다 1개씩 user 메시지
+
+@pytest.mark.database
+class TestDatabaseConstraints:
+    """데이터베이스 제약조건 테스트"""
+    
+    def test_unique_constraints_advanced(self, db_session):
+        """고급 유니크 제약조건 테스트"""
+        # 첫 번째 이메일 템플릿 생성
+        template1 = EmailTemplate(
+            name="unique_test_template",
+            subject_tpl="테스트 제목",
+            body_tpl="테스트 본문",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
+        db_session.add(template1)
+        db_session.commit()
+        
+        # 같은 이름으로 두 번째 템플릿 생성 시도
+        template2 = EmailTemplate(
+            name="unique_test_template",  # 중복 이름
+            subject_tpl="다른 제목",
+            body_tpl="다른 본문",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
+        db_session.add(template2)
+        
+        # 유니크 제약조건 위반 예상
+        with pytest.raises(IntegrityError):
+            db_session.commit()
+    
+    def test_data_integrity(self, db_session):
+        """데이터 무결성 테스트"""
+        # 올바른 데이터로 문서 생성
+        document = Document(
+            id="integrity-test-doc",
+            owner_id=None,  # owner_id는 nullable
+            original_filename="test_integrity.pdf",
+            file_type="pdf",
+            original_file_path="/test/integrity.pdf",
+            markdown_file_path="/test/integrity.md",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
+        db_session.add(document)
+        db_session.commit()
+        
+        # 문서가 성공적으로 생성되었는지 확인
+        retrieved_doc = db_session.query(Document).filter(
+            Document.id == "integrity-test-doc"
+        ).first()
+        
+        assert retrieved_doc is not None
+        assert retrieved_doc.original_filename == "test_integrity.pdf"
+        assert retrieved_doc.owner_id is None
+
+@pytest.mark.database
+class TestDatabasePerformance:
+    """데이터베이스 성능 테스트"""
+    
+    def test_query_performance_basic(self, db_session):
+        """기본 쿼리 성능 테스트"""
+        import time
+        
+        # 적당한 수의 데이터 생성
+        users = []
+        for i in range(20):  # 테스트 환경에 맞는 적당한 수
+            user = User(
+                unique_auth_number=f"PERF_TEST_{i:03d}",
+                username=f"perfuser_{i}",
+                hashed_password=f"password_{i}",
+                email=f"perf{i}@test.com",
+                is_active=True,
+                is_manager=False,
+                must_change_password=False,
+                created_at=datetime.now(timezone.utc)
+            )
+            users.append(user)
+        
+        # 일괄 삽입 성능 측정
+        start_time = time.time()
+        db_session.add_all(users)
+        db_session.commit()
+        insert_time = time.time() - start_time
+        
+        # 삽입 시간이 합리적인 범위인지 확인 (5초 이내)
+        assert insert_time < 5.0
+        
+        # 조회 성능 측정
+        start_time = time.time()
+        result = db_session.query(User).filter(
+            User.unique_auth_number.like("PERF_TEST_%")
+        ).all()
+        query_time = time.time() - start_time
+        
+        # 조회 시간이 합리적인 범위인지 확인 (2초 이내)
+        assert query_time < 2.0
+        assert len(result) == 20
+

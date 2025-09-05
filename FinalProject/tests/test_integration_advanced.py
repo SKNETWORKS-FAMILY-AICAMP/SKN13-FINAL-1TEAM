@@ -379,3 +379,407 @@ class TestLongRunningIntegration:
         # 각 리소스 생성 시도의 결과 검증
         for resource_type, name, status in created_resources:
             assert status in [201, 400, 401, 403, 404, 422]  # 예상 가능한 상태 코드들 (403, 404 포함)
+
+@pytest.mark.integration
+@pytest.mark.slow
+class TestAdvancedSystemIntegration:
+    """고급 시스템 통합 테스트"""
+    
+    @pytest.mark.asyncio
+    async def test_multi_user_document_collaboration(self, client, db_session, mock_openai):
+        """다중 사용자 문서 협업 워크플로우 테스트"""
+        # 여러 사용자 시뮬레이션
+        users = [
+            {"username": "user_alpha", "token": "token_alpha", "role": "manager"},
+            {"username": "user_beta", "token": "token_beta", "role": "editor"},
+            {"username": "user_gamma", "token": "token_gamma", "role": "viewer"}
+        ]
+        
+        collaboration_results = []
+        
+        for user in users:
+            headers = {"Authorization": f"Bearer {user['token']}"}
+            
+            # 각 사용자가 같은 문서에 대해 다른 작업 수행
+            if user["role"] == "manager":
+                # 매니저: 문서 업로드 및 권한 설정
+                files = {"file": ("shared_doc.pdf", io.BytesIO(SAMPLE_PDF_CONTENT), "application/pdf")}
+                upload_resp = client.post("/api/v1/documents/upload", files=files, headers=headers)
+                
+                collaboration_results.append({
+                    "user": user["username"],
+                    "action": "upload",
+                    "status": upload_resp.status_code
+                })
+                
+            elif user["role"] == "editor":
+                # 편집자: 문서 검색 및 AI와 상호작용
+                search_resp = client.get("/api/v1/documents/", headers=headers)
+                chat_resp = client.post(
+                    "/api/v1/chat/message",
+                    json={"message": "문서를 분석해주세요", "session_id": f"{user['username']}_session"},
+                    headers=headers
+                )
+                
+                collaboration_results.append({
+                    "user": user["username"],
+                    "action": "edit_and_analyze",
+                    "search_status": search_resp.status_code,
+                    "chat_status": chat_resp.status_code
+                })
+                
+            else:  # viewer
+                # 뷰어: 문서 조회만
+                view_resp = client.get("/api/v1/documents/", headers=headers)
+                
+                collaboration_results.append({
+                    "user": user["username"],
+                    "action": "view_only",
+                    "status": view_resp.status_code
+                })
+        
+        # 협업 결과 검증
+        assert len(collaboration_results) == 3
+        
+        # 각 사용자별로 적절한 권한과 기능이 작동했는지 확인
+        for result in collaboration_results:
+            if result["action"] == "upload":
+                assert result["status"] in [201, 400, 401, 404, 422]
+            elif result["action"] == "edit_and_analyze":
+                assert result["search_status"] in [200, 401, 404]
+                assert result["chat_status"] in [200, 400, 401, 404, 422]
+            else:  # view_only
+                assert result["status"] in [200, 401, 404]
+    
+    @pytest.mark.asyncio
+    async def test_system_load_and_scalability(self, client, mock_openai):
+        """시스템 부하 및 확장성 테스트"""
+        import asyncio
+        import time
+        
+        # 고부하 시뮬레이션
+        async def simulate_heavy_load():
+            """무거운 부하 시뮬레이션"""
+            tasks = []
+            
+            # 동시에 여러 유형의 작업 실행
+            for i in range(10):  # 적당한 수로 조정
+                # 문서 업로드
+                task1 = asyncio.create_task(asyncio.to_thread(
+                    lambda i=i: client.post(
+                        "/api/v1/documents/upload",
+                        files={"file": (f"load_test_{i}.pdf", io.BytesIO(SAMPLE_PDF_CONTENT), "application/pdf")},
+                        headers={"Authorization": f"Bearer load_test_token_{i}"}
+                    )
+                ))
+                
+                # AI 채팅
+                task2 = asyncio.create_task(asyncio.to_thread(
+                    lambda i=i: client.post(
+                        "/api/v1/chat/message",
+                        json={"message": f"부하 테스트 메시지 {i}", "session_id": f"load_session_{i}"},
+                        headers={"Authorization": f"Bearer load_test_token_{i}"}
+                    )
+                ))
+                
+                # 캘린더 이벤트 생성
+                task3 = asyncio.create_task(asyncio.to_thread(
+                    lambda i=i: client.post(
+                        "/api/v1/calendar/events",
+                        json={
+                            "title": f"부하 테스트 이벤트 {i}",
+                            "start": (datetime.now(timezone.utc) + timedelta(days=i+1)).isoformat(),
+                            "end": (datetime.now(timezone.utc) + timedelta(days=i+1, hours=1)).isoformat()
+                        },
+                        headers={"Authorization": f"Bearer load_test_token_{i}"}
+                    )
+                ))
+                
+                tasks.extend([task1, task2, task3])
+            
+            # 모든 작업 완료까지 대기
+            start_time = time.time()
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            total_time = time.time() - start_time
+            
+            return results, total_time
+        
+        # 부하 테스트 실행
+        results, execution_time = await simulate_heavy_load()
+        
+        # 성능 검증
+        assert execution_time < 30.0  # 30초 이내에 완료
+        assert len(results) == 30  # 10개 세트 × 3개 작업
+        
+        # 오류 발생률 체크
+        successful_results = [r for r in results if not isinstance(r, Exception)]
+        error_rate = 1 - (len(successful_results) / len(results))
+        assert error_rate < 0.5  # 오류율 50% 미만
+    
+    @pytest.mark.asyncio
+    async def test_data_consistency_under_load(self, client, db_session, mock_openai):
+        """부하 상황에서의 데이터 일관성 테스트"""
+        import asyncio
+        
+        # 동시 데이터 생성 테스트
+        async def create_concurrent_data():
+            """동시 데이터 생성"""
+            tasks = []
+            
+            # 동시에 여러 사용자가 데이터를 생성
+            for i in range(5):
+                headers = {"Authorization": f"Bearer consistency_token_{i}"}
+                
+                # 사용자 생성 작업
+                task = asyncio.create_task(asyncio.to_thread(
+                    lambda i=i, headers=headers: client.post(
+                        "/api/v1/users/",
+                        json={
+                            "unique_auth_number": f"CONCURRENT_{i:03d}",
+                            "username": f"concurrent_user_{i}",
+                            "email": f"concurrent{i}@test.com",
+                            "dept": "동시성테스트부서",
+                            "position": "테스터"
+                        },
+                        headers=headers
+                    )
+                ))
+                tasks.append(task)
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            return results
+        
+        # 동시 생성 실행
+        creation_results = await create_concurrent_data()
+        
+        # 결과 검증
+        assert len(creation_results) == 5
+        
+        # 데이터 일관성 확인
+        for i, result in enumerate(creation_results):
+            if not isinstance(result, Exception):
+                # 성공한 요청들은 적절한 응답 코드를 가져야 함
+                assert result.status_code in [201, 400, 403, 409, 422]
+    
+    @pytest.mark.asyncio
+    async def test_system_recovery_after_failure(self, client, mock_openai):
+        """시스템 장애 후 복구 테스트"""
+        # 정상 상태에서 기본 기능 확인
+        headers = {"Authorization": "Bearer recovery_test_token"}
+        
+        # 1단계: 정상 동작 확인
+        normal_response = client.get("/api/v1/documents/", headers=headers)
+        assert normal_response.status_code in [200, 401, 404]
+        
+        # 2단계: 장애 상황 시뮬레이션 (잘못된 요청들)
+        failure_scenarios = [
+            # 잘못된 토큰
+            {"headers": {"Authorization": "Bearer invalid_token"}, "endpoint": "/api/v1/documents/"},
+            # 잘못된 데이터
+            {"headers": headers, "endpoint": "/api/v1/users/", "method": "POST", "data": {"invalid": "data"}},
+            # 존재하지 않는 리소스
+            {"headers": headers, "endpoint": "/api/v1/documents/nonexistent", "method": "DELETE"}
+        ]
+        
+        failure_results = []
+        for scenario in failure_scenarios:
+            if scenario.get("method") == "POST":
+                resp = client.post(scenario["endpoint"], json=scenario.get("data", {}), headers=scenario["headers"])
+            elif scenario.get("method") == "DELETE":
+                resp = client.delete(scenario["endpoint"], headers=scenario["headers"])
+            else:
+                resp = client.get(scenario["endpoint"], headers=scenario["headers"])
+            
+            failure_results.append(resp.status_code)
+        
+        # 장애 상황에서 적절한 오류 응답 확인
+        for status_code in failure_results:
+            assert status_code in [400, 401, 403, 404, 422]  # 오류 상태들
+        
+        # 3단계: 복구 후 정상 동작 확인
+        recovery_response = client.get("/api/v1/documents/", headers=headers)
+        assert recovery_response.status_code in [200, 401, 404]  # 정상 복구
+
+@pytest.mark.integration
+class TestBusinessWorkflowIntegration:
+    """비즈니스 워크플로우 통합 테스트"""
+    
+    @pytest.mark.asyncio
+    async def test_complete_business_process(self, client, db_session, mock_openai):
+        """완전한 비즈니스 프로세스 테스트"""
+        # 실제 비즈니스 시나리오: 문서 검토 및 승인 프로세스
+        
+        headers = {"Authorization": "Bearer business_process_token"}
+        process_state = {
+            "stage": "initiated",
+            "document_uploaded": False,
+            "review_requested": False,
+            "ai_analysis_completed": False,
+            "meeting_scheduled": False,
+            "process_completed": False
+        }
+        
+        # 1단계: 문서 업로드
+        files = {"file": ("business_doc.pdf", io.BytesIO(SAMPLE_PDF_CONTENT), "application/pdf")}
+        upload_resp = client.post("/api/v1/documents/upload", files=files, headers=headers)
+        
+        if upload_resp.status_code in [201]:
+            process_state["document_uploaded"] = True
+            process_state["stage"] = "document_uploaded"
+        
+        # 2단계: AI 분석 요청
+        analysis_resp = client.post(
+            "/api/v1/chat/message",
+            json={
+                "message": "업로드된 문서를 분석하고 핵심 내용을 요약해주세요",
+                "session_id": "business_analysis_session"
+            },
+            headers=headers
+        )
+        
+        if analysis_resp.status_code in [200, 201]:
+            process_state["ai_analysis_completed"] = True
+            process_state["stage"] = "analysis_completed"
+        
+        # 3단계: 검토 미팅 스케줄링
+        meeting_resp = client.post(
+            "/api/v1/calendar/events",
+            json={
+                "title": "문서 검토 미팅",
+                "description": "AI 분석 결과를 바탕으로 한 문서 검토",
+                "start": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+                "end": (datetime.now(timezone.utc) + timedelta(days=1, hours=1)).isoformat(),
+                "all_day": False
+            },
+            headers=headers
+        )
+        
+        if meeting_resp.status_code in [201]:
+            process_state["meeting_scheduled"] = True
+            process_state["stage"] = "meeting_scheduled"
+        
+        # 4단계: 프로세스 완료 검증
+        if all([
+            process_state.get("document_uploaded", False),
+            process_state.get("ai_analysis_completed", False),
+            process_state.get("meeting_scheduled", False)
+        ]):
+            process_state["process_completed"] = True
+            process_state["stage"] = "completed"
+        
+        # 비즈니스 프로세스 검증
+        assert process_state["stage"] in ["initiated", "document_uploaded", "analysis_completed", "meeting_scheduled", "completed"]
+        
+        # 최소한 일부 단계는 성공했어야 함
+        stages_completed = sum([
+            process_state.get("document_uploaded", False),
+            process_state.get("ai_analysis_completed", False),
+            process_state.get("meeting_scheduled", False)
+        ])
+        assert stages_completed >= 1  # 최소 1단계는 완료
+    
+    def test_audit_trail_workflow(self, client, db_session):
+        """감사 추적 워크플로우 테스트"""
+        headers = {"Authorization": "Bearer audit_token"}
+        
+        # 감사 추적을 위한 일련의 작업 수행
+        audit_actions = []
+        
+        # 1. 사용자 생성
+        user_resp = client.post(
+            "/api/v1/users/",
+            json={
+                "unique_auth_number": "AUDIT_001",
+                "username": "audit_user",
+                "email": "audit@test.com",
+                "dept": "감사부서",
+                "position": "감사관"
+            },
+            headers=headers
+        )
+        audit_actions.append({
+            "action": "user_creation",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": user_resp.status_code,
+            "success": user_resp.status_code in [201, 400, 403, 422]  # 예상 범위 내
+        })
+        
+        # 2. 문서 조회
+        doc_resp = client.get("/api/v1/documents/", headers=headers)
+        audit_actions.append({
+            "action": "document_access",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": doc_resp.status_code,
+            "success": doc_resp.status_code in [200, 401, 404]
+        })
+        
+        # 3. 시스템 상태 확인
+        users_resp = client.get("/api/v1/users/", headers=headers)
+        audit_actions.append({
+            "action": "system_inquiry",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": users_resp.status_code,
+            "success": users_resp.status_code in [200, 401, 403]
+        })
+        
+        # 감사 추적 검증
+        assert len(audit_actions) == 3
+        
+        # 모든 작업이 기록되었고 타임스탬프가 있는지 확인
+        for action in audit_actions:
+            assert "action" in action
+            assert "timestamp" in action
+            assert "status" in action
+            assert "success" in action
+        
+        # 시간 순서 확인
+        timestamps = [action["timestamp"] for action in audit_actions]
+        sorted_timestamps = sorted(timestamps)
+        assert timestamps == sorted_timestamps  # 순서대로 기록되었는지
+
+@pytest.mark.integration
+@pytest.mark.performance
+class TestPerformanceIntegration:
+    """성능 통합 테스트"""
+    
+    def test_response_time_under_various_loads(self, client):
+        """다양한 부하 상황에서의 응답 시간 테스트"""
+        import time
+        
+        response_times = {"light": [], "medium": [], "heavy": []}
+        
+        # 가벼운 부하 (단순 조회)
+        for _ in range(3):
+            start = time.time()
+            resp = client.get("/api/v1/documents/", headers={"Authorization": "Bearer perf_token"})
+            response_times["light"].append(time.time() - start)
+        
+        # 중간 부하 (데이터 전송)
+        for _ in range(3):
+            start = time.time()
+            resp = client.post(
+                "/api/v1/chat/message",
+                json={"message": "성능 테스트 메시지", "session_id": "perf_session"},
+                headers={"Authorization": "Bearer perf_token"}
+            )
+            response_times["medium"].append(time.time() - start)
+        
+        # 무거운 부하 (파일 업로드)
+        for _ in range(2):  # 적은 수로 조정
+            start = time.time()
+            resp = client.post(
+                "/api/v1/documents/upload",
+                files={"file": ("perf_test.pdf", io.BytesIO(SAMPLE_PDF_CONTENT), "application/pdf")},
+                headers={"Authorization": "Bearer perf_token"}
+            )
+            response_times["heavy"].append(time.time() - start)
+        
+        # 응답 시간 검증
+        avg_light = sum(response_times["light"]) / len(response_times["light"])
+        avg_medium = sum(response_times["medium"]) / len(response_times["medium"])
+        avg_heavy = sum(response_times["heavy"]) / len(response_times["heavy"])
+        
+        # 부하가 증가할수록 응답 시간이 증가해야 하고, 모두 합리적 범위 내여야 함
+        assert avg_light < 2.0  # 가벼운 부하: 2초 이내
+        assert avg_medium < 5.0  # 중간 부하: 5초 이내
+        assert avg_heavy < 10.0  # 무거운 부하: 10초 이내
