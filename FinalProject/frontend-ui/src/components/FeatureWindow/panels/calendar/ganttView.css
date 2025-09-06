@@ -1,0 +1,176 @@
+/* src/components/Calendar/ganttView.css */
+
+/* GSTC */
+.gstc-wrapper {
+    width: 100%;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+}
+.gstc-host .gstc__list {
+    display: none !important;
+}
+.gstc-host .gstc__chart {
+    margin-left: 0 !important;
+}
+.gstc-host .gstc__calendar-tick-inner {
+    color: #9aa3af;
+    font-weight: 600;
+    font-size: 12px;
+}
+.gstc-host .gstc__calendar-level--1 .gstc__calendar-tick-inner {
+    color: #a7a7b2;
+}
+.gstc-host .gstc__chart-timeline-grid-row,
+.gstc-host .gstc__chart-timeline-grid-row-lines {
+    border: 0 !important;
+}
+.gstc-host .gstc__chart-timeline-grid-vertical-lines-line {
+    opacity: 0.08;
+}
+.gstc-host .gstc__chart-timeline-items-row {
+    height: 44px;
+}
+.gstc-host .gstc__chart-timeline-items-row-item {
+    border: none !important;
+    height: 28px;
+    top: 8px !important;
+    border-radius: 9999px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+}
+.gstc-host .gstc__chart-timeline-items-row-item-label {
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.gstc-host .bar--project {
+    background: #f7cf85;
+    color: #1f2937;
+}
+.gstc-host .bar--meeting {
+    background: #9db9ff;
+    color: #1f2937;
+}
+.gstc-host .bar--work {
+    background: #9be7b0;
+    color: #1f2937;
+}
+.gstc-host .bar--training {
+    background: #f8b7b7;
+    color: #1f2937;
+}
+.gstc-host .bar--deadline {
+    background: #ffb6b6;
+    color: #1f2937;
+}
+.gstc-host .bar--etc {
+    background: #ffd77a;
+    color: #1f2937;
+}
+
+/* CSS-only fallback */
+.fgantt {
+    position: relative;
+    width: 100%;
+    --fg-dayw: 110px;
+    display: flex;
+    flex-direction: column;
+}
+.fgantt-scroll {
+    position: relative;
+    flex: 1 1 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+}
+.fgantt-content {
+    position: relative;
+    min-height: 100%;
+}
+.fgantt-header {
+    display: grid;
+    gap: 0;
+    padding: 10px 8px 6px 8px;
+    color: #a0a0a0;
+    font-weight: 600;
+    font-size: 12px;
+    user-select: none;
+}
+.fgantt-day {
+    text-align: center;
+}
+.fgantt-canvas {
+    position: relative;
+    height: 100%;
+    padding: 8px 8px 16px 8px;
+    background-image: repeating-linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0.06) 0,
+        rgba(0, 0, 0, 0.06) 1px,
+        transparent 1px,
+        transparent var(--fg-dayw)
+    );
+}
+.fgantt-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 40px;
+}
+.fgantt-bar {
+    position: absolute;
+    top: 6px;
+    height: 28px;
+    min-width: 110px;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+}
+.fgantt-bar-text {
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.fgantt .bar--project {
+    background: #f7cf85;
+    color: #1f2937;
+}
+.fgantt .bar--meeting {
+    background: #9db9ff;
+    color: #1f2937;
+}
+.fgantt .bar--work {
+    background: #9be7b0;
+    color: #1f2937;
+}
+.fgantt .bar--training {
+    background: #f8b7b7;
+    color: #1f2937;
+}
+.fgantt .bar--deadline {
+    background: #ffb6b6;
+    color: #1f2937;
+}
+.fgantt .bar--etc {
+    background: #ffd77a;
+    color: #1f2937;
+}

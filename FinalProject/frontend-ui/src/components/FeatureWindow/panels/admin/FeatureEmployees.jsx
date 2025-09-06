@@ -1,79 +1,67 @@
+// ✅ src/pages/AdminPage.jsx
 import React, { useMemo, useState, useEffect } from "react";
-// import HeaderBar from "../components/shared/HeaderBar";
-// import MainSidebar from "../components/Sidebar/MainSidebar";
 // import Logo from "../assets/sample_logo.svg";
 import EmployeeCreateModal from "../../../Modal/EmployeeCreateModal";
 import EmployeeEditModal from "../../../Modal/EmployeeEditModal";
-// 아이콘
-// import { FiMenu } from "react-icons/fi";    // 메뉴 열기 버튼
-import { FaSearch } from "react-icons/fa";  // 검색 아이콘
+import ConfirmModal from "../../../Modal/ConfirmModal.jsx";
+import useToast from "../../../shared/toast/useToast.js";
+
+import employeeApi from "../../../services/employeeApi.js"; // 경로 확인
+
+import { FaSearch } from "react-icons/fa"; // 검색 아이콘
 
 // 부서 list(임시)
 const DEPT_OPTIONS = ["인사부", "총무부", "개발부"];
 // 직급 list(임시)
 const RANK_OPTIONS = ["사원", "대리", "팀장"];
-// 사원 더미데이터(임시)
-const DUMMY_EMPLOYEE = [
-    {
-        id: 1,
-        name: "홍길동",
-        dept: "인사부",
-        rank: "팀장",
-        email: "hong1@company.com",
-        accountId: "230519875",
-        password: "rkcdj5v4esRd4q",
-        isAdmin: true,
-    },
-    {
-        id: 2,
-        name: "김영희",
-        dept: "총무부",
-        rank: "대리",
-        email: "kim2@company.com",
-        accountId: "180412334",
-        password: "mD7a2pQk91",
-        isAdmin: false,
-    },
-    {
-        id: 3,
-        name: "이철수",
-        dept: "개발부",
-        rank: "사원",
-        email: "lee3@company.com",
-        accountId: "200709556",
-        password: "Zx4n8vL0t",
-        isAdmin: false,
-    },
-    {
-        id: 4,
-        name: "박민수",
-        dept: "개발부",
-        rank: "대리",
-        email: "park4@company.com",
-        accountId: "190101888",
-        password: "qaT39kLm2",
-        isAdmin: false,
-    },
-    {
-        id: 5,
-        name: "최수정",
-        dept: "인사부",
-        rank: "사원",
-        email: "choi5@company.com",
-        accountId: "210305667",
-        password: "pR4c9yWb!",
-        isAdmin: true,
-    },
-];
 
-export default function AdminPage() {
-    // 사이드바 열림/닫힘
-    // const [collapsed, setCollapsed] = useState(true);
+/** API → UI 매핑 */
+function apiToUi(u) {
+    return {
+        id: u.id,
+        name: u.username ?? "",
+        email: u.email ?? "",
+        isAdmin: !!u.is_manager,
+        dept: u.dept ?? "",
+        rank: u.position ?? "",
+        accountId: u.usernum ?? "",
+        password: "",
+    };
+}
 
-    // 사원 리스트 상태 관리(등록 후 즉시 반영)(수정 필요 ??)
-    const [employees, setEmployees] = useState(DUMMY_EMPLOYEE);
+/** UI 생성 → API */
+function uiCreateToApi(payload) {
+    return {
+        username: payload.name,
+        email: payload.email,
+        is_manager: !!payload.isAdmin,
+        unique_auth_number: payload.accountId, // 이 부분을 수정
+        dept: payload.dept || null,
+        position: payload.rank || null,
+    };
+}
 
-    // 상단 필터/검색
+/** UI 수정 → API */
+function uiEditToApi(patch) {
+    const body = {};
+    if (patch.name !== undefined) body.username = patch.name;
+    if (patch.email !== undefined) body.email = patch.email;
+    if (patch.isAdmin !== undefined) body.is_manager = !!patch.isAdmin;
+    if (patch.accountId !== undefined)
+        body.unique_auth_number = patch.accountId;
+    if (patch.dept !== undefined) body.dept = patch.dept || null;
+    if (patch.rank !== undefined) body.position = patch.rank || null;
+    return body;
+}
+
+export default function FeatureEmployees() {
+    const toast = useToast();
+
+    const [employees, setEmployees] = useState([]); // 더미 제거
+    const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState("");
+
+    // 필터
     const [dept, setDept] = useState("");
     const [rank, setRank] = useState("");
     const [q, setQ] = useState("");
@@ -87,82 +75,43 @@ export default function AdminPage() {
         });
     }, [employees, dept, rank, q]);
 
-    // 복사 토스트(수정필요 - 컴포넌트화)
-    const [copiedMsg, setCopiedMsg] = useState("");
-    const copyCreds = async (u) => {
-        const text = `아이디:${u.accountId}\n비밀번호:${u.password}`;
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopiedMsg("사원 정보가 복사되었습니다.");
-            setTimeout(() => setCopiedMsg(""), 1400);
-        } catch {
-            alert("복사에 실패했습니다. 브라우저 권한을 확인하세요.");
-        }
-    };
-
-    // 사원 계정 등록/수정 Modal 열림/닫힘 상태 관리
+    // 모달 상태
     const [openAddModal, setOpenAddModal] = useState(false);
     const [openEditModal, setOpenEditModal] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState(null);
 
-    // 사원 계정 등록 Modal(수정필요)
-    const handleCreateSubmit = (payload) => {
-        // payload 예시:
-        // {
-        //   name: "홍길동",
-        //   department: "개발부",
-        //   position: "대리",
-        //   isAdmin: true,
-        //   userId: "hong123",
-        //   password: "pR4c9yWb!e",
-        //   email: "hong@company.com"
-        // }
-
-        // 방어적으로 정리
-        const clean = {
-            name: (payload.name || "").trim(),
-            dept: (payload.department || "").trim(), // 리스트에서 dept 필드 사용
-            rank: (payload.position || "").trim(), // 리스트에서 rank 필드 사용
-            isAdmin: !!payload.isAdmin,
-            accountId: (payload.userId || "").trim(), // 리스트에서 accountId 필드 사용
-            password: (payload.password || "").trim(),
-            email: (payload.email || "").trim(),
-        };
-
-        // employees 상태 업데이트
-        setEmployees((prev) => {
-            // accountId 중복 방지
-            if (prev.some((u) => u.accountId === clean.accountId)) {
-                console.warn("[사원 등록] 중복 accountId:", clean.accountId);
-                alert("이미 존재하는 아이디입니다.");
-                return prev;
-            }
-
-            const newUser = {
-                id: Date.now(), // 임시 고유 id
-                ...clean,
-            };
-
-            console.log(
-                "🔵 [사원 등록 완료] newUser:",
-                JSON.stringify(newUser, null, 2)
-            );
-            return [newUser, ...prev];
-        });
-
-        // 모달 닫기
-        setOpenAddModal(false);
-    };
-
-    // 드롭다운 오픈된 행의 id
+    // 더보기 드롭다운
     const [openMenuId, setOpenMenuId] = useState(null);
 
-    // 바깥 클릭/ESC로 닫기
+    // ★ 추가: 삭제 확인 모달 상태
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmTarget, setConfirmTarget] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false); // 중복 클릭 방지
+
+    // 목록 조회 (배열/객체 모두 수용) ★ 변경
+    const fetchEmployees = async () => {
+        setLoading(true);
+        setLoadError("");
+        try {
+            const res = await employeeApi.getEmployeeList();
+            const list = Array.isArray(res) ? res : res?.data ?? [];
+            setEmployees(list.map(apiToUi));
+        } catch (err) {
+            console.error("[AdminPage] getEmployeeList error:", err);
+            setLoadError(err?.message || "목록 로딩 중 오류가 발생했습니다.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchEmployees();
+    }, []);
+
+    // 바깥 클릭/ESC 닫기
     useEffect(() => {
         const close = () => setOpenMenuId(null);
-        const handleKey = (e) => {
-            if (e.key === "Escape") close();
-        };
+        const handleKey = (e) => e.key === "Escape" && close();
         document.addEventListener("mousedown", close);
         window.addEventListener("keydown", handleKey);
         return () => {
@@ -171,139 +120,172 @@ export default function AdminPage() {
         };
     }, []);
 
-    // 수정하기 클릭 이벤트
+    // 생성 ★ 변경: password 제거
+    const handleCreateSubmit = async (payloadFromModal) => {
+        const clean = {
+            name: (payloadFromModal.name || "").trim(),
+            dept: (payloadFromModal.department || "").trim(),
+            rank: (payloadFromModal.position || "").trim(),
+            isAdmin: !!payloadFromModal.isAdmin,
+            accountId: (payloadFromModal.userId || "").trim(),
+            email: (payloadFromModal.email || "").trim(),
+        };
+        try {
+            const body = uiCreateToApi(clean);
+            await employeeApi.postEmployee(body);
+            toast.success("사원 계정이 정상적으로 등록되었습니다.");
+            await fetchEmployees();
+            setOpenAddModal(false);
+        } catch (err) {
+            console.error("[사원 등록] 실패:", err);
+            toast.error("사원등록에 실패했습니다. 다시 시도해주세요.");
+        }
+    };
+
+    // 수정 모달 열기
     const handleRowActionEdit = (u) => {
-        console.log("🟡 수정하기 클릭:", u);
-        setSelectedEmployee(u); // 수정할 사원 정보 저장
-        setOpenMenuId(null); // 드롭다운 닫기
-        setOpenEditModal(true); // 수정 모달 열기
+        setSelectedEmployee(u);
+        setOpenMenuId(null);
+        setOpenEditModal(true);
     };
 
-    // 행에서 "삭제하기" 클릭 시 호출
+    // ★ 변경: 삭제 클릭 시 → 확인 모달만 오픈 (API 호출 X)
     const handleRowActionDelete = (u) => {
-        console.log("🗑️ 삭제하기 클릭:", u);
-
-        // TODO: 이후 백엔드 API 요청 추가 예정
-        setEmployees((prev) => prev.filter((e) => e.id !== u.id));
-
-        setOpenMenuId(null); // 드롭다운 닫기
+        setOpenMenuId(null);
+        setConfirmTarget(u); // 어떤 사원인지 저장
+        setConfirmOpen(true); // 확인 모달 열기
     };
 
-    // 수정 저장(콘솔 + 프론트 상태 반영)
-    const handleEditSubmit = (payload) => {
-        console.log(
-            "🟦 [사원 수정 저장] payload:",
-            JSON.stringify(payload, null, 2)
-        );
-        setEmployees((prev) =>
-            prev.map((e) =>
-                e.id === payload.id
-                    ? {
-                        ...e,
-                        name: payload.name,
-                        dept: payload.department,
-                        rank: payload.position,
-                        isAdmin: payload.isAdmin,
-                        accountId: payload.userId,
-                        password: payload.password,
-                        // email은 읽기전용이므로 유지 (payload.email 사용해도 같음)
-                    }
-                    : e
-            )
-        );
-        setOpenEditModal(false); // 저장 후 모달 닫기
+    // ★ 추가: 확인 모달에서 "삭제하기" 클릭 → 실제 삭제 API
+    const handleConfirmDelete = async () => {
+        if (!confirmTarget || isDeleting) return;
+        setIsDeleting(true);
+        try {
+            await employeeApi.deleteEmployee(confirmTarget.id);
+            setConfirmOpen(false);
+            setConfirmTarget(null);
+            toast.success("사원 정보가 삭제되었습니다.");
+            await fetchEmployees();
+        } catch (err) {
+            console.error("[사원 삭제] error:", err);
+            toast.success("사원 계정 삭제에 실패했습니다. 다시 시도해주세요.");
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    // 수정 저장 ★ 변경: password 제거
+    const handleEditSubmit = async (payloadFromModal) => {
+        const patch = {
+            id: payloadFromModal.id,
+            name: payloadFromModal.name,
+            dept: payloadFromModal.department,
+            rank: payloadFromModal.position,
+            isAdmin: payloadFromModal.isAdmin,
+            accountId: payloadFromModal.userId,
+            email: payloadFromModal.email,
+        };
+        try {
+            const body = uiEditToApi(patch);
+            await employeeApi.updateEmployee(patch.id, body);
+            alert("수정 사항이 저장되었습니다.");
+            await fetchEmployees();
+            setOpenEditModal(false);
+            setSelectedEmployee(null);
+        } catch (err) {
+            console.error("[사원 수정] error:", err);
+            alert(err?.message || "수정 중 오류가 발생했습니다.");
+        }
     };
 
     return (
-        // <div className="w-screen h-screen">
-        //     <div className="flex w-full h-[calc(100vh-40px)]">
-        //         {/* <MainSidebar
-        //             collapsed={collapsed}
-        //             onCollapse={() => {
-        //                 setCollapsed(true);
-        //             }}
-        //             pageType="admin"
-        //             logoSrc={Logo}
-        //         /> */}
-
-                
-        //     </div>
-        // </div>
         <section>
             <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
-                    {/* {collapsed && (
-                        <div onClick={() => setCollapsed(false)}>
-                            <FiMenu />
-                        </div>
-                    )} */}
-                    {/* 제목 */}
-                    <div className="flex items-center justify-between">
-                        <h1 className="text-2xl font-bold">사원 목록</h1>
-                        <button
-                            onClick={() => setOpenAddModal(true)}
-                            className="text-sm px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
+                {/* 제목 */}
+                <div className="flex items-center justify-between">
+                    <h1 className="text-2xl font-bold">사원 목록</h1>
+                    <button
+                        onClick={() => setOpenAddModal(true)}
+                        className="text-sm px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
+                    >
+                        사원 계정 추가
+                    </button>
+                </div>
+
+                {/* 상단 컨트롤 */}
+                <div className="mt-4 flex flex-wrap gap-3 items-center text-sm">
+                    <div className="text-gray-600">
+                        {loading
+                            ? "불러오는 중..."
+                            : loadError
+                            ? "목록 로딩 실패"
+                            : `총 ${filtered.length}명의 사원`}
+                    </div>
+                    <div className="ml-auto flex gap-3">
+                        <select
+                            value={dept}
+                            onChange={(e) => setDept(e.target.value)}
+                            className="text-sm h-9 px-3 rounded-md border border-gray-300 bg-white"
                         >
-                            사원 계정 추가
-                        </button>
-                    </div>
-
-                    {/* 상단 컨트롤 */}
-                    <div className="mt-4 flex flex-wrap gap-3 items-center text-sm">
-                        <div className="text-gray-600">
-                            총 {filtered.length}명의 사원
-                        </div>
-                        <div className="ml-auto flex gap-3">
-                            <select
-                                value={dept}
-                                onChange={(e) => setDept(e.target.value)}
-                                className="text-sm h-9 px-3 rounded-md border border-gray-300 bg-white"
-                            >
-                                <option value="">부서 선택</option>
-                                {DEPT_OPTIONS.map((d) => (
-                                    <option key={d} value={d}>
-                                        {d}
-                                    </option>
-                                ))}
-                            </select>
-                            <select
-                                value={rank}
-                                onChange={(e) => setRank(e.target.value)}
-                                className="text-sm h-9 px-3 rounded-md border border-gray-300 bg-white"
-                            >
-                                <option value="">직급 선택</option>
-                                {RANK_OPTIONS.map((r) => (
-                                    <option key={r} value={r}>
-                                        {r}
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    value={q}
-                                    onChange={(e) => setQ(e.target.value)}
-                                    placeholder="검색할 사원 이름을 입력하세요"
-                                    className="text-sm h-9 w-[260px] pl-9 pr-3 rounded-md border border-gray-300"
-                                />
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                                    <FaSearch />
-                                </span>
-                            </div>
+                            <option value="">부서 선택</option>
+                            {DEPT_OPTIONS.map((d) => (
+                                <option key={d} value={d}>
+                                    {d}
+                                </option>
+                            ))}
+                        </select>
+                        <select
+                            value={rank}
+                            onChange={(e) => setRank(e.target.value)}
+                            className="text-sm h-9 px-3 rounded-md border border-gray-300 bg-white"
+                        >
+                            <option value="">직급 선택</option>
+                            {RANK_OPTIONS.map((r) => (
+                                <option key={r} value={r}>
+                                    {r}
+                                </option>
+                            ))}
+                        </select>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                value={q}
+                                onChange={(e) => setQ(e.target.value)}
+                                placeholder="검색할 사원 이름을 입력하세요"
+                                className="text-sm h-9 w-[260px] pl-9 pr-3 rounded-md border border-gray-300"
+                            />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                                <FaSearch />
+                            </span>
                         </div>
                     </div>
+                </div>
 
-                    {/* 컬럼 헤더 */}
-                    <div className="mt-6 grid grid-cols-[56px_1.2fr_1fr_1fr_2fr] px-2 text-sm text-[#B1B1B1]">
-                        <div>#</div>
-                        <div>이름</div>
-                        <div>부서</div>
-                        <div>직급</div>
-                        <div>이메일</div>
-                    </div>
+                {/* 컬럼 헤더 */}
+                <div className="mt-6 grid grid-cols-[56px_1.2fr_1fr_1fr_2fr] px-2 text-sm text-[#B1B1B1]">
+                    <div>#</div>
+                    <div>이름</div>
+                    <div>부서</div>
+                    <div>직급</div>
+                    <div>이메일</div>
+                </div>
 
-                    {/* 데이터 행 */}
-                    <div className="mt-2 space-y-2">
-                        {filtered.map((u, idx) => (
+                {/* 데이터 행 */}
+                <div className="mt-2 space-y-2">
+                    {loadError && (
+                        <div className="text-sm text-red-600 p-4 border rounded-md">
+                            {loadError}
+                        </div>
+                    )}
+                    {!loading && !loadError && filtered.length === 0 && (
+                        <div className="text-sm text-gray-500 p-4 border rounded-md">
+                            표시할 사원이 없습니다.
+                        </div>
+                    )}
+
+                    {!loading &&
+                        !loadError &&
+                        filtered.map((u, idx) => (
                             <div
                                 key={u.id}
                                 className="grid grid-cols-[56px_1.2fr_1fr_1fr_2fr] items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 h-12 hover:shadow-sm"
@@ -321,46 +303,10 @@ export default function AdminPage() {
                                     {u.rank}
                                 </div>
 
-                                {/* 이메일 + 아이콘 */}
+                                {/* 이메일 + 더보기 */}
                                 <div className="text-sm text-gray-700 flex items-center justify-between">
                                     <span className="truncate">{u.email}</span>
-                                    <span className="ml-3 shrink-0 flex items-center gap-1">
-                                        {/* 복사 버튼 */}
-                                        <button
-                                            onClick={() => copyCreds(u)}
-                                            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
-                                            aria-label="계정정보 복사"
-                                            title="계정정보 복사"
-                                        >
-                                            <svg
-                                                width="18"
-                                                height="18"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                            >
-                                                <rect
-                                                    x="9"
-                                                    y="9"
-                                                    width="10"
-                                                    height="12"
-                                                    rx="2"
-                                                    stroke="currentColor"
-                                                    strokeWidth="1.6"
-                                                />
-                                                <rect
-                                                    x="5"
-                                                    y="3"
-                                                    width="10"
-                                                    height="12"
-                                                    rx="2"
-                                                    stroke="currentColor"
-                                                    strokeWidth="1.6"
-                                                    opacity="0.6"
-                                                />
-                                            </svg>
-                                        </button>
-
-                                        {/* 더보기 버튼 & 드롭다운 */}
+                                    <span className="ml-3 shrink-0 flex items-center">
                                         <div className="relative">
                                             <button
                                                 onMouseDown={(e) =>
@@ -410,12 +356,12 @@ export default function AdminPage() {
                                                         onMouseDown={(e) =>
                                                             e.stopPropagation()
                                                         }
-                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-red-600"
                                                         onClick={() =>
                                                             handleRowActionDelete(
                                                                 u
                                                             )
-                                                        }
+                                                        } // ★ 변경: 여기서는 모달만 띄움
                                                     >
                                                         삭제하기
                                                     </button>
@@ -426,37 +372,56 @@ export default function AdminPage() {
                                 </div>
                             </div>
                         ))}
-                    </div>
-
-                    {/* 복사 토스트 */}
-                    {copiedMsg && (
-                        <div className="fixed bottom-6 right-6 px-4 py-2 text-sm rounded-md shadow bg-[#A8A8A8]/[0.72] text-white">
-                            {copiedMsg}
-                        </div>
-                    )}
-
-                    {/* 사원 계정 등록 모달 */}
-                    <EmployeeCreateModal
-                        isOpen={openAddModal}
-                        onClose={() => setOpenAddModal(false)}
-                        onSubmit={handleCreateSubmit}
-                        deptOptions={DEPT_OPTIONS}
-                        rankOptions={RANK_OPTIONS}
-                    />
-
-                    {/* 사원 계정 수정 모달 */}
-                    <EmployeeEditModal
-                        isOpen={openEditModal}
-                        onClose={() => {
-                            setOpenEditModal(false);
-                            setSelectedEmployee(null);
-                        }}
-                        onSubmit={handleEditSubmit}
-                        employee={selectedEmployee}
-                        deptOptions={DEPT_OPTIONS}
-                        rankOptions={RANK_OPTIONS}
-                    />
                 </div>
+
+                {/* 사원 계정 등록 모달 */}
+                <EmployeeCreateModal
+                    isOpen={openAddModal}
+                    onClose={() => setOpenAddModal(false)}
+                    onSubmit={handleCreateSubmit}
+                    deptOptions={DEPT_OPTIONS}
+                    rankOptions={RANK_OPTIONS}
+                />
+
+                {/* 사원 계정 수정 모달 */}
+                <EmployeeEditModal
+                    isOpen={openEditModal}
+                    onClose={() => {
+                        setOpenEditModal(false);
+                        setSelectedEmployee(null);
+                    }}
+                    onSubmit={handleEditSubmit}
+                    employee={selectedEmployee}
+                    deptOptions={DEPT_OPTIONS}
+                    rankOptions={RANK_OPTIONS}
+                />
+
+                {/* ★ 추가: 삭제 확인 모달 (Tailwind로 요청 이미지처럼 구성) */}
+                <ConfirmModal
+                    open={confirmOpen}
+                    onClose={() => {
+                        if (!isDeleting) {
+                            setConfirmOpen(false);
+                            setConfirmTarget(null);
+                        }
+                    }}
+                    title="이 사원 계정을 삭제하시겠습니까?" // 18px bold는 컴포넌트 내부 스타일로 처리됨
+                    content="삭제한 계정은 복구할 수 없습니다. 정말로 삭제하시겠습니까?"
+                    cancelText="취소"
+                    confirmText={isDeleting ? "삭제 중..." : "삭제하기"}
+                    onCancel={() => {
+                        if (!isDeleting) {
+                            setConfirmOpen(false);
+                            setConfirmTarget(null);
+                        }
+                    }}
+                    onConfirm={handleConfirmDelete}
+                    confirmVariant="danger" // 빨간 버튼
+                    align="center" // 버튼 가운데 정렬 (이미지와 동일)
+                    closeOnEsc={!isDeleting}
+                    disableBackdropClick={true}
+                />
+            </div>
         </section>
     );
 }
