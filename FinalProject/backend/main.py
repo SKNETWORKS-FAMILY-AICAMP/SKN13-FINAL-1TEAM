@@ -13,11 +13,13 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:5173",  # 프론트엔드 개발 서버
+    "http://localhost:3000",  # 추가 개발 포트
+    "*"  # 개발 환경에서는 모든 origin 허용
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # 개발 환경에서는 모든 origin 허용
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

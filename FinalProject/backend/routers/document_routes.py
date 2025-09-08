@@ -296,27 +296,27 @@ async def create_presigned_url(
         )
 
 @router.post("/export/docx")
-async def convert_html_to_docx(
-    request: HTMLToDocxRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """
-    순수 HTML을 DOCX로 변환하는 엔드포인트
-    DocumentEditor에서 사용
-    """
-    safe_filename = request.filename.strip()
+async def export_document_as_docx(req: ExportDocxRequest, request: Request):
+    print("--- Raw body ---")
+    raw_body = await request.body()
+    print(raw_body.decode())
+
+    print(f"--- Parsed html_content length: {len(req.html)} ---")
+    print(f"--- Parsed filename: {req.filename} ---")
+
+    safe_filename = req.filename.strip()
     if not safe_filename.endswith(".docx"):
         safe_filename += ".docx"
-
+    
     with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
         temp_filepath = temp_file.name
 
     doc_title = os.path.splitext(safe_filename)[0]
-    success = convert_html_to_docx(request.html, temp_filepath, title=doc_title)
+    success = convert_html_to_docx(req.html, temp_filepath, title=doc_title)
 
     if not success:
         raise HTTPException(status_code=500, detail="Failed to convert HTML to DOCX.")
-
+    
     return FileResponse(
         path=temp_filepath,
         filename=safe_filename,
