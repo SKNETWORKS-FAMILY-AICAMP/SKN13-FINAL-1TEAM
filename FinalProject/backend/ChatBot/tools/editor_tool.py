@@ -244,27 +244,27 @@ def run_document_edit(user_command: str, document_content: str) -> str:
     최종적으로 수정된 HTML 문서 내용을 반환해야 합니다.
     """
 
-    response = llm_with_internal_tools.invoke(
-        messages=[
-            {"role": "system", "content": EDITOR_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt_content}
-        ]
-    )
+    response = llm_with_internal_tools.invoke([
+        {"role": "system", "content": EDITOR_SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt_content}
+    ])
 
     # GPT의 응답이 Tool Call이면 Tool을 실행하고 결과를 반환
     if response.tool_calls:
         for tool_call in response.tool_calls:
             if tool_call["name"] == "edit_html_document":
-                return edit_html_document(
-                    document_content=document_content,
-                    instruction=tool_call["args"]["instruction"]
-                )
+                # invoke 메서드 사용하여 도구 호출
+                return edit_html_document.invoke({
+                    "document_content": document_content,
+                    "instruction": tool_call["args"]["instruction"]
+                })
             elif tool_call["name"] == "replace_text_in_document":
-                return replace_text_in_document(
-                    document_content=document_content,
-                    old_text=tool_call["args"]["old_text"],
-                    new_text=tool_call["args"]["new_text"]
-                )
+                # invoke 메서드 사용하여 도구 호출
+                return replace_text_in_document.invoke({
+                    "document_content": document_content,
+                    "old_text": tool_call["args"]["old_text"],
+                    "new_text": tool_call["args"]["new_text"]
+                })
     
     # Tool Call이 아니면 GPT의 직접 응답 (수정된 HTML)을 반환
     return response.content
