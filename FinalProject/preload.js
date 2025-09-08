@@ -97,12 +97,22 @@ const fsBridge = {
   sendDocumentUpdate: (content) => ipcRenderer.send("document:sendUpdate", content),
 };
 
+/* S3 공유 브리지 */
+const s3SharedBridge = {
+  list: (prefix = "") => ipcRenderer.invoke("s3shared:list", { prefix }),
+  downloadAndOpen: (key, saveAs) => ipcRenderer.invoke("s3shared:downloadAndOpen", { key, saveAs }),
+  upload: (filePath, key) => ipcRenderer.invoke("s3shared:upload", { filePath, key }),
+  delete: (key) => ipcRenderer.invoke("s3shared:delete", { key }),
+};
+
 /* 전역 노출 */
 contextBridge.exposeInMainWorld("electron", electronAPI);
 contextBridge.exposeInMainWorld("auth", authAPI);
 contextBridge.exposeInMainWorld("fsBridge", fsBridge);
+contextBridge.exposeInMainWorld("s3Shared", s3SharedBridge);
 
 Object.freeze(electronAPI);
 Object.freeze(electronAPI.ipcRenderer);
 Object.freeze(authAPI);
 Object.freeze(fsBridge);
+Object.freeze(s3SharedBridge);

@@ -6,11 +6,170 @@
  *  - Electron 메인 프로세스: 창 생성/제어, IPC 라우팅, FS/S3 유틸 등
  *  - [변경] 로그아웃 기능을 "명시 요청"으로만 브로드캐스트하도록 분리
  */
+//=================================문서 목록 S3연결=========================================
 require("dotenv").config();
+const fs = require("node:fs");
+const path = require("node:path");
+const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { pipeline } = require("node:stream");
+const { promisify } = require("node:util");
+const pipe = promisify(pipeline);
 
-const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
-const path = require("path");
-const fs = require("fs");
+// 환경변수 또는 기본값
+const AWS_REGION = process.env.AWS_REGION || "ap-northeast-2";
+const S3_BUCKET  = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || "your-bucket-name";
+const S3_ROOT    = process.env.S3_ROOT    || "documents/";   // 공유 루트 prefix
+
+// ─────────────────────────────────────────────────────────────
+// (신규) 공유 버킷 전용 환경변수
+//   - 기존 AWS_S3_BUCKET(=S3_BUCKET)은 건드리지 않음(레거시/다른 기능용)
+//   - 문서목록의 공유폴더(S3)만 S3_SHARED_BUCKET/S3_SHARED_ROOT 사용
+// ─────────────────────────────────────────────────────────────
+const S3_SHARED_BUCKET = process.env.S3_SHARED_BUCKET || "";
+const S3_SHARED_ROOT = (process.env.S3_SHARED_ROOT || "")
+  .replace(/^\/+/, "")
+  .replace(/\/\/+/g, "/");   // "documents/" 등 허용(빈 값이면 루트)
+
+const s3 = new S3Client({ region: AWS_REGION });
+
+// 로컬 하드코딩 다운로드 경로 (열기 시 여기에 저장 후 OS로 열기)
+const { app, ipcMain, shell, BrowserWindow, Menu, dialog } = require("electron");
+const LOCAL_DOWNLOAD_DIR = path.join(app.getPath("documents"), "S3-Shared-Downloads");
+async function ensureDir(p) { await fs.promises.mkdir(p, { recursive: true }).catch(() => {}); }
+function normPrefix(p) {
+  if (!p) return S3_ROOT;
+  if (!p.startsWith(S3_ROOT)) return (S3_ROOT + p).replaceAll("//", "/");
+  return p.endsWith("/") ? p : `${p}/`;
+}
+
+// 공유 버킷용 prefix 조립 (root("") + 사용자 prefix → 끝은 "/"로 통일)
+function buildPrefix(root, userPrefix) {
+  const p = (userPrefix || "").replace(/^\/+/, "");
+  let out = (root + p).replace(/\/\/+/g, "/"); // root가 ""일 수도 있음
+  if (out && !out.endsWith("/")) out += "/";
+  return out;
+}
+
+// [ADD-2] IPC 핸들러 추가 (기존 fs:* 핸들러는 수정 없이 그대로)
+ipcMain.handle("s3:list", async (_evt, { prefix }) => {
+  const Prefix = normPrefix(prefix);
+  const out = await s3.send(new ListObjectsV2Command({
+    Bucket: S3_BUCKET,
+    Prefix,
+    Delimiter: "/",         // 손자 이하 차단(직계만 노출)
+    MaxKeys: 500,           // 과도 로드 방지
+  }));
+
+  const folders = (out.CommonPrefixes || []).map(cp => {
+    const pfx = cp.Prefix; // 예: documents/a/b/
+    const name = pfx.slice(Prefix.length).replace(/\/$/, "");
+    return { id: pfx, name, prefix: pfx };
+  });
+
+  const files = (out.Contents || [])
+    .filter(obj => obj.Key !== Prefix && !obj.Key.endsWith("/"))
+    .map(obj => ({
+      id: obj.Key,
+      key: obj.Key,
+      name: obj.Key.slice(Prefix.length),
+      size: obj.Size,
+      lastModified: obj.LastModified?.toISOString?.() || null,
+    }));
+
+  return { prefix: Prefix, folders, files };
+});
+
+ipcMain.handle("s3:downloadAndOpen", async (_evt, { key, saveAs }) => {
+  await ensureDir(LOCAL_DOWNLOAD_DIR);
+  const filename = saveAs || path.basename(key);
+  const target = path.join(LOCAL_DOWNLOAD_DIR, filename);
+
+  const res = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+  await pipe(res.Body, fs.createWriteStream(target));
+
+  await shell.openPath(target);   // 로컬 파일로 열기
+  return { localPath: target };
+});
+
+/* [ADD] S3에 로컬 경로의 파일을 업로드하는 IPC
+  - localPath: 로컬 파일 절대경로
+  - destPrefix: 업로드할 S3 prefix (예: "documents/" 또는 "")
+  - Key = buildPrefix(S3_SHARED_ROOT, destPrefix) + path.basename(localPath)
+*/
+ipcMain.handle("s3shared:uploadFromPath", async (_evt, { localPath, destPrefix = "" }) => {
+  if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
+  if (!localPath) throw new Error("localPath required");
+
+  // Key 계산: 루트/사용자 prefix + 파일명
+  const keyPrefix = buildPrefix(S3_SHARED_ROOT, destPrefix); // "" 또는 "documents/" 등
+  const key = keyPrefix + path.basename(localPath);
+
+  // 스트림으로 업로드
+  const Body = fs.createReadStream(localPath);
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_SHARED_BUCKET,
+    Key: key,
+    Body,
+  }));
+
+  return { ok: true, key };
+});
+
+
+/* ============================================================================
+ *  🔹 공유 버킷 전용 IPC — 문서 목록(S3)에서만 사용
+ *     • s3shared:list               : 현재 prefix의 '직계 자식'만 조회(손자 차단)
+ *     • s3shared:downloadAndOpen    : 다운로드 후 OS 기본앱으로 열기
+ * ============================================================================ */
+
+// 목록: 루트("")이면 CommonPrefixes로 "documents/ logs/ temp/" 같은 폴더들이 온다
+ipcMain.handle("s3shared:list", async (_evt, { prefix = "" }) => {
+  if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
+
+  const Prefix = buildPrefix(S3_SHARED_ROOT, prefix);  // "" 가능(루트)
+  const out = await s3.send(new ListObjectsV2Command({
+    Bucket: S3_SHARED_BUCKET,
+    Prefix,
+    Delimiter: "/",             // 직계(child)만, 손자 이상 차단
+    MaxKeys: 500,               // 과도 로드 방지
+  }));
+
+  // 폴더
+  const folders = (out.CommonPrefixes || []).map(cp => {
+    const pfx = cp.Prefix;                                  // 예: "documents/"
+    const name = Prefix ? pfx.slice(Prefix.length) : pfx;   // 예: "documents/"
+    return { id: pfx, name: name.replace(/\/$/, ""), prefix: pfx };
+  });
+
+  // 파일
+  const files = (out.Contents || [])
+    .filter(obj => obj.Key !== Prefix && !obj.Key.endsWith("/"))
+    .map(obj => ({
+      id: obj.Key,
+      key: obj.Key,
+      name: Prefix ? obj.Key.slice(Prefix.length) : obj.Key,  // 상대 경로명
+      size: obj.Size,
+      lastModified: obj.LastModified?.toISOString?.() || null,
+    }));
+
+  return { prefix: Prefix, folders, files };
+});
+
+// 다운로드 후 OS로 열기
+ipcMain.handle("s3shared:downloadAndOpen", async (_evt, { key, saveAs }) => {
+  if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
+  if (!key) throw new Error("key required");
+
+  await ensureDir(LOCAL_DOWNLOAD_DIR);
+  const filename = saveAs || path.basename(key);
+  const target = path.join(LOCAL_DOWNLOAD_DIR, filename);
+
+  const res = await s3.send(new GetObjectCommand({ Bucket: S3_SHARED_BUCKET, Key: key }));
+  await pipe(res.Body, fs.createWriteStream(target));
+
+  await shell.openPath(target);   // 로컬 파일로 열기
+  return { localPath: target };
+});
 
 process.on("uncaughtException", (err) => {
     console.error(
