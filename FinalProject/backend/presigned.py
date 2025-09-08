@@ -12,8 +12,13 @@ from dotenv import load_dotenv
 # AWS_S3_BUCKET
 load_dotenv(dotenv_path="/home/ubuntu/SKN13-FINAL-1TEAM/FinalProject/backend/.env")
 
-# S3 클라이언트 생성
-s3_client = boto3.client('s3')
+# S3 클라이언트 생성 (AWS4-HMAC-SHA256 서명 방식 사용)
+from botocore.config import Config
+
+s3_client = boto3.client(
+    's3',
+    config=Config(signature_version='s3v4')
+)
 
 BUCKET_NAME = os.getenv('AWS_S3_BUCKET')
 
