@@ -17,7 +17,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origins],  # 개발 환경에서는 모든 origin 허용
+    allow_origins=origins,  # origins 배열을 직접 사용
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
