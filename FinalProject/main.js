@@ -447,7 +447,7 @@ ipcMain.handle("get-s3-upload-url", async (_evt, fileName) => {
 });
 
 // 파일 업로드 처리 (CORS 우회)
-ipcMain.handle("upload-file-to-s3", async (_evt, { uploadUrl, file, fileName }) => {
+ipcMain.handle("upload-file-to-s3", async (evt, { uploadUrl, file, fileName }) => {
     try {
         const fetch = require('node-fetch');
         
@@ -455,8 +455,11 @@ ipcMain.handle("upload-file-to-s3", async (_evt, { uploadUrl, file, fileName }) 
         const url = new URL(uploadUrl);
         const contentType = url.searchParams.get('content-type') || file.type || 'application/octet-stream';
         
-        console.log(`Uploading ${fileName} to S3...`);
+        console.log(`Uploading ${fileName} to S3... (${file.buffer.byteLength} bytes)`);
         console.log(`Content-Type: ${contentType}`);
+        
+        // 진행률 업데이트를 위한 이벤트 전송
+        evt.sender.send('upload-progress', { fileName, progress: 0 });
         
         const response = await fetch(uploadUrl, {
             method: 'PUT',
@@ -471,13 +474,16 @@ ipcMain.handle("upload-file-to-s3", async (_evt, { uploadUrl, file, fileName }) 
         if (!response.ok) {
             const responseText = await response.text().catch(() => '');
             console.error(`Upload failed: ${response.status} ${response.statusText}`, responseText);
+            evt.sender.send('upload-progress', { fileName, progress: 0, error: true });
             throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${responseText}`);
         }
 
         console.log(`Upload successful for ${fileName}`);
+        evt.sender.send('upload-progress', { fileName, progress: 100, completed: true });
         return { success: true, fileName };
     } catch (error) {
         console.error("Upload error:", error);
+        evt.sender.send('upload-progress', { fileName, progress: 0, error: true });
         return { success: false, error: error.message };
     }
 });

@@ -142,6 +142,9 @@ export default function FeatureDocs() {
 
   // S3 업로드 모달
   const [showUpload, setShowUpload] = useState(false);
+  
+  // S3 현재 경로 상태
+  const [s3CurrentPath, setS3CurrentPath] = useState("");
 
   // 삭제 중 여부(연속 실행 방지)
   const deletingRef = useRef(false);
@@ -327,7 +330,7 @@ export default function FeatureDocs() {
         {/* 본문 */}
         <div className="px-4 pb-6 overflow-auto">
           {mode === "s3" ? (
-            <S3Explorer />
+            <S3Explorer onPrefixChange={setS3CurrentPath} />
           ) : loading ? (
             <div className="p-10 text-sm text-gray-500">불러오는 중…</div>
           ) : (
@@ -393,6 +396,7 @@ export default function FeatureDocs() {
         <UploadModal
           open={showUpload}
           onClose={() => setShowUpload(false)}
+          pathHint={s3CurrentPath}  
           onUploaded={() => {
             // 업로드 완료 후 S3 목록 새로고침 이벤트 (S3Explorer에서 수신)
             window.dispatchEvent(new CustomEvent("s3:refresh"));

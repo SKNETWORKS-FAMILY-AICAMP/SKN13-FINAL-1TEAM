@@ -29,12 +29,28 @@ export default function UploadModal({
   /* ----------------------------- State & Refs ----------------------------- */
   const [files, setFiles] = useState([]);        // ✅ 항상 File 객체만 보관
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({}); // 파일별 진행률 추적
   const uploadLockRef = useRef(false);           // 🔒 더블클릭/연속 호출 락
   const abortRef = useRef(null);                 // 업로드 중단용 AbortController
   const fileInputRef = useRef(null);             // 네이티브 파일 선택기
 
   /* --------------------------- Helpers / Utils ---------------------------- */
   const normalizePath = (p) => (p || "").replaceAll("\\", "/");
+  
+  // 업로드 진행률 이벤트 리스너
+  useEffect(() => {
+    if (!open || !window?.electron?.onUploadProgress) return;
+    
+    const unsubscribe = window.electron.onUploadProgress((data) => {
+      const { fileName, progress, completed, error } = data;
+      setUploadProgress(prev => ({
+        ...prev,
+        [fileName]: { progress, completed: !!completed, error: !!error }
+      }));
+    });
+    
+    return unsubscribe;
+  }, [open]);
 
   // 파일 병합(중복 제거: 동일 path/name은 덮어씀)
   const addFiles = useCallback((newFiles = []) => {
@@ -124,6 +140,8 @@ export default function UploadModal({
           pathHint: pathHint || "", // 백엔드에서 지원 시 presigned key 생성에 반영
         });
       }
+      // 진행률 초기화
+      setUploadProgress({});
       onUploaded?.();
       onClose?.();
     } catch (err) {
@@ -192,17 +210,46 @@ export default function UploadModal({
               <div className="text-sm text-gray-400">아직 선택된 파일이 없습니다.</div>
             ) : (
               <ul className="max-h-44 overflow-auto text-sm divide-y border rounded-lg">
-                {files.map((f, i) => (
-                  <li key={(f.path || f.name) + i} className="flex items-center justify-between px-3 py-2">
-                    <span className="truncate mr-3">{f.name || f.path}</span>
-                    <button
-                      className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
-                      onClick={() => removeAt(i)}
-                    >
-                      제거
-                    </button>
-                  </li>
-                ))}
+                {files.map((f, i) => {
+                  const fileName = f.name || f.path;
+                  const progress = uploadProgress[fileName] || { progress: 0 };
+                  return (
+                    <li key={fileName + i} className="px-3 py-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="truncate mr-3">{fileName}</span>
+                        {!uploading && (
+                          <button
+                            className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
+                            onClick={() => removeAt(i)}
+                          >
+                            제거
+                          </button>
+                        )}
+                      </div>
+                      {uploading && (
+                        <div className="mt-1">
+                          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                            <span>
+                              {progress.error ? "업로드 실패" : 
+                               progress.completed ? "완료" : 
+                               `업로드 중... ${Math.round(progress.progress)}%`}
+                            </span>
+                            <span>{Math.round(progress.progress)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-300 ${
+                                progress.error ? 'bg-red-500' : 
+                                progress.completed ? 'bg-green-500' : 'bg-blue-500'
+                              }`}
+                              style={{ width: `${progress.progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

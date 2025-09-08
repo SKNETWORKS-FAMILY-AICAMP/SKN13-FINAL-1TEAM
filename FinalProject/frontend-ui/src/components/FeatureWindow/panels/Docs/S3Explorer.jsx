@@ -17,7 +17,7 @@ function splitBreadcrumb(prefix) {
   return (prefix || "").split("/").filter(Boolean);
 }
 
-export default function S3Explorer() {
+export default function S3Explorer({ onPrefixChange }) {
   // 현재 prefix (빈 문자열이면 루트)
   const [prefix, setPrefix] = useState("");
   const [loading, setLoading] = useState(false);
@@ -62,8 +62,12 @@ export default function S3Explorer() {
         return m;
       });
       setData(payload);
-      setPrefix(out.prefix || pfx);
-      pruneCacheToPath(out.prefix || pfx);
+      const newPrefix = out.prefix || pfx;
+      setPrefix(newPrefix);
+      pruneCacheToPath(newPrefix);
+      
+      // 부모에게 prefix 변경 알림
+      onPrefixChange?.(newPrefix);
     } catch (e) {
       setError(String(e?.message || e));
     } finally {

@@ -72,7 +72,8 @@ async function getPresignedUrlViaBridge(params) {
       },
       body: JSON.stringify({
         filename,
-        contentType
+        contentType,
+        pathHint: dir || ""
       })
     });
 
@@ -131,7 +132,7 @@ export async function uploadFileWithDedup(file, meta = {}) {
   const size = file.size ?? 0;
 
   const space = meta.space || "shared";
-  const dir = meta.dir || "";
+  const dir = meta.dir || meta.pathHint || "";
 
   // 1) sha256 계산
   const sha256 = await sha256Hex(file);

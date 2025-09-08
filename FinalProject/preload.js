@@ -35,6 +35,11 @@ const electronAPI = {
 
   getS3UploadUrl: (fileName) => ipcRenderer.invoke("get-s3-upload-url", fileName),
   uploadFileToS3: (uploadData) => ipcRenderer.invoke("upload-file-to-s3", uploadData),
+  onUploadProgress: (callback) => {
+    const handler = (_evt, data) => callback(data);
+    ipcRenderer.on('upload-progress', handler);
+    return () => ipcRenderer.removeListener('upload-progress', handler);
+  },
 
   openFeatureWindow: (role) => ipcRenderer.invoke("open-feature-window", role),
 
