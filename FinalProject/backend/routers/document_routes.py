@@ -16,12 +16,13 @@ from .auth_routes import get_current_user
 
 # Presigned URL 도구 import
 try:
-    from ..ChatBot.tools.presigned import (
+    from ..presigned import (
         get_upload_url, get_download_url, get_public_url,
         upload_file_directly, OneTimePresignedURLManager
     )
     PRESIGNED_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    print(f"Failed to import presigned module: {e}")
     PRESIGNED_AVAILABLE = False
 
 # APIRouter 인스턴스 생성
