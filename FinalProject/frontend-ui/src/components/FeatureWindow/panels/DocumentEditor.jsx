@@ -312,6 +312,83 @@ export default function DocEditor({ onClose }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [handleSave, handleLoad]);
 
+  /** 현재 문서 내용을 IPC를 통해 main process에 저장 (ChatWindow에서 접근 가능하도록) */
+  useEffect(() => {
+    if (window.fsBridge?.setCurrentDocumentContent) {
+      window.fsBridge.setCurrentDocumentContent(editorContent);
+      console.log('📝 DocumentEditor: IPC로 문서 내용 저장됨:', editorContent.substring(0, 100) + '...');
+    } else {
+      console.warn('📝 DocumentEditor: fsBridge.setCurrentDocumentContent가 없습니다.');
+    }
+  }, [editorContent]);
+
+  /** 챗봇에서 문서 업데이트 수신 - 전역 리스너로 중복 등록 방지 */
+  useEffect(() => {
+    // 이미 리스너가 등록되어 있다면 중복 등록 방지
+    if (window.__documentListenerRegistered) {
+      console.log('📡 DocumentEditor: IPC 리스너 이미 등록됨, 스킵');
+      return;
+    }
+
+    console.log('📡 DocumentEditor: IPC 리스너 등록 시도...');
+    
+    // 전역 핸들러 함수 
+    const handleDocumentUpdate = (updatedContent) => {
+      console.log('📨 DocumentEditor: IPC 이벤트 수신됨!', updatedContent ? updatedContent.substring(0, 100) + '...' : 'null');
+      
+      // 현재 활성화된 DocumentEditor 찾기
+      const currentEditorElement = document.querySelector('.tiptap');
+      if (!currentEditorElement || !updatedContent) {
+        console.warn('📨 에디터 요소 또는 업데이트 내용이 없습니다');
+        return;
+      }
+
+      try {
+        // TipTap 에디터 인스턴스 찾기 (전역에서 접근)
+        if (window.__currentDocumentEditor) {
+          const editor = window.__currentDocumentEditor;
+          editor.commands.setContent(updatedContent, false);
+          console.log('✅ 챗봇으로부터 문서가 업데이트되었습니다.');
+          
+          // 강제로 리렌더링 트리거 (상태 업데이트)
+          window.dispatchEvent(new CustomEvent('documentUpdated', { detail: updatedContent }));
+        }
+      } catch (error) {
+        console.error('❌ 문서 업데이트 적용 중 오류:', error);
+      }
+    };
+
+    // Electron IPC 리스너 등록 (전역으로 한 번만)
+    if (window.fsBridge?.onDocumentUpdate && !window.__documentListenerRegistered) {
+      console.log('✅ fsBridge.onDocumentUpdate 사용 가능, 리스너 등록 중...');
+      const removeListener = window.fsBridge.onDocumentUpdate(handleDocumentUpdate);
+      window.__documentListenerRegistered = true;
+      window.__removeDocumentListener = removeListener;
+      console.log('✅ IPC 리스너 전역 등록 완료');
+    } else {
+      console.warn('❌ fsBridge.onDocumentUpdate가 없거나 이미 등록됨');
+    }
+  }, []);
+
+  // 현재 에디터를 전역에 저장 (IPC 핸들러에서 접근할 수 있도록)
+  useEffect(() => {
+    if (editorRef.current) {
+      window.__currentDocumentEditor = editorRef.current;
+    }
+  }, [editorRef.current]);
+
+  // 커스텀 이벤트로 상태 업데이트 처리
+  useEffect(() => {
+    const handleDocumentUpdated = (event) => {
+      const updatedContent = event.detail;
+      setEditorContent(updatedContent);
+      setIsDirty(true);
+    };
+
+    window.addEventListener('documentUpdated', handleDocumentUpdated);
+    return () => window.removeEventListener('documentUpdated', handleDocumentUpdated);
+  }, []);
+
   return (
     <ErrorBoundary>
       <div className="flex flex-col h-full rounded-xl border border-gray-200 bg-white">

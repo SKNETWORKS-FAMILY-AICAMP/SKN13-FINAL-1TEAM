@@ -85,6 +85,16 @@ const fsBridge = {
     return ipcRenderer.invoke("fs:saveDoc", { name, content });
   },
   openDoc: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
+  
+  // 문서 내용 공유를 위한 IPC 메서드들
+  getCurrentDocumentContent: () => ipcRenderer.invoke("document:getCurrentContent"),
+  setCurrentDocumentContent: (content) => ipcRenderer.invoke("document:setCurrentContent", content),
+  onDocumentUpdate: (callback) => {
+    const handler = (_event, content) => callback(content);
+    ipcRenderer.on("document:updated", handler);
+    return () => ipcRenderer.removeListener("document:updated", handler);
+  },
+  sendDocumentUpdate: (content) => ipcRenderer.send("document:sendUpdate", content),
 };
 
 /* 전역 노출 */

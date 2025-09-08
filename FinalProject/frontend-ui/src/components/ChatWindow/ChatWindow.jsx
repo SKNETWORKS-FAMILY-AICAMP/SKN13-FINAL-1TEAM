@@ -166,6 +166,85 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
           attachToLastAI(normalizeAttachments(data.attachments));
         }
 
+        // 문서 업데이트 처리: 기능창의 DocumentEditor로 전달
+        if (data.document_update) {
+          console.log('📝 document_update 필드 감지됨:', data.document_update.substring(0, 100) + '...');
+          try {
+            console.log('🔍 fsBridge 상태 확인:', {
+              fsBridge존재: !!window.fsBridge,
+              sendDocumentUpdate존재: !!window.fsBridge?.sendDocumentUpdate
+            });
+            
+            // Electron IPC를 통해 기능창에 문서 업데이트 전달
+            if (window.fsBridge?.sendDocumentUpdate) {
+              console.log('📤 sendDocumentUpdate 호출 중...');
+              window.fsBridge.sendDocumentUpdate(data.document_update);
+              console.log('✅ 문서 업데이트를 기능창으로 전달했습니다.');
+            } else {
+              console.warn('❌ fsBridge.sendDocumentUpdate가 없습니다. 문서 업데이트를 전달할 수 없습니다.');
+              console.log('🔍 사용 가능한 fsBridge 메서드들:', Object.keys(window.fsBridge || {}));
+            }
+          } catch (error) {
+            console.error('❌ 문서 업데이트 전달 중 오류:', error);
+          }
+        }
+
+        // 문서 내용 요청 처리: 백엔드가 현재 문서 내용을 요청하는 경우
+        if (data.needs_document_content) {
+          try {
+            console.log('🔍 백엔드에서 문서 내용을 요청했습니다.');
+            
+            // 기능창에서 현재 문서 내용 가져오기 (IPC 사용)
+            if (window.fsBridge?.getCurrentDocumentContent) {
+              window.fsBridge.getCurrentDocumentContent().then(documentContent => {
+                console.log('📄 IPC로 가져온 문서 내용:', documentContent ? documentContent.substring(0, 100) + '...' : 'null');
+                console.log('📄 문서 내용 타입:', typeof documentContent);
+                console.log('📄 문서 내용 길이:', documentContent?.length);
+                
+                if (documentContent && documentContent !== "<p>문서 작성을 시작하세요...</p>") {
+                  console.log('✅ 현재 문서 내용을 가져왔습니다. 백엔드에 전송합니다.');
+                  
+                  // 새로운 SSE 연결로 문서 내용과 함께 재요청
+                  const newUrl = new URL(`${BASE_URL}/chat/stream`, window.location.origin);
+                  newUrl.searchParams.append('session_id', currentSession?.id);
+                  newUrl.searchParams.append('prompt', input.trim());
+                  newUrl.searchParams.append('document_content', documentContent);
+                  
+                  console.log('🔄 새로운 URL로 재요청:', newUrl.toString());
+                  
+                  // 기존 연결 종료
+                  closeEventSource();
+                  
+                  // 새 연결 시작
+                  const newEs = new EventSource(newUrl);
+                  eventSourceRef.current = newEs;
+                  
+                  // 동일한 이벤트 핸들러 설정
+                  newEs.onmessage = es.onmessage;
+                  newEs.onerror = es.onerror;
+                  
+                } else {
+                  console.warn('❌ 기능창에서 문서 내용을 가져올 수 없습니다.');
+                  appendMessage({ role: 'ai', content: '죄송합니다. 현재 편집 중인 문서를 찾을 수 없습니다. 기능창에서 문서를 먼저 작성해주세요.' });
+                  endStream();
+                }
+              }).catch(error => {
+                console.error('문서 내용 가져오기 실패:', error);
+                appendMessage({ role: 'ai', content: '문서 내용을 가져오는 중 오류가 발생했습니다.' });
+                endStream();
+              });
+            } else {
+              console.warn('❌ fsBridge.getCurrentDocumentContent가 없습니다.');
+              appendMessage({ role: 'ai', content: '문서 내용 가져오기 기능이 지원되지 않습니다.' });
+              endStream();
+            }
+          } catch (error) {
+            console.error('문서 내용 요청 처리 중 오류:', error);
+            endStream();
+          }
+          return; // 추가 처리 중단
+        }
+
         if (data.done) {
           endStream();
           return;

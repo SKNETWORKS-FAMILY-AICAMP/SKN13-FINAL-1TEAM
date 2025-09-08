@@ -357,6 +357,38 @@ ipcMain.handle("fs:open", async (_evt, { name }) => {
     return { ok: !r, reason: r || undefined };
 });
 
+// 문서 내용 공유를 위한 변수
+let currentDocumentContent = "<p>문서 작성을 시작하세요...</p>";
+
+// 문서 내용 공유 IPC 핸들러들
+ipcMain.handle("document:getCurrentContent", () => {
+    console.log("[MAIN] 문서 내용 요청됨:", currentDocumentContent ? currentDocumentContent.substring(0, 100) + '...' : 'null');
+    return currentDocumentContent;
+});
+
+ipcMain.handle("document:setCurrentContent", (_evt, content) => {
+    console.log("[MAIN] 문서 내용 업데이트됨:", content ? content.substring(0, 100) + '...' : 'null');
+    currentDocumentContent = content;
+    return true;
+});
+
+ipcMain.on("document:sendUpdate", (_evt, content) => {
+    console.log("[MAIN] 문서 업데이트 신호 받음, 기능창으로 전달");
+    console.log("[MAIN] featureWindow 상태:", {
+        exists: !!featureWindow,
+        destroyed: featureWindow?.isDestroyed?.(),
+        id: featureWindow?.id
+    });
+    
+    if (featureWindow && !featureWindow.isDestroyed()) {
+        console.log("[MAIN] 기능창으로 document:updated 이벤트 전송 중...");
+        featureWindow.webContents.send("document:updated", content);
+        console.log("[MAIN] 이벤트 전송 완료");
+    } else {
+        console.warn("[MAIN] 기능창이 없거나 파괴됨, 이벤트 전송 실패");
+    }
+});
+
 /* 역할별 창 오픈 */
 ipcMain.on("auth:success", (_evt, payload) => {
     const role = payload?.role;
