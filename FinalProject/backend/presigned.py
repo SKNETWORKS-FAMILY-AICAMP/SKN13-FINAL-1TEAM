@@ -17,6 +17,7 @@ from botocore.config import Config
 
 s3_client = boto3.client(
     's3',
+    region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
     config=Config(signature_version='s3v4')
 )
 
