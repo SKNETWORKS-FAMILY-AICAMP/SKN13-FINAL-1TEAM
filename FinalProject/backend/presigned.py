@@ -26,7 +26,7 @@ BUCKET_NAME = os.getenv('SHARED_S3_BUCKET')
 if not BUCKET_NAME:
     raise ValueError("이봐, 아들. AWS_S3_BUCKET 환경 변수가 설정되지 않았다.")
 
-def get_upload_url(file_name: str, content_type: str = 'application/octet-stream', expires_in: int = 300) -> Dict[str, str]:
+def get_upload_url(file_name: str, content_type: str = 'application/octet-stream', expires_in: int = 300, path_hint: str = "") -> Dict[str, str]:
     """
     S3에 파일을 업로드하기 위한 presigned URL을 생성한다.
     
@@ -43,7 +43,13 @@ def get_upload_url(file_name: str, content_type: str = 'application/octet-stream
     """
     # 덮어쓰기 방지를 위해 타임스탬프 추가
     timestamp = int(datetime.now().timestamp() * 1000)
-    file_key = f"uploads/{timestamp}-{file_name}"
+    
+    # path_hint가 있으면 사용, 없으면 기본 uploads/ 경로
+    base_path = path_hint.strip() if path_hint.strip() else "uploads/"
+    if base_path and not base_path.endswith("/"):
+        base_path += "/"
+    
+    file_key = f"{base_path}{timestamp}-{file_name}"
     
     try:
         signed_url = s3_client.generate_presigned_url(

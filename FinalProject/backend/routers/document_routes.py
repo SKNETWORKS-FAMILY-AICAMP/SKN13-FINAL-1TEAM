@@ -52,6 +52,7 @@ class DocumentOut(BaseModel):
 class PresignedURLRequest(BaseModel):
     filename: str
     contentType: Optional[str] = "application/octet-stream"
+    pathHint: Optional[str] = ""
 
 # --- 변환 헬퍼 ---
 def _convert_to_markdown(file_path: Path, file_type: str) -> str:
@@ -277,8 +278,8 @@ async def create_presigned_url(
         )
     
     try:
-        # main2.py의 로직 복사
-        result = get_upload_url(request.filename, request.contentType)
+        # pathHint를 포함해서 presigned URL 생성
+        result = get_upload_url(request.filename, request.contentType, path_hint=request.pathHint)
         return {
             "uploadUrl": result.get("uploadUrl"),
             "fileKey": result.get("fileKey"), 
