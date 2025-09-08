@@ -34,6 +34,7 @@ const electronAPI = {
   offWindowResize: (cb) => ipcRenderer.removeListener("window-resized", cb),
 
   getS3UploadUrl: (fileName) => ipcRenderer.invoke("get-s3-upload-url", fileName),
+  uploadFileToS3: (uploadData) => ipcRenderer.invoke("upload-file-to-s3", uploadData),
 
   openFeatureWindow: (role) => ipcRenderer.invoke("open-feature-window", role),
 

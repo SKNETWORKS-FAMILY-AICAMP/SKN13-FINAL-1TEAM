@@ -21,6 +21,7 @@ LINKS:
 */
 
 import { SPACES } from "./s3Spaces.js";
+import { BASE_URL } from "./env.js";
 
 /* ============================================================================
    🔒 내부 상태: 단일비행(inflight) & 완료(done) 캐시 (sha256 → Promise/Result)
@@ -56,23 +57,59 @@ async function getPresignedUrlViaBridge(params) {
   } = typeof params === "string" ? { filename: params } : (params || {});
   if (!filename) throw new Error("filename is required");
 
-  if (!window?.electron?.getS3UploadUrl) {
-    throw new Error("Electron bridge가 없습니다: window.electron.getS3UploadUrl 미정의");
+  try {
+    // 직접 백엔드 API 호출
+    const token = localStorage.getItem('userToken');
+    if (!token) {
+      throw new Error("JWT 토큰이 없습니다. 로그인이 필요합니다.");
+    }
+
+    const response = await fetch(`${BASE_URL}/files/presigned`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        filename,
+        contentType
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+    }
+
+    const result = await response.json();
+    return { 
+      url: result.uploadUrl,
+      uploadUrl: result.uploadUrl,
+      fileKey: result.fileKey,
+      displayName: result.displayName
+    };
+  } catch (apiError) {
+    console.warn("Direct API call failed, trying Electron bridge:", apiError.message);
+    
+    // API 실패 시 Electron bridge 폴백
+    if (!window?.electron?.getS3UploadUrl) {
+      throw new Error("Electron bridge도 없습니다: window.electron.getS3UploadUrl 미정의");
+    }
+
+    // 우선 신규 시그니처(object)로 시도
+    let resp = await window.electron.getS3UploadUrl({ filename, space, dir, contentType }).catch(() => null);
+
+    // 구버전 브릿지(문자열만 받는) 폴백
+    if (!resp || (!resp.url && !resp.uploadUrl)) {
+      resp = await window.electron.getS3UploadUrl(filename);
+    }
+
+    const url = resp?.uploadUrl || resp?.url;
+    if (!url) throw new Error(`Presigned URL 요청 실패: ${resp?.error || "url 없음"}`);
+
+    // 파일키/표시명 등 백엔드가 준 부가 정보도 보존
+    return { ...resp, url };
   }
-
-  // 우선 신규 시그니처(object)로 시도
-  let resp = await window.electron.getS3UploadUrl({ filename, space, dir, contentType }).catch(() => null);
-
-  // 구버전 브릿지(문자열만 받는) 폴백
-  if (!resp || (!resp.url && !resp.uploadUrl)) {
-    resp = await window.electron.getS3UploadUrl(filename);
-  }
-
-  const url = resp?.uploadUrl || resp?.url;
-  if (!url) throw new Error(`Presigned URL 요청 실패: ${resp?.error || "url 없음"}`);
-
-  // 파일키/표시명 등 백엔드가 준 부가 정보도 보존
-  return { ...resp, url };
 }
 
 /* ============================================================================
@@ -121,16 +158,33 @@ export async function uploadFileWithDedup(file, meta = {}) {
     const presigned = await getPresignedUrlViaBridge({ filename, space, dir, contentType });
     const uploadUrl = presigned.url;
 
-    // 4-2) S3로 PUT 업로드 (AbortSignal 연동)
-    const putRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: file,
-      signal: meta.signal,
-    });
-    if (!putRes.ok) {
-      const text = await putRes.text().catch(() => "");
-      throw new Error(`S3 업로드 실패: ${putRes.status} ${text}`);
+    // 4-2) Electron main process를 통해 S3 업로드 (CORS 우회)
+    if (window?.electron?.uploadFileToS3) {
+      const fileBuffer = await file.arrayBuffer();
+      const uploadResult = await window.electron.uploadFileToS3({
+        uploadUrl,
+        file: {
+          buffer: fileBuffer,
+          type: contentType
+        },
+        fileName: filename
+      });
+      
+      if (!uploadResult.success) {
+        throw new Error(`S3 업로드 실패: ${uploadResult.error}`);
+      }
+    } else {
+      // 브라우저 환경 폴백 (CORS 문제 발생 가능)
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: file,
+        signal: meta.signal,
+      });
+      if (!putRes.ok) {
+        const text = await putRes.text().catch(() => "");
+        throw new Error(`S3 업로드 실패: ${putRes.status} ${text}`);
+      }
     }
 
     // 4-3) 결과 구성 + 완료 캐시 저장

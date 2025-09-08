@@ -414,7 +414,72 @@ ipcMain.handle("window:close", (event) => {
 
 /* S3 및 FS Bridge (원본 유지) */
 ipcMain.handle("get-s3-upload-url", async (_evt, fileName) => {
-    return { url: "https://example-presigned-url", fields: {}, fileName };
+    try {
+        // 백엔드 API에서 presigned URL 가져오기
+        const fetch = require('node-fetch');
+        
+        const response = await fetch('http://13.125.105.129:8000/api/v1/files/presigned', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                // TODO: JWT 토큰 처리 필요
+            },
+            body: JSON.stringify({
+                filename: fileName,
+                contentType: 'application/octet-stream'
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        return { 
+            uploadUrl: result.uploadUrl, 
+            fileKey: result.fileKey, 
+            fileName 
+        };
+    } catch (error) {
+        console.error("Error generating presigned URL:", error);
+        return { uploadUrl: "https://example-presigned-url", fields: {}, fileName };
+    }
+});
+
+// 파일 업로드 처리 (CORS 우회)
+ipcMain.handle("upload-file-to-s3", async (_evt, { uploadUrl, file, fileName }) => {
+    try {
+        const fetch = require('node-fetch');
+        
+        // URL에서 Content-Type이 이미 지정되어 있는지 확인
+        const url = new URL(uploadUrl);
+        const contentType = url.searchParams.get('content-type') || file.type || 'application/octet-stream';
+        
+        console.log(`Uploading ${fileName} to S3...`);
+        console.log(`Content-Type: ${contentType}`);
+        
+        const response = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': contentType
+            },
+            body: Buffer.from(file.buffer)
+        });
+
+        console.log(`Upload response status: ${response.status}`);
+
+        if (!response.ok) {
+            const responseText = await response.text().catch(() => '');
+            console.error(`Upload failed: ${response.status} ${response.statusText}`, responseText);
+            throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${responseText}`);
+        }
+
+        console.log(`Upload successful for ${fileName}`);
+        return { success: true, fileName };
+    } catch (error) {
+        console.error("Upload error:", error);
+        return { success: false, error: error.message };
+    }
 });
 function extToMime(ext) {
     const map = {
