@@ -55,7 +55,7 @@ export default function RoleRouter({ userType, activeKey }) {
         if (activeKey === "calendar")
             return <FeatureFrame defaultTab="calendar" />;
         if (activeKey === "mypage") return <FeatureFrame defaultTab="mypage" />;
-        // if (activeKey === "forms")    return <FeatureFrame defaultTab="forms" />; // "문서 작성"
+        if (activeKey === "forms")    return <FeatureFrame defaultTab="forms" />; // "문서 작성"
     }
 
     /** 사원(User) 분기

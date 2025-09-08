@@ -143,7 +143,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     }
 
     // 기존과 동일: SSE 시작
-    const url = new URL(`${BASE_URL}/llm/stream`, window.location.origin);
+    const url = new URL(`${BASE_URL}/chat/stream`, window.location.origin);
     url.searchParams.append('session_id', sessionId);
     url.searchParams.append('prompt', prompt);
 

@@ -34,17 +34,23 @@
 // 외부 연결(Dependency)
 //  - RichEditor: 실제 본문 입력/렌더링
 //  - EditorToolbar: 글꼴, 정렬, 표 삽입 등 서식 조작 툴바
-//  - documentsApi.exportToDocx(): HTML → DOCX 변환
+//  - documentsApi.*(): HTML → DOCX 변환 (이름 유연 처리)
 //  - llmApi.streamLLM(): 문서 내용 기반 AI 편집 호출
 //  - window.fsBridge.showSaveDialog/saveDoc/showOpenDialog
 //    → Electron preload에서 파일 입출력 연결
+//
+// ✅ 변경 사항 요약(안정화 가드 + DOCX import 유연화)
+//  - (1) onEditorUpdate 옵셔널 가드 추가
+//  - (2) EditorToolbar 렌더 가드 추가
+//  - (3) handleLoad의 ipcRenderer.invoke 옵셔널 가드 추가
+//  - (4) documentsApi 네임스페이스 import + 함수 이름 폴백 처리
 // ────────────────────────────────────────────────────────────────────────────────
-
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import EditorToolbar from "./Editor/EditorToolbar";
 import RichEditor from "./Editor/RichEditor";
-import { exportToDocx } from "../../services/documentsApi";
+// ⬇️ 변경: 기명(import { exportToDocx }) → 네임스페이스 import
+import * as documentsApi from "../../services/documentsApi";
 import { saveAs } from "file-saver";
 import { streamLLM } from "../../services/llmApi";
 
@@ -79,10 +85,12 @@ export default function DocEditor({ onClose }) {
   const [editorContent, setEditorContent] = useState("<p>문서 작성을 시작하세요...</p>");
   const editorRef = useRef(null);
   const isLoadingRef = useRef(false);
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [sessionId] = useState(() => (crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-sess`));
 
   // 다른 창에서 오는 문서 업데이트 반영 (preload의 onEditorUpdate 사용)
   useEffect(() => {
+    // ✅ (1) Electron 브리지 옵셔널 가드
+    if (!window.electron?.onEditorUpdate) return;
     const off = window.electron.onEditorUpdate((html) => {
       if (editorRef.current && !editorRef.current.isDestroyed) {
         editorRef.current.commands.setContent(html || "", false);
@@ -173,6 +181,13 @@ export default function DocEditor({ onClose }) {
       if (canceled || !filePaths || filePaths.length === 0) return;
 
       const filePath = filePaths[0];
+
+      // ✅ (3) IPC 호출 가드: 웹/미주입 환경 크래시 방지
+      if (!window.electron?.ipcRenderer?.invoke) {
+        alert("이 환경에서는 파일 읽기를 지원하지 않습니다.");
+        return;
+      }
+
       // 파일 경로 기반으로 메인 프로세스에 직접 요청 (겸용 핸들러 가정)
       const resp = await window.electron.ipcRenderer.invoke("fs:readDoc", { filePath });
       const { ok, content, mime } = resp || {};
@@ -211,7 +226,17 @@ export default function DocEditor({ onClose }) {
     if (!html || html === "<p></p>") { alert("내보낼 내용이 없습니다."); return; }
     const docxFilename = documentTitle.replace(/\.[^/.]+$/, "") + ".docx";
     try {
-      const blob = await exportToDocx(html, docxFilename);
+      // ⬇️ (4) documentsApi 함수 이름 폴백 처리
+      const fn =
+        documentsApi.exportToDocx ||
+        documentsApi.exportDocx ||
+        documentsApi.htmlToDocx ||
+        documentsApi.default;
+      if (!fn) {
+        alert("DOCX 내보내기 함수가 없습니다. services/documentsApi.js를 확인하세요.");
+        return;
+      }
+      const blob = await fn(html, docxFilename);
       saveAs(blob, docxFilename);
     } catch (e) {
       console.error("DOCX 내보내기 실패:", e);
@@ -315,7 +340,12 @@ export default function DocEditor({ onClose }) {
         </div>
 
         {/* 서식 툴바 */}
-        <EditorToolbar editor={editorRef.current} />
+        {/* ✅ (2) editor 준비 전에는 툴바 렌더하지 않음 */}
+        {editorRef.current ? (
+          <EditorToolbar editor={editorRef.current} />
+        ) : (
+          <div className="h-10 border-b bg-white" />
+        )}
 
         {/* 본문 에디터 */}
         <div className="flex-1 overflow-y-auto" onClick={() => editorRef.current?.commands.focus()}>
