@@ -4,6 +4,7 @@ from typing import List, Optional
 from ..database import get_db, User
 from pydantic import BaseModel
 from passlib.context import CryptContext # Import CryptContext
+from .auth_routes import get_current_user
 
 # APIRouter 인스턴스 생성
 router = APIRouter()
@@ -35,7 +36,7 @@ class UserUpdate(BaseModel):
 
 # 새로운 사용자 생성 엔드포인트 (관리자용)
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+def create_user(user: UserCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     # 사원번호 중복 확인
     db_user = db.query(User).filter(User.unique_auth_number == user.unique_auth_number).first()
     if db_user:
@@ -78,7 +79,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 # 모든 사용자 조회 엔드포인트 (관리자용)
 @router.get("", response_model=List[dict])
-def get_all_users(db: Session = Depends(get_db)):
+def get_all_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     users = db.query(User).all() # 모든 사용자 조회
     # 사용자 목록 반환 (민감 정보 제외)
     return [
@@ -97,7 +98,7 @@ def get_all_users(db: Session = Depends(get_db)):
 
 # 특정 사용자 조회 엔드포인트 (관리자용)
 @router.get("/{user_id}", response_model=dict)
-def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
+def get_user_by_id(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first() # ID로 사용자 조회
     if not user: # 사용자 없으면 404 에러
         raise HTTPException(status_code=404, detail="User not found")
@@ -106,7 +107,7 @@ def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
 
 # 사용자 삭제 엔드포인트 (관리자용)
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT) # 204 No Content 반환
-def delete_user(user_id: int, db: Session = Depends(get_db)):
+def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first() # ID로 사용자 조회
     if not user: # 사용자 없으면 404 에러
         raise HTTPException(status_code=404, detail="User not found")
@@ -116,7 +117,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 
 # 사용자 정보 업데이트 엔드포인트 (관리자용)
 @router.put("/{user_id}", response_model=dict)
-def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
+def update_user(user_id: int, user_update: UserUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first() # ID로 사용자 조회
     if not user: # 사용자 없으면 404 에러
         raise HTTPException(status_code=404, detail="User not found")
@@ -134,7 +135,7 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
 
 # 사용자의 비밀번호를 초기화하는 엔드포인트 (관리자용)
 @router.put("/{user_id}/reset-password", response_model=dict)
-def reset_user_password(user_id: int, db: Session = Depends(get_db)):
+def reset_user_password(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

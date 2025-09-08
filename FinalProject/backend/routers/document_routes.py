@@ -296,13 +296,9 @@ async def create_presigned_url(
         )
 
 @router.post("/export/docx")
-async def export_document_as_docx(req: ExportDocxRequest, request: Request):
-    print("--- Raw body ---")
-    raw_body = await request.body()
-    print(raw_body.decode())
-
-    print(f"--- Parsed html_content length: {len(req.html)} ---")
-    print(f"--- Parsed filename: {req.filename} ---")
+async def export_document_as_docx(req: ExportDocxRequest, current_user: User = Depends(get_current_user)):
+    print(f"--- HTML content length: {len(req.html)} ---")
+    print(f"--- Filename: {req.filename} ---")
 
     safe_filename = req.filename.strip()
     if not safe_filename.endswith(".docx"):

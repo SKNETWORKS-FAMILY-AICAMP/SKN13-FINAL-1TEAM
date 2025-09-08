@@ -333,7 +333,7 @@ async def get_messages(
 
 # LLM 응답 스트리밍 엔드포인트
 @router.get("/stream")
-async def llm_stream(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
+async def llm_stream(session_id: str, prompt: str, current_user: User = Depends(get_current_user), document_content: Optional[str] = None, db: Session = Depends(get_db)):
     config = generate_config(session_id) # 세션 ID로 설정 생성
     chat_agent = RoutingAgent() # 라우팅 에이전트 인스턴스 생성
 
