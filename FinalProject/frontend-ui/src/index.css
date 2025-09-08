@@ -58,3 +58,10 @@
 .fgantt-scroll::-webkit-scrollbar-corner {
     background: transparent;
 }
+
+/* JSON 코드 블록 줄바꿈 개선 */
+.word-wrap-break-word {
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}

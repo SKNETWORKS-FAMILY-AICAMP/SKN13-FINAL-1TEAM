@@ -314,39 +314,42 @@ export default function App() {
                         />
                     )}
 
+                    {/* 사이드바 */}
                     {(isMaximized || sidebarOpen) && (
-                        <div
-                            className={`bg-white shadow-lg z-40 transition-all duration-300
-              ${
-                  isMaximized
-                      ? "basis-1/6 relative"
-                      : "w-64 fixed h-full left-0 top-0"
-              }`}
-                        >
-                            <Sidebar
-                                onClose={() => setSidebarOpen(false)}
-                                sessions={sessionList}
-                                onNewChat={handleNewChat}
-                                onSelectChat={handleSelectChat}
-                                isMaximized={isMaximized}
-                                onLogout={
-                                    handleLogout
-                                } /* ← 버튼 → 전역 로그아웃 */
-                            />
-                        </div>
-                    )}
-
                     <div
-                        className={`flex flex-col transition-all duration-300 ${
-                            isMaximized ? "basis-5/6" : "flex-1"
+                        className={`bg-white shadow-lg z-40 transition-all duration-300
+                        ${isMaximized
+                            // 기존: basis-1/6 relative
+                            ? "relative flex-none w-1/6 min-w-0"
+                            : "w-64 fixed h-full left-0 top-0"
                         }`}
                     >
-                        <ChatWindow
-                            key={chatKey}
-                            currentSession={currentSession}
-                            onSessionUpdated={loadSessions}
-                            isMaximized={isMaximized}
+                        <Sidebar
+                        onClose={() => setSidebarOpen(false)}
+                        sessions={sessionList}
+                        onNewChat={handleNewChat}
+                        onSelectChat={handleSelectChat}
+                        isMaximized={isMaximized}
+                        onLogout={handleLogout}
                         />
+                    </div>
+                    )}
+
+                    {/* 채팅 영역 */}
+                    <div
+                    className={`flex flex-col transition-all duration-300
+                        ${isMaximized
+                        // 기존: basis-5/6
+                        ? "flex-auto min-w-0"
+                        : "flex-1"
+                        }`}
+                    >
+                    <ChatWindow
+                        key={chatKey}
+                        currentSession={currentSession}
+                        onSessionUpdated={loadSessions}
+                        isMaximized={isMaximized}
+                    />
                     </div>
                 </div>
             </div>
