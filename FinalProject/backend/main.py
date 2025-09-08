@@ -13,7 +13,6 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:5173",  # 프론트엔드 개발 서버
-    "http://localhost:3000",  # 추가 개발 포트
 ]
 
 app.add_middleware(
