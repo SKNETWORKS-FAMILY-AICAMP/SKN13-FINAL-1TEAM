@@ -54,7 +54,7 @@ class PresignedURLRequest(BaseModel):
     contentType: Optional[str] = "application/octet-stream"
     pathHint: Optional[str] = ""
 
-class HTMLToDocxRequest(BaseModel):
+class ExportDocxRequest(BaseModel):
     html: str
     filename: str = "document.docx"
 
