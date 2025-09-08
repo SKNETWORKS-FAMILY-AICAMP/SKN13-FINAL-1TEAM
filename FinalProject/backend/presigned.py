@@ -21,7 +21,7 @@ s3_client = boto3.client(
     config=Config(signature_version='s3v4')
 )
 
-BUCKET_NAME = os.getenv('AWS_S3_BUCKET')
+BUCKET_NAME = os.getenv('SHARED_S3_BUCKET')
 
 if not BUCKET_NAME:
     raise ValueError("이봐, 아들. AWS_S3_BUCKET 환경 변수가 설정되지 않았다.")
