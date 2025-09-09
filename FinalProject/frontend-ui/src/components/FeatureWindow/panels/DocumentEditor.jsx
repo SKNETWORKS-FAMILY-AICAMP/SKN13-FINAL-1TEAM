@@ -63,6 +63,7 @@ export default function DocEditor({ onClose }) {
   const [documentTitle, setDocumentTitle] = useState("새 문서");
   const [isDirty, setIsDirty] = useState(false);
   const [editorContent, setEditorContent] = useState("<p>문서 작성을 시작하세요...</p>");
+  const [isContentLoaded, setIsContentLoaded] = useState(false); // ✅ [추가] 콘텐츠 로드 완료 플래그
 
   // ✅ ref는 유지하되,
   const editorRef = useRef(null);
@@ -96,6 +97,35 @@ export default function DocEditor({ onClose }) {
       }
     } catch {}
   }, []);
+
+  // ✅ [수정] 메인 프로세스에서 문서 내용 불러오고 로드 플래그 설정
+  useEffect(() => {
+    const loadFromMain = async () => {
+      try {
+        if (window.fsBridge?.getCurrentDocumentContent) {
+          console.log("🔄 [DocEditor] 메인 프로세스에서 문서 내용 로딩 시도...");
+          const contentFromMain = await window.fsBridge.getCurrentDocumentContent();
+          if (contentFromMain) {
+            console.log("✅ [DocEditor] 메인 프로세스에서 내용 로드 성공. 에디터에 적용합니다.");
+            setEditorContent(contentFromMain);
+            if (editorRef.current && !editorRef.current.isDestroyed) {
+              editorRef.current.commands.setContent(contentFromMain, false);
+            }
+            setIsDirty(false);
+          } else {
+            console.log("ℹ️ [DocEditor] 메인 프로세스에 저장된 내용이 없습니다.");
+          }
+        }
+      } catch (e) {
+        console.error("❌ [DocEditor] 메인 프로세스에서 문서 내용 로딩 중 오류:", e);
+      } finally {
+        // ✅ 로드가 성공하든 실패하든, 초기 로드 시도가 끝났음을 표시
+        setIsContentLoaded(true);
+      }
+    };
+
+    loadFromMain();
+  }, []); // 마운트 시 1회만 실행
 
   /** 저장 */
   const handleSave = useCallback(async () => {
@@ -297,13 +327,17 @@ export default function DocEditor({ onClose }) {
 
   /** 현재 문서 내용을 IPC를 통해 main process에 저장 (ChatWindow에서 접근 가능하도록) */
   useEffect(() => {
+    // ✅ [수정] 콘텐츠가 로드된 이후에만 저장 로직 실행
+    if (!isContentLoaded) {
+      return;
+    }
     if (window.fsBridge?.setCurrentDocumentContent) {
       window.fsBridge.setCurrentDocumentContent(editorContent);
       console.log('📝 DocumentEditor: IPC로 문서 내용 저장됨:', editorContent.substring(0, 100) + '...');
     } else {
       console.warn('📝 DocumentEditor: fsBridge.setCurrentDocumentContent가 없습니다.');
     }
-  }, [editorContent]);
+  }, [editorContent, isContentLoaded]); // ✅ 의존성 배열에 isContentLoaded 추가
 
   /** 챗봇에서 문서 업데이트 수신 - 전역 리스너로 중복 등록 방지 */
   useEffect(() => {
