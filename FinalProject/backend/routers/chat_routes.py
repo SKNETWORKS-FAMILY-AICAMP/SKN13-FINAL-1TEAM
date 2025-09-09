@@ -158,8 +158,8 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
         formatted_output += f"`Error processing output: {e}`"
         print(f"[Error] raw_output={raw_output} -> {e}")
 
-    # 1. SSE 전송 (도구 출력 메시지 전송)
-    yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
+    # 1. SSE 전송 (도구 출력 메시지 전송) - 사용자에게는 숨김
+    # yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
 
     # 2. ChatMessage 저장 (도구 출력 메시지)
     chat_msg = _create_chat_message(
