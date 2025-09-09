@@ -195,6 +195,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
 
     full_response_content = "" # 전체 응답 내용을 저장할 버퍼
     llm_output_buffer = "" # 라우팅 LLM 출력을 위한 버퍼
+    has_tool_execution = False # 도구 실행 여부 추적
     
     # 이전 채팅 메시지 가져오기
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
@@ -246,10 +247,19 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
             if content:
-                yield f"data: {json.dumps({'content': content})}\n\n"
-                full_response_content += content
+                # DocumentEditorAgent의 중복 응답 방지: 도구 실행 후 최종 확인 메시지만 전송
+                agent_name = event.get("name", "")
+                if "DocumentEditAgent" in agent_name and has_tool_execution:
+                    # 도구 실행 후 최종 확인 메시지만 스트리밍
+                    yield f"data: {json.dumps({'content': content})}\n\n"
+                    full_response_content += content
+                elif "DocumentEditAgent" not in agent_name:
+                    # 다른 에이전트는 정상 스트리밍
+                    yield f"data: {json.dumps({'content': content})}\n\n"
+                    full_response_content += content
                 
         elif kind == "on_tool_start": # 도구 시작 이벤트
+            has_tool_execution = True  # 도구 실행 플래그 설정
             async for chunk in _handle_tool_start(event, session_id, db):
                 yield chunk
         
