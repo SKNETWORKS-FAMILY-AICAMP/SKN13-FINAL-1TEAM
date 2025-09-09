@@ -362,8 +362,12 @@ def run_document_edit(user_command: str, document_content: str) -> str:
                     "new_text": tool_call["args"]["new_text"]
                 })
     
-    # Tool Call이 아니면 GPT의 직접 응답 (수정된 HTML)을 반환
-    return response.content
+    # Tool Call이 아니면 기본 HTML 편집으로 처리 (응답 메시지 제거)
+    # GPT가 추가 설명을 하지 않도록 HTML만 반환
+    return edit_html_document.invoke({
+        "document_content": document_content,
+        "instruction": user_command
+    })
 
 # === 새로운 Tiptap 전용 도구들 ===
 

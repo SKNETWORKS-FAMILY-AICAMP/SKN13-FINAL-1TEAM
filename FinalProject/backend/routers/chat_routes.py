@@ -247,16 +247,8 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
             if content:
-                # DocumentEditorAgent의 중복 응답 방지: 도구 실행 후 최종 확인 메시지만 전송
-                agent_name = event.get("name", "")
-                if "DocumentEditAgent" in agent_name and has_tool_execution:
-                    # 도구 실행 후 최종 확인 메시지만 스트리밍
-                    yield f"data: {json.dumps({'content': content})}\n\n"
-                    full_response_content += content
-                elif "DocumentEditAgent" not in agent_name:
-                    # 다른 에이전트는 정상 스트리밍
-                    yield f"data: {json.dumps({'content': content})}\n\n"
-                    full_response_content += content
+                yield f"data: {json.dumps({'content': content})}\n\n"
+                full_response_content += content
                 
         elif kind == "on_tool_start": # 도구 시작 이벤트
             has_tool_execution = True  # 도구 실행 플래그 설정

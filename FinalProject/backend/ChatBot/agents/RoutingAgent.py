@@ -37,7 +37,7 @@ def route_question(state: AgentState) -> Literal["document_search", "general_cha
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
     
     # Upgraded system_prompt for more robust routing
-    system_prompt = f"""당신은 사용자의 질문을 분석하여 가장 적절한 전문가에게 전달하는 라우Ting 전문가입니다. 대화의 전체 맥락을 고려하여 최적의 결정을 내리십시오.
+    system_prompt = f"""당신은 사용자의 질문을 분석하여 가장 적절한 전문가에게 전달하는 라우팅 전문가입니다. 대화의 전체 맥락을 고려하여 최적의 결정을 내리십시오.
 
 **세 명의 전문가:**
 
