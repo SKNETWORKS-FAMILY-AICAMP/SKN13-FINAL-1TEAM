@@ -132,39 +132,51 @@ export default function DocEditor({ onClose }) {
     const ed = editorRef.current;
     if (!ed) return;
 
-    if (!window.fsBridge?.showSaveDialog || !window.fsBridge?.saveDoc) {
-      alert("파일 저장 기능을 사용할 수 없습니다.");
+    // ✅ [수정] 새로 추가된 fsBridge.saveFile 함수를 사용하도록 변경
+    if (!window.fsBridge?.showSaveDialog || !window.fsBridge?.saveFile) {
+      alert("파일 저장 기능을 사용할 수 없습니다. (Bridge 함수 누락)");
       return;
     }
     const defaultName =
       documentTitle.match(/\.(txt|md|html)$/i) ? documentTitle : `${documentTitle}.html`;
 
+    // 1. 저장 대화상자 띄우기
     const result = await window.fsBridge.showSaveDialog({
       title: "문서 저장",
       defaultPath: defaultName,
       filters: [
-        { name: "Text Files", extensions: ["txt", "md"] },
         { name: "HTML Files", extensions: ["html"] },
+        { name: "Text Files", extensions: ["txt", "md"] },
         { name: "All Files", extensions: ["*"] },
       ],
     });
     const { canceled, filePath } = result || {};
-    if (canceled || !filePath) return;
+    if (canceled || !filePath) {
+      return; // 사용자가 취소
+    }
 
+    // 2. 파일 내용 저장
     const content = ed.getHTML();
     try {
-      await window.fsBridge.saveDoc({ filePath, content });
-      alert(`'${filePath}'이(가) 저장되었습니다.`);
+      // ✅ [수정] 새로운 saveFile IPC 핸들러 호출
+      await window.fsBridge.saveFile({ filePath, content });
+
+      alert(`'${filePath}'에 문서가 저장되었습니다.`);
+      
+      // 3. 상태 업데이트
       const fileName = filePath.split(/[\\/]/).pop();
       const newTitle = fileName || documentTitle;
       setDocumentTitle(newTitle);
       setIsDirty(false);
-      setEditorContent(content);
+      setEditorContent(content); // 현재 컨텐츠를 저장된 컨텐츠로 동기화
+      
+      // 로컬스토리지에도 저장 (기존 로직 유지)
       try {
         localStorage.setItem("document-editor-content", content);
         localStorage.setItem("document-editor-title", newTitle);
       } catch {}
     } catch (e) {
+      console.error("File save failed:", e);
       alert(`저장 실패: ${e?.message || "알 수 없는 오류"}`);
     }
   }, [documentTitle]);
