@@ -32,7 +32,7 @@ class ChatSession(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now(), index=True, comment="세션 생성시간")
     
     # 관계 정의
-    user = relationship("User", back_populates="chat_sessions", passive_deletes=True)  # 세션 소유자
+    user = relationship("User", back_populates="chat_sessions", passive_deletes=False)  # 세션 소유자
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")  # 세션의 메시지들
 
 
