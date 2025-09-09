@@ -247,8 +247,15 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         if kind == "on_chat_model_stream":
             content = event["data"]["chunk"].content
             if content:
-                yield f"data: {json.dumps({'content': content})}\n\n"
-                full_response_content += content
+                # Agent 이름 제거 (사용자에게 깔끔한 응답 제공)
+                agent_names = ["DocumentEditorAgent", "DocumentSearchAgent", "GeneralChatAgent", "RoutingAgent"]
+                cleaned_content = content
+                for agent_name in agent_names:
+                    cleaned_content = cleaned_content.replace(agent_name, "").strip()
+                
+                if cleaned_content:  # 빈 내용이 아닌 경우만 전송
+                    yield f"data: {json.dumps({'content': cleaned_content})}\n\n"
+                    full_response_content += cleaned_content
                 
         elif kind == "on_tool_start": # 도구 시작 이벤트
             has_tool_execution = True  # 도구 실행 플래그 설정
