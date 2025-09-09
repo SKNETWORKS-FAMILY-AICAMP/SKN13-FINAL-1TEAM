@@ -4,7 +4,7 @@ import GSTC from "gantt-schedule-timeline-calendar";
 import "gantt-schedule-timeline-calendar/dist/style.css";
 import "./ganttView.css";
 import { startOfMonth, endOfMonth, addMonths, differenceInCalendarDays } from "date-fns";
-import { EVENT_TYPE_COLORS, matchTypeByColor } from "./calendarConstants";
+import { EVENT_TYPES, matchTypeByColor } from "./calendarConstants";
 
 const LICENSE_KEY = import.meta.env?.VITE_GSTC_LICENSE_KEY || "";
 
@@ -19,7 +19,7 @@ function normalizeInterval(ev) {
   if (!Number.isFinite(e) || e <= s) e = s + MIN_MS;
 
   const type = (ev.type ? String(ev.type).toLowerCase() : matchTypeByColor(ev.color)) || "etc";
-  const color = ev.color ?? EVENT_TYPE_COLORS[type]?.bg;
+  const color = ev.color ?? EVENT_TYPES[type]?.bg;
 
   return { start: s, end: e, title: ev.title || "", type, color, ev };
 }

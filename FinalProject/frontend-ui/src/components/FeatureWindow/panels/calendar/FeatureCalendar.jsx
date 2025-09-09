@@ -11,7 +11,7 @@ import calendarApi from "../../../services/calendarApi.js";
 import useToast from "../../../shared/toast/useToast.js";
 
 import { startOfMonth, endOfMonth } from "date-fns";
-import { EVENT_TYPE_COLORS } from "./calendarConstants";
+import { EVENT_TYPES } from "./calendarConstants";
 
 import { FiCalendar } from "react-icons/fi";
 import { LuChartGantt, LuChevronLeft, LuChevronRight, LuPencil } from "react-icons/lu";
@@ -109,7 +109,7 @@ export default function FeatureCalendar() {
 
   const handleCreateSubmit = useCallback(async (payload) => {
     try {
-      const base = EVENT_TYPE_COLORS[payload.type || "etc"] ?? EVENT_TYPE_COLORS.etc;
+      const base = EVENT_TYPES[payload.type || "etc"] ?? EVENT_TYPES.etc;
       const withColor = { ...payload, color: base.bg || "#9BE7B0", allDay: payload.allDay ?? false };
       const res = await calendarApi.createEvent(withColor);
       const clean = normalizeEvent(res);
@@ -135,7 +135,7 @@ export default function FeatureCalendar() {
       await calendarApi.deleteEvent(selected.id);
       setEvents((prev) => prev.filter((e) => e.id !== selected.id));
       setConfirmOpen(false);
-      setDetailOpen(false);     // 삭제 시 상세 모달 닫기
+      setDetailOpen(false);
       setSelected(null);
       toast.success("일정이 삭제되었습니다.");
     } catch {
@@ -145,7 +145,7 @@ export default function FeatureCalendar() {
 
   const handleEditSubmit = useCallback(async (payload) => {
     try {
-      const base = EVENT_TYPE_COLORS[payload.type || "etc"] ?? EVENT_TYPE_COLORS.etc;
+      const base = EVENT_TYPES[payload.type || "etc"] ?? EVENT_TYPES.etc;
       const withColor = { ...payload, color: base.bg || "#9BE7B0" };
       const res = await calendarApi.updateEvent(payload.id, withColor);
       const clean = normalizeEvent(res);

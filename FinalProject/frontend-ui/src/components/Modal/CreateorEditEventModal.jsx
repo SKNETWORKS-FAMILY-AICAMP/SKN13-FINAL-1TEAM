@@ -3,16 +3,15 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import FormModal from "./FormModal";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 import {
-  EVENT_TYPE_COLORS,
-  TYPE_LABELS,
-  matchTypeByColor,
+  EVENT_TYPES as CAL_EVENT_TYPES,
+  colorToType,
 } from "../FeatureWindow/panels/calendar/calendarConstants";
 
-// 칩(팔레트에서 생성)
-const EVENT_TYPES = Object.keys(EVENT_TYPE_COLORS).map((k) => ({
-  key: k,
-  label: TYPE_LABELS[k] || k,
-  dot: EVENT_TYPE_COLORS[k].bg,
+// 팔레트(칩) 데이터
+const TYPE_CHIPS = Object.entries(CAL_EVENT_TYPES).map(([key, v]) => ({
+  key,
+  label: v.label,
+  dot: v.bg,
 }));
 
 // 10분 단위 시간
@@ -192,8 +191,7 @@ export default function CreateorEditEventModal({
 
       setTitle(editEvent.title ?? "");
       setDesc(editEvent.description ?? "");
-      // ★ color → type 매핑 (type이 없을 때)
-      setType(editEvent.type ?? matchTypeByColor(editEvent.color) ?? "etc");
+      setType(colorToType(editEvent.color) ?? "etc");
       setAllDay(alld);
 
       setStart({
@@ -312,6 +310,7 @@ export default function CreateorEditEventModal({
           <input
             className="mt-2 w-full h-11 rounded-xl border border-gray-300 px-3 text-sm"
             placeholder="일정 제목을 입력하세요"
+            maxLength='50'
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -398,15 +397,17 @@ export default function CreateorEditEventModal({
         <div>
           <div className={label}>일정 타입</div>
           <div className="mt-3 flex flex-wrap gap-3">
-            {EVENT_TYPES.map((t) => {
+            {TYPE_CHIPS.map((t) => {
               const active = type === t.key;
               return (
                 <button
                   key={t.key}
                   type="button"
                   onClick={() => setType(t.key)}
-                  className={`h-10 px-4 rounded-xl border text-sm flex items-center gap-2 ${
-                    active ? "border-gray-400 bg-white shadow-[0_1px_0_rgba(0,0,0,0.06)]" : "border-gray-300 bg-white hover:bg-gray-50"
+                  className={`h-10 px-4 rounded-xl border text-sm flex items-center gap-2 transition-colors ${
+                    active
+                      ? "border-gray-800 bg-gray-100 font-semibold text-gray-900 shadow"
+                      : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
                   }`}
                   aria-pressed={active}
                 >
