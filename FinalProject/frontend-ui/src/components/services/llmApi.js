@@ -129,10 +129,6 @@ export function streamLLM({
 
               // --- 백엔드에서 오는 SSE payload 처리 ---
               if (parsed.content) {
-<<<<<<< HEAD
-=======
-                console.log('📄 Content:', parsed.content); // 실제 내용 확인
->>>>>>> ef688aa9297dda07be66570b30a9beac06b77537
                 full += parsed.content;
                 onDelta?.(parsed.content, full);
               }
