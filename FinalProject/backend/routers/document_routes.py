@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Body
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Body, Query
 from fastapi.responses import JSONResponse, FileResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel
@@ -9,10 +9,17 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import fitz  # PyMuPDF
 from docx import Document as DocxDocument  # python-docx
+# --- 맨 위 import 근처 ---
+
+import boto3
+from botocore.config import Config
 
 from ..database import get_db, Document, User
 from ..ChatBot.tools.html_to_docx import convert_html_to_docx
 from .auth_routes import get_current_user
+
+SHARED_BUCKET = os.getenv("S3_SHARED_BUCKET", "skn13-shared-bucket")
+SHARED_ROOT   = os.getenv("S3_SHARED_ROOT", "")  # 예: "" 또는 "shared/"
 
 # Presigned URL 도구 import
 try:
@@ -319,3 +326,57 @@ async def export_document_as_docx(req: ExportDocxRequest, current_user: User = D
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         background=BackgroundTask(os.unlink, temp_filepath)
     )
+
+_s3 = boto3.client(
+    "s3",
+    region_name=os.getenv("AWS_REGION", "ap-northeast-2"),
+    config=Config(signature_version="s3v4"),
+)
+
+def _build_prefix(root: str, user_prefix: str | None) -> str:
+    p = (user_prefix or "").lstrip("/")
+    out = f"{root}{p}".replace("//", "/")
+    return out if not out or out.endswith("/") else out + "/"
+
+@router.get("/shared/list")
+async def list_shared(prefix: str = "", current_user: User = Depends(get_current_user)):
+    Prefix = _build_prefix(SHARED_ROOT, prefix)
+    resp = _s3.list_objects_v2(
+        Bucket=SHARED_BUCKET, Prefix=Prefix, Delimiter="/", MaxKeys=500
+    )
+    folders = [
+        {
+            "id": cp["Prefix"],
+            "name": (cp["Prefix"][len(Prefix):]).rstrip("/"),
+            "prefix": cp["Prefix"],
+        }
+        for cp in resp.get("CommonPrefixes", [])
+    ]
+    files = []
+    for obj in resp.get("Contents", []):
+        if obj["Key"] == Prefix or obj["Key"].endswith("/"):
+            continue
+        files.append({
+            "id": obj["Key"],
+            "key": obj["Key"],
+            "name": obj["Key"][len(Prefix):],
+            "size": obj.get("Size"),
+            "lastModified": obj.get("LastModified").isoformat() if obj.get("LastModified") else None,
+        })
+    return {"prefix": Prefix, "folders": folders, "files": files}
+
+@router.get("/shared/download")
+async def download_shared(key: str = Query(..., description="S3 key"),
+                          current_user: User = Depends(get_current_user)):
+    # presigned GET으로 돌려주면 대용량도 안전
+    url = _s3.generate_presigned_url(
+        ClientMethod="get_object",
+        Params={"Bucket": SHARED_BUCKET, "Key": key},
+        ExpiresIn=60 * 5,
+    )
+    return {"url": url}
+
+@router.delete("/shared/object")
+async def delete_shared(key: str, current_user: User = Depends(get_current_user)):
+    _s3.delete_object(Bucket=SHARED_BUCKET, Key=key)
+    return {"ok": True}

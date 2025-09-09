@@ -73,7 +73,7 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 
     # 사용자 화면에 표시할 생각 중 메시지
     thinking_message = (
-        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
+#        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
         f"```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
     )
 
@@ -121,7 +121,8 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
         print(f"--- Sending document_update for replace_text_in_document. Content length: {len(content_to_send) if isinstance(content_to_send, str) else 'N/A'} ---")
         yield f"data: {json.dumps({'document_update': content_to_send}, ensure_ascii=False)}\n\n"
 
-    formatted_output = "[Tool Output]: " # 도구 출력 포맷팅을 위한 초기 문자열
+#    formatted_output = "[Tool Output]: " # 도구 출력 포맷팅을 위한 초기 문자열
+    formatted_output = ""
     tool_raw_json = None
 
     try:
@@ -158,8 +159,8 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
         formatted_output += f"`Error processing output: {e}`"
         print(f"[Error] raw_output={raw_output} -> {e}")
 
-    # 1. SSE 전송 (도구 출력 메시지 전송)
-    yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
+    # 1. SSE 전송 (도구 출력 메시지 전송) - 사용자에게는 숨김
+    # yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
 
     # 2. ChatMessage 저장 (도구 출력 메시지)
     chat_msg = _create_chat_message(
@@ -250,6 +251,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 full_response_content += content
                 
         elif kind == "on_tool_start": # 도구 시작 이벤트
+            has_tool_execution = True  # 도구 실행 플래그 설정
             async for chunk in _handle_tool_start(event, session_id, db):
                 yield chunk
         
