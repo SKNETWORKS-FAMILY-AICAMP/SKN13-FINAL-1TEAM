@@ -196,6 +196,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
     full_response_content = "" # 전체 응답 내용을 저장할 버퍼
     llm_output_buffer = "" # 라우팅 LLM 출력을 위한 버퍼
     has_tool_execution = False # 도구 실행 여부 추적
+    routing_in_progress = True # 라우팅 진행 중 여부 추적
     
     # 이전 채팅 메시지 가져오기
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
@@ -243,36 +244,24 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 yield f"data: {json.dumps({'content': llm_output_buffer}, ensure_ascii=False)}\n\n"
                 llm_output_buffer = "" # 버퍼 비우기
 
-        # 일반적인 LLM 스트림 처리 (라우팅 LLM 제외)
-        if kind == "on_chat_model_stream":
-            content = event["data"]["chunk"].content
-            if content:
-                # Agent 이름 제거 (사용자에게 깔끔한 응답 제공)
-                agent_names = ["DocumentEditorAgent", "DocumentSearchAgent", "GeneralChatAgent", "RoutingAgent"]
-                cleaned_content = content
-                for agent_name in agent_names:
-                    cleaned_content = cleaned_content.replace(agent_name, "").strip()
-                
-                if cleaned_content:  # 빈 내용이 아닌 경우만 전송
-                    yield f"data: {json.dumps({'content': cleaned_content})}\n\n"
-                    full_response_content += cleaned_content
-                
-        elif kind == "on_tool_start": # 도구 시작 이벤트
-            has_tool_execution = True  # 도구 실행 플래그 설정
-            async for chunk in _handle_tool_start(event, session_id, db):
-                yield chunk
-        
-        elif kind == "on_tool_end": # 도구 종료 이벤트
-            async for chunk in _handle_tool_end(event, session_id, db):
-                yield chunk
-        
-        elif kind == "on_end": # 스트림 종료 이벤트
-            final_state = event.get("data", {}).get("output", {})
-            # ... (나머지 로직)
-            yield "data: [DONE]\n\n" # 스트림 종료 신호
+    # 일반적인 LLM 스트림 처리
+    if kind == "on_chat_model_stream":
+        content = event["data"]["chunk"].content
+        if content:
+            # Agent 이름 제거
+            agent_names = ["DocumentEditorAgent", "DocumentSearchAgent", "GeneralChatAgent", "RoutingAgent"]
+            cleaned_content = content
+            for agent_name in agent_names:
+                cleaned_content = cleaned_content.replace(agent_name, "").strip()
+            
+            if cleaned_content:  
+                full_response_content += cleaned_content  # 버퍼에만 저장
 
-    if full_response_content: # 전체 응답 내용이 있으면 저장
-        _create_chat_message(db, session_id, "assistant", full_response_content)
+    elif kind == "on_end":  # 스트림 종료 이벤트
+        if full_response_content:
+            yield f"data: {json.dumps({'content': full_response_content}, ensure_ascii=False)}\n\n"
+            _create_chat_message(db, session_id, "assistant", full_response_content)
+        yield "data: [DONE]\n\n"
 
 # --- 채팅 API 엔드포인트 ---
 # 메시지 저장 엔드포인트
