@@ -912,6 +912,21 @@ ipcMain.handle("fs:saveFile", async (_evt, { filePath, content }) => {
   return { ok: true };
 });
 
+// ✅ [추가] 파일 열기 대화상자 핸들러
+ipcMain.handle("fs:showOpenDialog", async (evt, options) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  return dialog.showOpenDialog(win, options);
+});
+
+// ✅ [추가] 절대 경로 파일 읽기 핸들러
+ipcMain.handle("fs:readFileByPath", async (_evt, { filePath }) => {
+  if (!filePath) throw new Error("filePath is required for fs:readFileByPath");
+  if (!fs.existsSync(filePath)) return { ok: false, reason: "not_found" };
+  const content = await fs.promises.readFile(filePath, "utf-8");
+  await upsertOpened({ path: filePath, name: path.basename(filePath) });
+  return { ok: true, content, mime: extToMime(path.extname(filePath).slice(1)) };
+});
+
 /* ============================================================================
  *   문서 내용 공유 IPC (원본 유지)
  * ==========================================================================*/

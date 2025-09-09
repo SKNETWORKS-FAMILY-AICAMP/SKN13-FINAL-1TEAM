@@ -80,9 +80,11 @@ function toName(arg) {
   return "";
 }
 const fsBridge = {
-  // ✅ [추가] 파일 저장/열기 대화상자
+  // ✅ [수정] 파일 저장/열기 대화상자 및 파일 읽기/쓰기
   showSaveDialog: (options) => ipcRenderer.invoke("fs:showSaveDialog", options),
+  showOpenDialog: (options) => ipcRenderer.invoke("fs:showOpenDialog", options),
   saveFile: (options) => ipcRenderer.invoke("fs:saveFile", options),
+  readFileByPath: (options) => ipcRenderer.invoke("fs:readFileByPath", options),
 
   listDocs: () => ipcRenderer.invoke("fs:listDocs"),
   listViewed: () => ipcRenderer.invoke("fs:listViewed"), // ✅ 추가

@@ -184,16 +184,22 @@ export default function DocEditor({ onClose }) {
   /** 불러오기 */
   const handleLoad = useCallback(async () => {
     if (isLoadingRef.current) return;
+    
+    // ✅ [수정] 새로 추가된 fsBridge 함수를 사용하도록 변경
+    if (!window.fsBridge?.showOpenDialog || !window.fsBridge?.readFileByPath) {
+      alert("파일 불러오기 기능을 사용할 수 없습니다. (Bridge 함수 누락)");
+      return;
+    }
+
+    if (isDirty) {
+      const proceed = confirm("저장되지 않은 변경 사항이 있습니다. 계속하시겠습니까?");
+      if (!proceed) return;
+    }
+
     isLoadingRef.current = true;
+
     try {
-      if (!window.fsBridge?.showOpenDialog) {
-        alert("파일 불러오기 기능을 사용할 수 없습니다.");
-        return;
-      }
-      if (isDirty) {
-        const proceed = confirm("저장되지 않은 변경 사항이 있습니다. 불러오시겠습니까?");
-        if (!proceed) return;
-      }
+      // 1. 파일 열기 대화상자 띄우기
       const result = await window.fsBridge.showOpenDialog({
         title: "문서 열기",
         properties: ["openFile"],
@@ -204,40 +210,51 @@ export default function DocEditor({ onClose }) {
         ],
       });
       const { canceled, filePaths } = result || {};
-      if (canceled || !filePaths || filePaths.length === 0) return;
-
+      if (canceled || !filePaths || filePaths.length === 0) {
+        return; // 사용자가 취소
+      }
       const filePath = filePaths[0];
 
-      // ✅ 웹/미주입 환경 가드
-      if (!window.electron?.ipcRenderer?.invoke) {
-        alert("이 환경에서는 파일 읽기를 지원하지 않습니다.");
+      // 2. 파일 내용 읽기
+      // ✅ [수정] 새로운 readFileByPath IPC 핸들러 호출
+      const resp = await window.fsBridge.readFileByPath({ filePath });
+      const { ok, content, mime, reason } = resp || {};
+
+      if (!ok) {
+        alert(`파일을 읽는 중 문제가 발생했습니다: ${reason || "알 수 없는 오류"}`);
         return;
       }
 
-      // 파일 경로 기반으로 메인 프로세스에 직접 요청
-      const resp = await window.electron.ipcRenderer.invoke("fs:readDoc", { filePath });
-      const { ok, content, mime } = resp || {};
-      if (!ok || !mime) { alert("파일을 읽는 중 문제가 발생했습니다."); return; }
+      // 3. 에디터에 내용 적용
+      let processedContent = "";
+      if (mime === "text/html") {
+        processedContent = content || "";
+      } else if (mime === "text/plain" || mime === "text/markdown") {
+        processedContent = toSimpleHTML(content || "");
+      } else {
+        alert(`지원하지 않는 파일 형식입니다: ${mime}`);
+        return;
+      }
 
-      let processed = "";
-      if (mime === "text/html") processed = content || "";
-      else if (mime === "text/plain" || mime === "text/markdown") processed = toSimpleHTML(content || "");
-      else { alert(`지원하지 않는 형식: ${mime}`); return; }
-
-      editorRef.current?.commands.setContent(processed, false);
-      setEditorContent(processed);
+      editorRef.current?.commands.setContent(processedContent, false);
+      setEditorContent(processedContent);
       setIsDirty(false);
 
+      // 4. 상태 업데이트
       const fileName = filePath.split(/[\\/]/).pop();
       const newTitle = fileName || "문서";
       setDocumentTitle(newTitle);
 
+      // 로컬스토리지에도 저장 (기존 로직 유지)
       try {
-        localStorage.setItem("document-editor-content", processed);
+        localStorage.setItem("document-editor-content", processedContent);
         localStorage.setItem("document-editor-title", newTitle);
-      } catch {}
-      alert(`'${filePath}' 불러오기 완료`);
+      } catch {} 
+      
+      alert(`'${filePath}' 파일을 불러왔습니다.`);
+
     } catch (e) {
+      console.error("File load failed:", e);
       alert(`파일 불러오기 실패: ${e?.message || "알 수 없는 오류"}`);
     } finally {
       isLoadingRef.current = false;

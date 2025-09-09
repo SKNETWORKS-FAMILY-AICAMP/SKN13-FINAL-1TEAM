@@ -3,7 +3,7 @@ name: Notify Discord on Push
 on:
   push:
     branches:
-      - main  # 원하는 브랜치명
+      - '*'  # 모든 브랜치
 
 jobs:
   notify:
