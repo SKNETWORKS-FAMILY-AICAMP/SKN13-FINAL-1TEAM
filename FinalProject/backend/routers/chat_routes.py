@@ -73,7 +73,7 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 
     # 사용자 화면에 표시할 생각 중 메시지
     thinking_message = (
-        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
+#        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
         f"```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
     )
 
@@ -121,7 +121,8 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
         print(f"--- Sending document_update for replace_text_in_document. Content length: {len(content_to_send) if isinstance(content_to_send, str) else 'N/A'} ---")
         yield f"data: {json.dumps({'document_update': content_to_send}, ensure_ascii=False)}\n\n"
 
-    formatted_output = "[Tool Output]: " # 도구 출력 포맷팅을 위한 초기 문자열
+#    formatted_output = "[Tool Output]: " # 도구 출력 포맷팅을 위한 초기 문자열
+    formatted_output = ""
     tool_raw_json = None
 
     try:
@@ -195,8 +196,6 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
 
     full_response_content = "" # 전체 응답 내용을 저장할 버퍼
     llm_output_buffer = "" # 라우팅 LLM 출력을 위한 버퍼
-    has_tool_execution = False # 도구 실행 여부 추적
-    routing_in_progress = True # 라우팅 진행 중 여부 추적
     
     # 이전 채팅 메시지 가져오기
     history_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all()
@@ -244,24 +243,29 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 yield f"data: {json.dumps({'content': llm_output_buffer}, ensure_ascii=False)}\n\n"
                 llm_output_buffer = "" # 버퍼 비우기
 
-    # 일반적인 LLM 스트림 처리
-    if kind == "on_chat_model_stream":
-        content = event["data"]["chunk"].content
-        if content:
-            # Agent 이름 제거
-            agent_names = ["DocumentEditorAgent", "DocumentSearchAgent", "GeneralChatAgent", "RoutingAgent"]
-            cleaned_content = content
-            for agent_name in agent_names:
-                cleaned_content = cleaned_content.replace(agent_name, "").strip()
-            
-            if cleaned_content:  
-                full_response_content += cleaned_content  # 버퍼에만 저장
+        # 일반적인 LLM 스트림 처리 (라우팅 LLM 제외)
+        if kind == "on_chat_model_stream":
+            content = event["data"]["chunk"].content
+            if content:
+                yield f"data: {json.dumps({'content': content})}\n\n"
+                full_response_content += content
+                
+        elif kind == "on_tool_start": # 도구 시작 이벤트
+            has_tool_execution = True  # 도구 실행 플래그 설정
+            async for chunk in _handle_tool_start(event, session_id, db):
+                yield chunk
+        
+        elif kind == "on_tool_end": # 도구 종료 이벤트
+            async for chunk in _handle_tool_end(event, session_id, db):
+                yield chunk
+        
+        elif kind == "on_end": # 스트림 종료 이벤트
+            final_state = event.get("data", {}).get("output", {})
+            # ... (나머지 로직)
+            yield "data: [DONE]\n\n" # 스트림 종료 신호
 
-    elif kind == "on_end":  # 스트림 종료 이벤트
-        if full_response_content:
-            yield f"data: {json.dumps({'content': full_response_content}, ensure_ascii=False)}\n\n"
-            _create_chat_message(db, session_id, "assistant", full_response_content)
-        yield "data: [DONE]\n\n"
+    if full_response_content: # 전체 응답 내용이 있으면 저장
+        _create_chat_message(db, session_id, "assistant", full_response_content)
 
 # --- 채팅 API 엔드포인트 ---
 # 메시지 저장 엔드포인트
