@@ -13,7 +13,7 @@ class employeeApi {
         try {
             const body = {
                 username: payload.username,
-                email: payload.email,
+                email: payload.email || null,
                 unique_auth_number: payload.unique_auth_number,
                 dept: payload.dept || null,
                 position: payload.position || null,
