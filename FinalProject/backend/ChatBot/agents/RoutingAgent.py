@@ -68,7 +68,7 @@ def route_question(state: AgentState) -> Literal["document_search", "general_cha
     # Invoke LLM with the system prompt and the entire message history
     response = llm.invoke([SystemMessage(content=system_prompt)] + messages)
     decision = response.content.strip()
-    return
+    return ""
     # If agent requires a document but it's not in the state, request it.
     if ("DocumentEditorAgent" in decision or "DocumentSearchAgent" in decision) and not state.get("document_content"):
         print(f"--- Decision: {decision}, but document not found. Routing to request_document. ---")
