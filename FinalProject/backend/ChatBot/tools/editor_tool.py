@@ -362,8 +362,19 @@ def run_document_edit(user_command: str, document_content: str) -> str:
                     "new_text": tool_call["args"]["new_text"]
                 })
     
-    # Tool Call이 아니면 기본 HTML 편집으로 처리 (응답 메시지 제거)
-    # GPT가 추가 설명을 하지 않도록 HTML만 반환
+    # Tool Call이 아니면 GPT의 직접 응답을 처리
+    # HTML 태그가 포함된 응답인지 확인하고 HTML만 추출
+    content = response.content
+    
+    # HTML 태그가 포함되어 있으면 그것만 반환
+    if '<' in content and '>' in content:
+        # HTML 부분만 추출 (간단한 방식)
+        import re
+        html_match = re.search(r'<[^>]+>.*?</[^>]+>|<[^>]+/>', content, re.DOTALL)
+        if html_match:
+            return html_match.group(0)
+    
+    # HTML이 없으면 edit_html_document로 처리
     return edit_html_document.invoke({
         "document_content": document_content,
         "instruction": user_command
