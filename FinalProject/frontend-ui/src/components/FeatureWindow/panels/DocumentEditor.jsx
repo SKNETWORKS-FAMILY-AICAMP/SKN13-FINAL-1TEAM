@@ -129,8 +129,8 @@ export default function DocEditor({ onClose }) {
       title: "문서 저장",
       defaultPath: defaultName,
       filters: [
-        { name: "HTML Files", extensions: ["html"] },
         { name: "Text Files", extensions: ["txt", "md"] },
+        { name: "HTML Files", extensions: ["html"] },
         { name: "All Files", extensions: ["*"] },
       ],
     });

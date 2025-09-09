@@ -1,6 +1,6 @@
-import { CHAT_URL } from './env';
+import { CHAT_URL, BASE_URL } from './env';
 
-// SSE 스트리밍 - FastAPI /stream 엔드포인트와 호환
+// Fetch를 사용한 SSE 스트리밍 - createAxios 토큰 로직 활용
 export function streamLLM({
   sessionId,
   prompt,
@@ -13,6 +13,8 @@ export function streamLLM({
   onDone,
   onError,
 }) {
+  console.log('🚀 streamLLM 함수 호출됨 - Fetch 버전!', { sessionId, prompt });
+  
   const params = new URLSearchParams({
     session_id: sessionId,
     prompt: prompt,
@@ -23,62 +25,152 @@ export function streamLLM({
   }
 
   const url = `${CHAT_URL}/stream?${params.toString()}`;
-  const es = new EventSource(url);
+  console.log('🔗 요청 URL:', url);
+
   let full = '';
+  let controller = new AbortController();
   let closed = false;
 
   function safeClose() {
     if (!closed) {
       closed = true;
-      es.close();
+      controller.abort();
     }
   }
 
-  es.onmessage = (e) => {
+  // 토큰 갱신 함수 (createAxios 로직 참고)
+  const refreshToken = async () => {
     try {
-      // [DONE] 종료 신호
-      if (e.data === '[DONE]') {
-        safeClose();
-        onDone?.(full);
-        return;
+      const refreshResponse = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        localStorage.setItem("userToken", data.access_token);
+        return data.access_token;
       }
-
-      const data = JSON.parse(e.data);
-
-      // --- 백엔드에서 오는 SSE payload 처리 ---
-      if (data.content) {
-        // 일반 LLM 응답 스트림
-        full += data.content;
-        onDelta?.(data.content, full);
+      throw new Error('토큰 갱신 실패');
+    } catch (error) {
+      localStorage.removeItem("userToken");
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
       }
-
-      if (data.tool_message) {
-        onToolMessage?.(data.tool_message);
-      }
-
-      if (data.thinking_message) {
-        onThinking?.(data.thinking_message);
-      }
-
-      if (data.document_update) {
-        onDocumentUpdate?.(data.document_update);
-      }
-
-      if (data.needs_document_content) {
-        onNeedsDocument?.(data.agent_context);
-      }
-
-    } catch (err) {
-      console.error('SSE parse error:', err, 'Raw data:', e.data);
-      onError?.(err);
+      throw error;
     }
   };
 
-  es.onerror = (err) => {
-    console.error('SSE connection error:', err);
-    safeClose();
-    onError?.(err);
+  // 스트리밍 요청 함수
+  const makeRequest = async (useRefreshToken = false) => {
+    let token = localStorage.getItem("userToken");
+    
+    if (useRefreshToken) {
+      token = await refreshToken();
+    }
+    
+    if (!token) {
+      console.warn('⚠️ 토큰이 없습니다. 로그인이 필요할 수 있습니다.');
+      onError?.(new Error('인증 토큰이 없습니다'));
+      return;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'text/event-stream',
+        },
+        credentials: 'include',
+        signal: controller.signal,
+      });
+
+      // 401 에러 시 토큰 갱신 후 재시도
+      if (response.status === 401 && !useRefreshToken) {
+        console.log('🔄 401 에러 - 토큰 갱신 후 재시도');
+        return makeRequest(true);
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          onDone?.(full);
+          break;
+        }
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+
+            // [DONE] 종료 신호
+            if (data === '[DONE]') {
+              safeClose();
+              onDone?.(full);
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              
+              // 디버깅을 위한 로그 추가
+              console.log('🔍 SSE 데이터 파싱:', Object.keys(parsed));
+
+              // --- 백엔드에서 오는 SSE payload 처리 ---
+              if (parsed.content) {
+                console.log('📄 Content:', parsed.content); // 실제 내용 확인
+                full += parsed.content;
+                onDelta?.(parsed.content, full);
+              }
+
+              if (parsed.tool_message) {
+                onToolMessage?.(parsed.tool_message);
+              }
+
+              if (parsed.thinking_message) {
+                onThinking?.(parsed.thinking_message);
+              }
+
+              if (parsed.document_update) {
+                console.log('🎯 document_update 감지!', parsed.document_update);
+                onDocumentUpdate?.(parsed.document_update);
+              }
+
+              if (parsed.needs_document_content) {
+                onNeedsDocument?.(parsed.agent_context);
+              }
+
+            } catch (parseError) {
+              if (data.trim()) { // 빈 문자열이 아닌 경우만 로그
+                console.error('SSE parse error:', parseError, 'Raw data:', data);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('🛑 요청이 중단되었습니다');
+      } else {
+        console.error('❌ Fetch 스트리밍 에러:', error);
+        onError?.(error);
+      }
+    }
   };
+
+  // 요청 시작
+  makeRequest();
 
   // cleanup 함수 반환
   return () => safeClose();
