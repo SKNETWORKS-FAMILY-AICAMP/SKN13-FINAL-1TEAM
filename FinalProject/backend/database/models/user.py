@@ -42,7 +42,7 @@ class User(Base):
     
     # 관계 정의
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")  # 사용자의 리프레시 토큰들
-    chat_sessions = relationship("ChatSession", back_populates="user")     # 사용자의 채팅 세션들
+    chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan", passive_deletes=False)     # 사용자의 채팅 세션들
     calendars = relationship("Calendar", back_populates="user", cascade="all, delete-orphan")  # 사용자의 캘린더들
     documents = relationship("Document", back_populates="owner", passive_deletes=True)         # 사용자의 문서들
     events_created = relationship("Event", back_populates="creator", foreign_keys="Event.created_by")  # 사용자가 생성한 이벤트들
