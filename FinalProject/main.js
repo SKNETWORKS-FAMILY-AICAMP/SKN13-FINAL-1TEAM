@@ -44,8 +44,9 @@ const S3_ROOT = process.env.S3_ROOT || "documents/"; // 공유 루트 prefix
 const S3_SHARED_BUCKET = process.env.S3_SHARED_BUCKET || "skn13-shared-bucket";
 const S3_SHARED_ROOT = process.env.S3_SHARED_ROOT || "";
 
+//===================  이 아래 함수를 바꿔주세요 =========================
 const s3 = new S3Client({ region: AWS_REGION });
-
+//=====================이 위에 함수를 바꿔주세요 =========================
 const {
   app,
   ipcMain,
