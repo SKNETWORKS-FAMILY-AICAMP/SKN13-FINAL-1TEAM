@@ -32,7 +32,7 @@ import EditorToolbar from "./Editor/EditorToolbar";
 import RichEditor from "./Editor/RichEditor";
 import * as documentsApi from "../../services/documentsApi";
 import { saveAs } from "file-saver";
-import { streamLLM } from "../../services/llmApi";
+// import { streamLLM } from "../../services/llmApi"; // AI편집 기능 주석처리로 인해 불필요
 
 /** 간단 ErrorBoundary */
 class ErrorBoundary extends React.Component {
@@ -286,59 +286,59 @@ export default function DocEditor({ onClose }) {
     }
   }, [documentTitle]);
 
-  /** AI 편집 */
-  const handleEditWithAI = useCallback(async () => {
-    const ed = editorRef.current;
-    if (!ed) return;
-    const userCommand = prompt("AI에게 문서 편집 명령을 내려주세요:");
-    if (!userCommand) return;
+  /** AI 편집 - 주석처리 (필요없음) */
+  // const handleEditWithAI = useCallback(async () => {
+  //   const ed = editorRef.current;
+  //   if (!ed) return;
+  //   const userCommand = prompt("AI에게 문서 편집 명령을 내려주세요:");
+  //   if (!userCommand) return;
 
-    const current = ed.getHTML();
-    if (!current || current === "<p></p>") { alert("편집할 내용이 없습니다."); return; }
+  //   const current = ed.getHTML();
+  //   if (!current || current === "<p></p>") { alert("편집할 내용이 없습니다."); return; }
 
-    alert("AI가 문서를 편집 중입니다...");
-    try {
-      streamLLM({
-        sessionId,
-        prompt: userCommand,
-        documentContent: current,
-        onDelta: () => {}, 
-        onToolMessage: (msg) => console.log("Tool Message:", msg),
-        onDone: (full) => {
-          try {
-            const parsed = JSON.parse(full);
-            if (parsed.document_update) {
-              ed.commands.setContent(parsed.document_update, false);
-              setEditorContent(parsed.document_update);
-              setIsDirty(true);
-              alert("AI 편집 완료!");
-            } else {
-              alert("AI 응답에 업데이트가 없습니다.");
-            }
-          } catch (e) {
-            console.error("AI 응답 파싱 실패:", e);
-            alert("AI 응답 처리 중 오류가 발생했습니다.");
-          }
-        },
-        onError: (err) => {
-          console.error("AI 편집 오류:", err);
-          alert("AI 편집 중 오류가 발생했습니다: " + err.message);
-        },
-      });
-    } catch (e) {
-      console.error("streamLLM 호출 실패:", e);
-      alert("AI 편집 기능을 시작할 수 없습니다.");
-    }
-  }, [sessionId]);
+  //   alert("AI가 문서를 편집 중입니다...");
+  //   try {
+  //     streamLLM({
+  //       sessionId,
+  //       prompt: userCommand,
+  //       documentContent: current,
+  //       onDelta: () => {}, 
+  //       onToolMessage: (msg) => console.log("Tool Message:", msg),
+  //       onDone: (full) => {
+  //         try {
+  //           const parsed = JSON.parse(full);
+  //           if (parsed.document_update) {
+  //             ed.commands.setContent(parsed.document_update, false);
+  //             setEditorContent(parsed.document_update);
+  //             setIsDirty(true);
+  //             alert("AI 편집 완료!");
+  //           } else {
+  //             alert("AI 응답에 업데이트가 없습니다.");
+  //           }
+  //         } catch (e) {
+  //           console.error("AI 응답 파싱 실패:", e);
+  //           alert("AI 응답 처리 중 오류가 발생했습니다.");
+  //         }
+  //       },
+  //       onError: (err) => {
+  //         console.error("AI 편집 오류:", err);
+  //         alert("AI 편집 중 오류가 발생했습니다: " + err.message);
+  //       },
+  //     });
+  //   } catch (e) {
+  //     console.error("streamLLM 호출 실패:", e);
+  //     alert("AI 편집 기능을 시작할 수 없습니다.");
+  //   }
+  // }, [sessionId]);
 
-  /** 닫기 */
-  const handleClose = useCallback(() => {
-    if (isDirty) {
-      const ok = confirm("저장되지 않은 변경 사항이 있습니다. 닫으시겠습니까?");
-      if (!ok) return;
-    }
-    onClose?.();
-  }, [isDirty, onClose]);
+  /** 닫기 - 주석처리 (필요없음) */
+  // const handleClose = useCallback(() => {
+  //   if (isDirty) {
+  //     const ok = confirm("저장되지 않은 변경 사항이 있습니다. 닫으시겠습니까?");
+  //     if (!ok) return;
+  //   }
+  //   onClose?.();
+  // }, [isDirty, onClose]);
 
   /** 단축키 (Ctrl/Cmd+S, Ctrl/Cmd+O) */
   useEffect(() => {
@@ -444,12 +444,14 @@ export default function DocEditor({ onClose }) {
             <button onClick={handleExportDocx} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-green-600 text-white hover:bg-green-700">
               DOCX로 내보내기
             </button>
-            <button onClick={handleEditWithAI} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-purple-600 text-white hover:bg-purple-700">
+            {/* AI편집 버튼 주석처리 - 필요없음 */}
+            {/* <button onClick={handleEditWithAI} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-purple-600 text-white hover:bg-purple-700">
               AI 편집
-            </button>
-            <button onClick={handleClose} className="px-4 py-2 text-sm font-semibold rounded-xl bg-red-500 text-white hover:bg-red-600">
+            </button> */}
+            {/* 닫기 버튼 주석처리 - 필요없음 */}
+            {/* <button onClick={handleClose} className="px-4 py-2 text-sm font-semibold rounded-xl bg-red-500 text-white hover:bg-red-600">
               닫기
-            </button>
+            </button> */}
           </div>
         </div>
 
