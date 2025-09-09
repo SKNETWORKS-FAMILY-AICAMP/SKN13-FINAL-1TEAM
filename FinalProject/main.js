@@ -897,6 +897,21 @@ ipcMain.handle("fs:open", async (_evt, { name }) => {
   return { ok: !r, reason: r || undefined };
 });
 
+// ✅ [추가] 파일 저장 대화상자 핸들러
+ipcMain.handle("fs:showSaveDialog", async (evt, options) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  return dialog.showSaveDialog(win, options);
+});
+
+// ✅ [추가] 절대 경로 파일 저장 핸들러
+ipcMain.handle("fs:saveFile", async (_evt, { filePath, content }) => {
+  if (!filePath) throw new Error("filePath is required for fs:saveFile");
+  await fs.promises.writeFile(filePath, content ?? "", "utf-8");
+  // 최근 열어본 목록에도 추가
+  await upsertOpened({ path: filePath, name: path.basename(filePath) });
+  return { ok: true };
+});
+
 /* ============================================================================
  *   문서 내용 공유 IPC (원본 유지)
  * ==========================================================================*/
