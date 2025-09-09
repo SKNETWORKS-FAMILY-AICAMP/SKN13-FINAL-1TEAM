@@ -20,7 +20,7 @@ def get_password_hash(password):
 class UserCreate(BaseModel):
     unique_auth_number: str # 사원번호 (필수)
     username: str # 사용자 이름 (필수)
-    email: Optional[str] # 이메일 (필수)
+    email: Optional[str] = None # 이메일 (필수)
     dept: Optional[str] = None # 부서 (선택적)
     position: Optional[str] = None # 직급 (선택적)
     is_manager: Optional[bool] = False # 관리자 권한 여부 (기본값: False)
