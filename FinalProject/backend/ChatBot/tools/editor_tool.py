@@ -25,7 +25,8 @@ def edit_html_document(document_content: str, instruction: str) -> str:
     TipTap 에디터와 완전히 호환되는 HTML 편집을 수행합니다.
     지원 기능: 헤딩, 텍스트 스타일링, 리스트, 테이블, 블록쿼트, 텍스트 추가/수정 등
     """
-    print(f"--- Running edit_html_document Tool with instruction: '{instruction}' ---")
+    try:
+        logger.info(f"HTML 문서 편집 시작 - 지시사항: {instruction[:100]}...")
     
     # HTML 문서가 비어있거나 매우 간단한 경우 기본 구조 생성
     if not document_content.strip() or document_content.strip() == '<p></p>':
@@ -332,23 +333,30 @@ def edit_html_document(document_content: str, instruction: str) -> str:
             new_p.string = content_to_add
             soup.append(new_p)
 
-    # 결과 반환 전 정리
-    result = str(soup)
-    
-    # 불필요한 HTML 태그 정리
-    result = result.replace('<html><body>', '').replace('</body></html>', '')
-    result = result.strip()
-    
-    return result
+        # 결과 반환 전 정리
+        result = str(soup)
+        
+        # 불필요한 HTML 태그 정리
+        result = result.replace('<html><body>', '').replace('</body></html>', '')
+        result = result.strip()
+        
+        logger.info(f"HTML 문서 편집 완료 - 결과 길이: {len(result)}자")
+        return result
+        
+    except Exception as e:
+        logger.error(f"HTML 문서 편집 중 오류 발생: {str(e)}")
+        # 오류 발생 시 원본 문서 반환하면서 오류 메시지 추가
+        error_message = f"<p style='color: red;'>편집 중 오류가 발생했습니다: {str(e)}</p>"
+        return f"{document_content}\n{error_message}"
 
 @tool
 def run_document_edit(user_command: str, document_content: str) -> str:
     """
     사용자의 편집 요청에 따라 문서를 수정하는 메인 툴.
-    GPT가 이 툴을 호출하여 편집 전략을 세우고 문서를 반환합니다.
+    대화 맥락을 고려하여 지능적인 편집을 수행합니다.
     Tiptap 에디터의 모든 기능을 지원합니다.
     """
-    print("--- Running Document Editor Tool (Tiptap Enhanced) ---")
+    logger.info(f"문서 편집 도구 실행 - 명령: {user_command[:100]}...")
 
     llm_client = ChatOpenAI(model_name='gpt-4o', temperature=0)
     llm_with_internal_tools = llm_client.bind_tools([replace_text_in_document, edit_html_document])
@@ -386,45 +394,49 @@ def run_document_edit(user_command: str, document_content: str) -> str:
     반드시 사용자의 요청에 맞는 실질적이고 구체적인 내용을 생성하세요.
     """
 
-    response = llm_with_internal_tools.invoke([
-        {"role": "system", "content": EDITOR_SYSTEM_PROMPT},
-        {"role": "user", "content": user_prompt_content}
-    ])
+    try:
+        response = llm_with_internal_tools.invoke([
+            {"role": "system", "content": EDITOR_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt_content}
+        ])
 
-    # GPT의 응답이 Tool Call이면 Tool을 실행하고 결과를 반환
-    if response.tool_calls:
-        for tool_call in response.tool_calls:
-            if tool_call["name"] == "edit_html_document":
-                # invoke 메서드 사용하여 도구 호출
-                return edit_html_document.invoke({
-                    "document_content": document_content,
-                    "instruction": tool_call["args"]["instruction"]
-                })
-            elif tool_call["name"] == "replace_text_in_document":
-                # invoke 메서드 사용하여 도구 호출
-                return replace_text_in_document.invoke({
-                    "document_content": document_content,
-                    "old_text": tool_call["args"]["old_text"],
-                    "new_text": tool_call["args"]["new_text"]
-                })
+        # GPT의 응답이 Tool Call이면 Tool을 실행하고 결과를 반환
+        if response.tool_calls:
+            for tool_call in response.tool_calls:
+                if tool_call["name"] == "edit_html_document":
+                    return edit_html_document.invoke({
+                        "document_content": document_content,
+                        "instruction": tool_call["args"]["instruction"]
+                    })
+                elif tool_call["name"] == "replace_text_in_document":
+                    return replace_text_in_document.invoke({
+                        "document_content": document_content,
+                        "old_text": tool_call["args"]["old_text"],
+                        "new_text": tool_call["args"]["new_text"]
+                    })
+        
+        # Tool Call이 아니면 GPT의 직접 응답을 처리
+        content = response.content
+        
+        # HTML 태그가 포함된 응답인지 확인하고 HTML만 추출
+        if '<' in content and '>' in content:
+            html_match = re.search(r'<[^>]+>.*?</[^>]+>|<[^>]+/>', content, re.DOTALL)
+            if html_match:
+                return html_match.group(0)
+        
+        # HTML이 없으면 edit_html_document로 처리
+        return edit_html_document.invoke({
+            "document_content": document_content,
+            "instruction": user_command
+        })
     
-    # Tool Call이 아니면 GPT의 직접 응답을 처리
-    # HTML 태그가 포함된 응답인지 확인하고 HTML만 추출
-    content = response.content
-    
-    # HTML 태그가 포함되어 있으면 그것만 반환
-    if '<' in content and '>' in content:
-        # HTML 부분만 추출 (간단한 방식)
-        import re
-        html_match = re.search(r'<[^>]+>.*?</[^>]+>|<[^>]+/>', content, re.DOTALL)
-        if html_match:
-            return html_match.group(0)
-    
-    # HTML이 없으면 edit_html_document로 처리
-    return edit_html_document.invoke({
-        "document_content": document_content,
-        "instruction": user_command
-    })
+    except Exception as e:
+        logger.error(f"run_document_edit에서 오류 발생: {str(e)}")
+        # 오류 발생 시 기본적인 편집 시도
+        return edit_html_document.invoke({
+            "document_content": document_content,
+            "instruction": user_command
+        })
 
 # === 새로운 Tiptap 전용 도구들 ===
 

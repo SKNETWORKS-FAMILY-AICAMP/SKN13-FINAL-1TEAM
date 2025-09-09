@@ -67,32 +67,52 @@ def _prepare_editing_context(messages: list, document_content: str) -> list:
     """편집 컨텍스트 준비 - 대화 맥락 포함"""
     logger.info("문서 내용 포함하여 편집 컨텍스트 준비")
     
-    # 대화 맥락 추출 (최근 3개 메시지)
-    recent_messages = messages[-3:] if len(messages) >= 3 else messages
+    # 대화 맥락 추출 - 더 많은 메시지 포함 (최대 10개)
+    recent_messages = messages[-10:] if len(messages) >= 10 else messages
     conversation_context = ""
     
     for msg in recent_messages:
         if hasattr(msg, 'content') and msg.content:
-            # HumanMessage와 AIMessage 구분
-            role = "사용자" if hasattr(msg, 'type') and msg.type == "human" else "AI"
-            conversation_context += f"\n{role}: {msg.content[:200]}..."  # 내용을 200자로 제한
+            # 메시지 타입에 따른 역할 구분
+            if hasattr(msg, 'type'):
+                if msg.type == "human":
+                    role = "사용자"
+                elif msg.type == "ai":
+                    role = "AI"
+                else:
+                    role = "시스템"
+            else:
+                # content에서 에이전트 이름 추출 시도
+                content_start = msg.content[:50]
+                if "GeneralChatAgent" in content_start:
+                    role = "GeneralChatAgent"
+                elif "DocumentEditorAgent" in content_start:
+                    role = "DocumentEditorAgent"
+                else:
+                    role = "AI"
+            
+            # 더 긴 내용 포함 (500자까지)
+            conversation_context += f"\n{role}: {msg.content[:500]}..."
     
     context_message = SystemMessage(
         content=f"""## 문서 편집 지시사항 ##
-당신은 전문 문서 편집자입니다. 아래의 대화 맥락을 참고하여 문서를 편집하세요.
+당신은 전문 문서 편집자입니다. 아래의 전체 대화 맥락을 **반드시** 참고하여 문서를 편집하세요.
 
-**대화 맥락**:
+**전체 대화 맥락**:
 {conversation_context}
 
-**편집 대상 문서**:
+**현재 문서 상태**:
 {document_content}
 
-**중요 지침**:
-1. 대화 맥락을 참고하여 사용자가 원하는 내용을 파악하세요
-2. 단순히 지시문을 그대로 추가하지 말고, 맥락에 맞는 실제 내용을 생성하세요
-3. 사용자가 "내용 작성해줘", "추가해줘" 등의 요청을 할 때는 앞서 언급된 주제에 관련된 구체적인 내용을 작성하세요
+**핵심 편집 원칙**:
+1. **대화 맥락 완전 활용**: 위의 대화 내용에서 사용자가 언급한 구체적인 주제, 요구사항, 정보를 모두 파악하세요
+2. **맥락 기반 내용 생성**: 
+   - "작성해줘", "내용 추가해줘" 등의 요청이 있을 때는 대화에서 언급된 구체적인 주제로 실제 내용을 작성하세요
+   - 예: "세계 최고의 광고 Best3" 주제가 언급되었다면, 그에 대한 실제 보고서 내용을 작성
+3. **에이전트 간 정보 연결**: GeneralChatAgent가 제공한 정보를 DocumentEditorAgent가 문서에 반영하세요
+4. **구체적 내용 생성**: 추상적이거나 placeholder 텍스트가 아닌, 실용적이고 구체적인 내용을 생성하세요
 
-적절한 편집 도구를 선택하여 사용자 요청을 정확히 수행하세요.
+대화 맥락에서 파악한 주제와 요구사항을 바탕으로 적절한 편집 도구를 선택하여 실행하세요.
 """
     )
     
