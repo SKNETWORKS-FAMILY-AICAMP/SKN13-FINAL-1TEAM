@@ -23,6 +23,7 @@ import DocumentRowList from "./Docs/DocumentRowList.jsx";
 import Toast from "./Docs/Toast.jsx";
 import S3Explorer from "./Docs/S3Explorer.jsx";
 import UploadModal from "./Docs/UploadModal.jsx";
+import useToast from "../../shared/toast/useToast.js";
 
 /* 
   확장자 → MIME 추정 (fsBridge가 mime을 주지 않는 경우 대비)
@@ -122,6 +123,7 @@ function groupByDay(list, getTs) {
   메인 컴포넌트
 */
 export default function FeatureDocs() {
+  const toast = useToast();
   // 모드: 'local' | 's3'
   const [mode, setMode] = useState("local");
 
@@ -139,7 +141,7 @@ export default function FeatureDocs() {
 
   // 로딩 & 토스트
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState(null);
+  // const [toast, setToast] = useState(null);
 
   // S3 업로드 모달
   const [showUpload, setShowUpload] = useState(false);
@@ -222,10 +224,12 @@ export default function FeatureDocs() {
     try {
       const ok = await deleteLocalDocDirect(doc.path);
       if (!ok.ok) throw new Error("local delete failed");
-      setToast({ type: "success", msg: "로컬 문서가 삭제되었습니다." });
+      // setToast({ type: "success", msg: "로컬 문서가 삭제되었습니다." });
+      toast.success("문서가 삭제되었습니다.");
     } catch {
       setDocs(prev);
-      setToast({ type: "error", msg: "삭제에 실패했습니다." });
+      // setToast({ type: "error", msg: "삭제에 실패했습니다." });
+      toast.error("문서 삭제에 실패했습니다. 다시 시도해주세요.");
     } finally {
       deletingRef.current = false;
     }
@@ -337,7 +341,7 @@ export default function FeatureDocs() {
           onUploaded={() => window.dispatchEvent(new CustomEvent("s3:refresh"))}
         />
 
-        <Toast toast={toast} onClose={() => setToast(null)} />
+        {/* <Toast toast={toast} onClose={() => setToast(null)} /> */}
       </div>
     </div>
   );
