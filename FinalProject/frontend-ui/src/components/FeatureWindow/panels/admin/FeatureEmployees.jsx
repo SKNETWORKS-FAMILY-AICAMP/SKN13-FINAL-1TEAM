@@ -138,7 +138,7 @@ export default function FeatureEmployees() {
             setOpenAddModal(false);
         } catch (err) {
             console.error("[사원 등록] 실패:", err);
-            toast.error("사원등록에 실패했습니다. 다시 시도해주세요.");
+            toast.error("사원 등록에 실패했습니다. 다시 시도해주세요.");
         }
     };
 

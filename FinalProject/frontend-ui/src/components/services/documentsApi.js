@@ -1,59 +1,8 @@
 // src/components/services/documentsApi.js
-import { BASE_URL } from "./env.js";
+import createAxios from "./createAxios.js";
 
-function withTimeout(ms = 8000) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  return { signal: ctrl.signal, done: () => clearTimeout(t) };
-}
-
-async function request(path, { method = "GET", headers = {}, body, timeout = 8000 } = {}) {
-  const { signal, done } = withTimeout(timeout);
-  const reqId = crypto.randomUUID();
-
-  const url = `${BASE_URL}${path}`;
-  const label = `[API ${reqId.slice(0, 8)}] ${method} ${path}`;
-
-  console.time(label); // ⏱ 요청~응답 전체 시간
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json", "X-Request-ID": reqId, ...headers }, // ⛏️ 스프레드 유지
-      body,
-      signal,
-    });
-
-    // 상태/URL 로그
-    console.log(`${label} → ${res.status}`, url);
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const ct = res.headers.get("content-type") || "";
-    if (ct.includes("application/json")) {
-      const data = await res.json();
-      // (선택) 결과 규모 힌트
-      const sizeHint =
-        Array.isArray(data) ? `array:${data.length}` :
-        data && typeof data === "object" ? "object" : typeof data;
-      console.debug(`${label} ✓ JSON (${sizeHint})`);
-      return data;
-    } else {
-      const text = await res.text();
-      console.debug(`${label} ✓ TEXT (${text.length} chars)`);
-      return text;
-    }
-  } catch (e) {
-    if (e?.name === "AbortError") {
-      console.warn(`${label} ✖ aborted after ${timeout}ms`, url);
-    } else {
-      console.error(`${label} ✖`, e);
-    }
-    throw e;
-  } finally {
-    console.timeEnd(label); // ⏱ 총 소요시간 출력
-    done();
-  }
-}
+// createAxios 인스턴스 생성
+const api = createAxios("");
 
 // ─────────────────────────────────────────────────────────────
 // 기존 API들 (그대로 유지)
@@ -61,27 +10,67 @@ async function request(path, { method = "GET", headers = {}, body, timeout = 800
 export async function listDocuments({ limit = 200, page = 1, sort = "-updated_at", q = "" } = {}) {
   const sp = new URLSearchParams({ limit, page, sort });
   if (q) sp.set("q", q);
-  const data = await request(`/documents?${sp.toString()}`);
-  return data?.items ?? data ?? [];
+  const response = await api.get(`/files?${sp.toString()}`);
+  return response.data?.items ?? response.data ?? [];
 }
 
 export async function createDocumentMeta({ title, url, mime }) {
-  return request(`/documents`, { method: "POST", body: JSON.stringify({ title, url, mime }) });
+  const response = await api.post(`/files`, { title, url, mime });
+  return response.data;
 }
 
 export async function removeDocument(id) {
-  await request(`/documents/${id}`, { method: "DELETE" });
+  await api.delete(`/files/${id}`);
   return true;
 }
 
 export async function restoreDocument(id) {
-  await request(`/documents/${id}/restore`, { method: "POST" });
+  await api.post(`/files/${id}/restore`);
   return true;
 }
 
 // ✅ 최근 열람(DB, presigned_url 포함)
 export async function listRecentDocs({ limit = 50, page = 1, sort = "-updated_at" } = {}) {
   const sp = new URLSearchParams({ limit, page, sort });
-  const data = await request(`/documents/recent?${sp.toString()}`);
-  return data?.items ?? data ?? [];
+  const response = await api.get(`/files/recent?${sp.toString()}`);
+  return response.data?.items ?? response.data ?? [];
+}
+export async function exportToDocx(html, filename = "document.docx", doc_id = null) {
+  // 1) 서버에 HTML → DOCX 변환 API 사용 시도 (createAxios 사용으로 CORS 해결)
+  try {
+    const endpoint = doc_id 
+      ? `/files/${doc_id}/export`      // 특정 문서 export
+      : `/files/export/docx`;          // 일반 HTML → DOCX 변환
+    
+    const response = await api.post(endpoint, {
+      html,
+      filename
+    }, {
+      responseType: 'blob'  // DOCX 바이너리 응답을 위한 설정
+    });
+
+    // axios는 자동으로 blob으로 변환해줌
+    return response.data;
+  } catch (e) {
+    console.warn("[documentsApi] exportToDocx: 서버 변환 실패, 클라이언트 폴백 사용", e);
+  }
+
+
+  // 2) 폴백: HTML을 Word에서 열 수 있는 형식으로 저장
+  //    * 진짜 .docx 변환은 아님 (정확한 변환은 서버/전용 라이브러리 필요)
+  //    * 그래도 Word는 HTML 파일을 잘 열 수 있음
+  const htmlDoc =
+    `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${(filename || "document").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</title>
+</head>
+<body>
+${html || ""}
+</body>
+</html>`;
+
+  // Word가 열 수 있도록 MIME을 Word 계열로 지정 (완벽한 docx는 아님)
+  return new Blob([htmlDoc], { type: "application/msword" });
 }

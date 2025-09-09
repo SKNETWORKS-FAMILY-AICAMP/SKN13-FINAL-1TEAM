@@ -24,7 +24,7 @@ export default function AgendaPanel({
   onSelectEvent,
   onJumpToDate,
 }) {
-  const [tab, setTab] = useState("month"); // 'today' | 'week' | 'month'
+  const [tab, setTab] = useState("today"); // 'today' | 'week' | 'month'
 
   // 기간 계산
   const { range, title } = useMemo(() => {

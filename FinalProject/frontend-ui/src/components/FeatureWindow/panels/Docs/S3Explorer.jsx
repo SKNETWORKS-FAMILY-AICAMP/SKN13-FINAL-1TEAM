@@ -7,14 +7,31 @@
    - 파일 열기: S3 → 로컬 고정 폴더에 다운로드 후 OS 기본 프로그램으로 실행
   사용처:
    - FeatureDocs.jsx 에서 mode === 's3' 일 때 렌더링
+
+  변경점:
+   - services/s3Api.js import 제거
+   - preload 브릿지 window.s3Shared(list / downloadAndOpen) 직접 사용
+   - 업로드 완료 이벤트(s3:refresh) 수신해 현재 prefix 재로딩
 */
 
 import React, { useEffect, useMemo, useState } from "react";
-import { s3List, s3DownloadAndOpen } from "../../../services/s3Api.js";
 
 // 브레드크럼 유틸: prefix → ["documents","sub","folder"]
 function splitBreadcrumb(prefix) {
   return (prefix || "").split("/").filter(Boolean);
+}
+
+// (선택) 임시/시스템 파일 숨김용 유틸
+function isTempOrSystemName(name) {
+  const lower = String(name || "").toLowerCase().trim();
+  if (!lower) return false;
+  if (lower.startsWith("~$")) return true;                 // Office 잠금
+  if (lower.startsWith("._")) return true;                 // macOS resource fork
+  if (lower === "thumbs.db" || lower === "desktop.ini") return true;
+  if (lower === ".ds_store" || lower === ".dsstore") return true;
+  if (lower.endsWith(".tmp") || lower.endsWith(".temp")) return true;
+  if (lower.endsWith(".crdownload") || lower.endsWith(".part")) return true;
+  return false;
 }
 
 export default function S3Explorer({ onPrefixChange }) {
@@ -44,28 +61,52 @@ export default function S3Explorer({ onPrefixChange }) {
     });
   }
 
-  // 🔧 특정 prefix 로드
+  // 🔧 특정 prefix 로드 (window.s3Shared 브릿지 사용)
   async function load(pfx) {
     setLoading(true);
     setError("");
+
+    // 브릿지 존재 확인
+    if (!window.s3Shared?.list || !window.s3Shared?.downloadAndOpen) {
+      setLoading(false);
+      setError("S3 브릿지가 감지되지 않았습니다. (preload 연결 확인)");
+      return;
+    }
+
     try {
-      // 캐시에 있으면 먼저 표시
+      // 캐시에 있으면 먼저 표시(UX용)
       const cached = cache.get(pfx);
       if (cached) setData(cached);
 
-      const out = await s3List(pfx);
-      const payload = { folders: out.folders, files: out.files };
+      // 메인 프로세스 IPC → 실제 버킷 호출
+      const out = await window.s3Shared.list(pfx);
+
+      // 폴더/파일 (임시/시스템 파일은 UI에서 숨김)
+      const folders = (out?.folders || []).filter(f => !!f);
+      const filesRaw = (out?.files || []).filter(f => !!f);
+      const files = filesRaw.filter(f => !isTempOrSystemName(f.name));
+
+      // (선택) 정렬: 폴더는 이름 오름차순, 파일은 최근 수정 내림차순
+      folders.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      files.sort((a, b) => {
+        const ta = a.lastModified ? new Date(a.lastModified).getTime() : 0;
+        const tb = b.lastModified ? new Date(b.lastModified).getTime() : 0;
+        return tb - ta;
+      });
+
+      const payload = { folders, files };
 
       setCache(prev => {
         const m = new Map(prev);
-        m.set(out.prefix || pfx, payload);
+        m.set(out.prefix ?? pfx, payload);
         return m;
       });
       setData(payload);
-      const newPrefix = out.prefix || pfx;
+
+      const newPrefix = out.prefix ?? pfx;
       setPrefix(newPrefix);
       pruneCacheToPath(newPrefix);
-      
+
       // 부모에게 prefix 변경 알림
       onPrefixChange?.(newPrefix);
     } catch (e) {
@@ -76,9 +117,9 @@ export default function S3Explorer({ onPrefixChange }) {
   }
 
   // 최초 로딩: 루트
-  useEffect(() => { load(""); }, []);
+  useEffect(() => { load(""); /* eslint-disable-next-line */ }, []);
 
-  // [ADD] 업로드 완료 시 새로고침 이벤트 수신
+  // 업로드 완료 시 새로고침 이벤트 수신
   useEffect(() => {
     const onRefresh = () => load(prefix || "");
     window.addEventListener("s3:refresh", onRefresh);
@@ -95,17 +136,34 @@ export default function S3Explorer({ onPrefixChange }) {
   };
 
   const enterFolder = (p) => load(p);
-  const openFile = async (f) => { await s3DownloadAndOpen(f.key, f.name); };
+
+  const openFile = async (f) => {
+    try {
+      await window.s3Shared.downloadAndOpen(f.key, f.name);
+    } catch (e) {
+      setError(`다운로드/열기 실패: ${String(e?.message || e)}`);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
       {/* 브레드크럼 */}
       <div className="px-3 py-2 border-b bg-gray-50 text-sm">
-        <button className="text-blue-600 hover:underline" onClick={() => goCrumb(-1)}>루트</button>
+        <button
+          className="text-blue-600 hover:underline"
+          onClick={() => goCrumb(-1)}
+        >
+          루트
+        </button>
         {crumbs.map((c, i) => (
           <span key={i}>
             <span className="mx-1 text-gray-400">/</span>
-            <button className="text-blue-600 hover:underline" onClick={() => goCrumb(i)}>{c}</button>
+            <button
+              className="text-blue-600 hover:underline"
+              onClick={() => goCrumb(i)}
+            >
+              {c}
+            </button>
           </span>
         ))}
       </div>
@@ -113,7 +171,9 @@ export default function S3Explorer({ onPrefixChange }) {
       {/* 본문 */}
       <div className="flex-1 overflow-auto p-3">
         {loading && <div className="text-sm text-gray-500">불러오는 중…</div>}
-        {error && <div className="text-sm text-red-600">{error}</div>}
+        {error && !loading && (
+          <div className="text-sm text-red-600 whitespace-pre-wrap">{error}</div>
+        )}
 
         {/* 폴더 목록 */}
         <div className="mb-3">
@@ -124,12 +184,15 @@ export default function S3Explorer({ onPrefixChange }) {
                 key={f.id}
                 className="border rounded-xl p-3 text-left hover:bg-gray-50"
                 onClick={() => enterFolder(f.prefix)}
+                title={f.prefix}
               >
                 <div className="font-medium">{f.name || "(이름없음)"}</div>
                 <div className="text-xs text-gray-500 truncate">{f.prefix}</div>
               </button>
             ))}
-            {data.folders.length === 0 && <div className="text-sm text-gray-400">폴더 없음</div>}
+            {(!loading && data.folders.length === 0) && (
+              <div className="text-sm text-gray-400">폴더 없음</div>
+            )}
           </div>
         </div>
 
@@ -155,7 +218,9 @@ export default function S3Explorer({ onPrefixChange }) {
                 </div>
               </div>
             ))}
-            {data.files.length === 0 && <div className="p-3 text-sm text-gray-400">파일 없음</div>}
+            {(!loading && data.files.length === 0) && (
+              <div className="p-3 text-sm text-gray-400">파일 없음</div>
+            )}
           </div>
         </div>
       </div>

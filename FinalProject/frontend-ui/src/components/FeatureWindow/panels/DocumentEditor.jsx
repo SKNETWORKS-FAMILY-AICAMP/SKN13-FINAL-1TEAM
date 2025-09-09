@@ -18,38 +18,18 @@
 //  - documentTitle : 현재 문서 제목
 //  - editorContent : HTML 형태의 본문 내용
 //  - isDirty       : 저장되지 않은 변경 여부 (true일 때 제목에 * 붙음)
-//  - editorRef     : TipTap 에디터 인스턴스 참조
+//  - editor        : TipTap 에디터 인스턴스 (✅ ref → state로 승격해 리렌더 보장)
+//  - editorRef     : TipTap 에디터 인스턴스 참조(기존 호환용)
 //  - sessionId     : AI 편집 세션 식별용 (UUID)
 //
-// 함수 설명
-//  - ErrorBoundary   : 에디터 내부에서 JS 오류 발생 시 안전하게 감싸주는 UI
-//  - toSimpleHTML() : TXT/MD 불러올 때 줄바꿈 → <br> 변환
-//  - handleSave()   : 현재 내용을 로컬 파일(html/txt/md)로 저장
-//  - handleLoad()   : 파일 불러오기 (html/txt/md → HTML 변환 후 반영)
-//  - handleExportDocx() : 현재 문서를 .docx 형식으로 내보내기
-//  - handleEditWithAI(): LLM API(streamLLM) 호출해 자동 편집 실행
-//  - handleClose()  : 닫기 버튼 → 미저장 확인 후 부모의 onClose 실행
-//  - useEffect(keydown): Ctrl+S / Ctrl+O 단축키 바인딩
-//
-// 외부 연결(Dependency)
-//  - RichEditor: 실제 본문 입력/렌더링
-//  - EditorToolbar: 글꼴, 정렬, 표 삽입 등 서식 조작 툴바
-//  - documentsApi.*(): HTML → DOCX 변환 (이름 유연 처리)
-//  - llmApi.streamLLM(): 문서 내용 기반 AI 편집 호출
-//  - window.fsBridge.showSaveDialog/saveDoc/showOpenDialog
-//    → Electron preload에서 파일 입출력 연결
-//
-// ✅ 변경 사항 요약(안정화 가드 + DOCX import 유연화)
-//  - (1) onEditorUpdate 옵셔널 가드 추가
-//  - (2) EditorToolbar 렌더 가드 추가
-//  - (3) handleLoad의 ipcRenderer.invoke 옵셔널 가드 추가
-//  - (4) documentsApi 네임스페이스 import + 함수 이름 폴백 처리
-// ────────────────────────────────────────────────────────────────────────────────
+// 변경 사항 요약(툴바 표시 복구)
+//  - ref 값으로 조건 렌더링하던 툴바를 state(editor) 기준으로 렌더하도록 수정
+//  - RichEditor의 setEditorRef에서 setEditor(...) 호출해 최초 마운트 시 리렌더 유도
+// ────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import EditorToolbar from "./Editor/EditorToolbar";
 import RichEditor from "./Editor/RichEditor";
-// ⬇️ 변경: 기명(import { exportToDocx }) → 네임스페이스 import
 import * as documentsApi from "../../services/documentsApi";
 import { saveAs } from "file-saver";
 import { streamLLM } from "../../services/llmApi";
@@ -83,13 +63,17 @@ export default function DocEditor({ onClose }) {
   const [documentTitle, setDocumentTitle] = useState("새 문서");
   const [isDirty, setIsDirty] = useState(false);
   const [editorContent, setEditorContent] = useState("<p>문서 작성을 시작하세요...</p>");
+
+  // ✅ ref는 유지하되,
   const editorRef = useRef(null);
+  // ✅ 툴바 표시/리렌더를 위한 state 추가
+  const [editor, setEditor] = useState(null);
+
   const isLoadingRef = useRef(false);
   const [sessionId] = useState(() => (crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-sess`));
 
   // 다른 창에서 오는 문서 업데이트 반영 (preload의 onEditorUpdate 사용)
   useEffect(() => {
-    // ✅ (1) Electron 브리지 옵셔널 가드
     if (!window.electron?.onEditorUpdate) return;
     const off = window.electron.onEditorUpdate((html) => {
       if (editorRef.current && !editorRef.current.isDestroyed) {
@@ -115,8 +99,8 @@ export default function DocEditor({ onClose }) {
 
   /** 저장 */
   const handleSave = useCallback(async () => {
-    const editor = editorRef.current;
-    if (!editor) return;
+    const ed = editorRef.current;
+    if (!ed) return;
 
     if (!window.fsBridge?.showSaveDialog || !window.fsBridge?.saveDoc) {
       alert("파일 저장 기능을 사용할 수 없습니다.");
@@ -137,7 +121,7 @@ export default function DocEditor({ onClose }) {
     const { canceled, filePath } = result || {};
     if (canceled || !filePath) return;
 
-    const content = editor.getHTML();
+    const content = ed.getHTML();
     try {
       await window.fsBridge.saveDoc({ filePath, content });
       alert(`'${filePath}'이(가) 저장되었습니다.`);
@@ -182,13 +166,13 @@ export default function DocEditor({ onClose }) {
 
       const filePath = filePaths[0];
 
-      // ✅ (3) IPC 호출 가드: 웹/미주입 환경 크래시 방지
+      // ✅ 웹/미주입 환경 가드
       if (!window.electron?.ipcRenderer?.invoke) {
         alert("이 환경에서는 파일 읽기를 지원하지 않습니다.");
         return;
       }
 
-      // 파일 경로 기반으로 메인 프로세스에 직접 요청 (겸용 핸들러 가정)
+      // 파일 경로 기반으로 메인 프로세스에 직접 요청
       const resp = await window.electron.ipcRenderer.invoke("fs:readDoc", { filePath });
       const { ok, content, mime } = resp || {};
       if (!ok || !mime) { alert("파일을 읽는 중 문제가 발생했습니다."); return; }
@@ -220,13 +204,12 @@ export default function DocEditor({ onClose }) {
 
   /** DOCX로 내보내기 */
   const handleExportDocx = useCallback(async () => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const html = editor.getHTML();
+    const ed = editorRef.current;
+    if (!ed) return;
+    const html = ed.getHTML();
     if (!html || html === "<p></p>") { alert("내보낼 내용이 없습니다."); return; }
     const docxFilename = documentTitle.replace(/\.[^/.]+$/, "") + ".docx";
     try {
-      // ⬇️ (4) documentsApi 함수 이름 폴백 처리
       const fn =
         documentsApi.exportToDocx ||
         documentsApi.exportDocx ||
@@ -246,12 +229,12 @@ export default function DocEditor({ onClose }) {
 
   /** AI 편집 */
   const handleEditWithAI = useCallback(async () => {
-    const editor = editorRef.current;
-    if (!editor) return;
+    const ed = editorRef.current;
+    if (!ed) return;
     const userCommand = prompt("AI에게 문서 편집 명령을 내려주세요:");
     if (!userCommand) return;
 
-    const current = editor.getHTML();
+    const current = ed.getHTML();
     if (!current || current === "<p></p>") { alert("편집할 내용이 없습니다."); return; }
 
     alert("AI가 문서를 편집 중입니다...");
@@ -266,7 +249,7 @@ export default function DocEditor({ onClose }) {
           try {
             const parsed = JSON.parse(full);
             if (parsed.document_update) {
-              editor.commands.setContent(parsed.document_update, false);
+              ed.commands.setContent(parsed.document_update, false);
               setEditorContent(parsed.document_update);
               setIsDirty(true);
               alert("AI 편집 완료!");
@@ -324,33 +307,25 @@ export default function DocEditor({ onClose }) {
 
   /** 챗봇에서 문서 업데이트 수신 - 전역 리스너로 중복 등록 방지 */
   useEffect(() => {
-    // 이미 리스너가 등록되어 있다면 중복 등록 방지
     if (window.__documentListenerRegistered) {
       console.log('📡 DocumentEditor: IPC 리스너 이미 등록됨, 스킵');
       return;
     }
 
     console.log('📡 DocumentEditor: IPC 리스너 등록 시도...');
-    
-    // 전역 핸들러 함수 
+
     const handleDocumentUpdate = (updatedContent) => {
       console.log('📨 DocumentEditor: IPC 이벤트 수신됨!', updatedContent ? updatedContent.substring(0, 100) + '...' : 'null');
-      
-      // 현재 활성화된 DocumentEditor 찾기
       const currentEditorElement = document.querySelector('.tiptap');
       if (!currentEditorElement || !updatedContent) {
         console.warn('📨 에디터 요소 또는 업데이트 내용이 없습니다');
         return;
       }
-
       try {
-        // TipTap 에디터 인스턴스 찾기 (전역에서 접근)
         if (window.__currentDocumentEditor) {
-          const editor = window.__currentDocumentEditor;
-          editor.commands.setContent(updatedContent, false);
+          const ed = window.__currentDocumentEditor;
+          ed.commands.setContent(updatedContent, false);
           console.log('✅ 챗봇으로부터 문서가 업데이트되었습니다.');
-          
-          // 강제로 리렌더링 트리거 (상태 업데이트)
           window.dispatchEvent(new CustomEvent('documentUpdated', { detail: updatedContent }));
         }
       } catch (error) {
@@ -358,7 +333,6 @@ export default function DocEditor({ onClose }) {
       }
     };
 
-    // Electron IPC 리스너 등록 (전역으로 한 번만)
     if (window.fsBridge?.onDocumentUpdate && !window.__documentListenerRegistered) {
       console.log('✅ fsBridge.onDocumentUpdate 사용 가능, 리스너 등록 중...');
       const removeListener = window.fsBridge.onDocumentUpdate(handleDocumentUpdate);
@@ -416,10 +390,9 @@ export default function DocEditor({ onClose }) {
           </div>
         </div>
 
-        {/* 서식 툴바 */}
-        {/* ✅ (2) editor 준비 전에는 툴바 렌더하지 않음 */}
-        {editorRef.current ? (
-          <EditorToolbar editor={editorRef.current} />
+        {/* 서식 툴바 — ✅ editor state 기준으로 렌더 */}
+        {editor ? (
+          <EditorToolbar editor={editor} />
         ) : (
           <div className="h-10 border-b bg-white" />
         )}
@@ -427,10 +400,14 @@ export default function DocEditor({ onClose }) {
         {/* 본문 에디터 */}
         <div className="flex-1 overflow-y-auto" onClick={() => editorRef.current?.commands.focus()}>
           <RichEditor
-            initialHTML={editorContent}              // ✅ prop 이름 맞춤
-            setEditorRef={(editorInstance) => {      // ✅ setEditorRef로 인스턴스 전달
-              editorRef.current = editorInstance;
-              window.getTiptapEditorContent = () => editorInstance.getHTML();
+            initialHTML={editorContent}
+            setEditorRef={(inst) => {
+              // 기존 ref 유지
+              editorRef.current = inst;
+              // ✅ 최초 생성 시 state로도 보관 → 리렌더 발생 → 툴바 표시
+              setEditor(inst);
+              // 디버그/호환
+              window.getTiptapEditorContent = () => inst.getHTML();
             }}
             onChange={(html) => {
               setEditorContent(html);

@@ -81,9 +81,11 @@ function toName(arg) {
 }
 const fsBridge = {
   listDocs: () => ipcRenderer.invoke("fs:listDocs"),
+  listViewed: () => ipcRenderer.invoke("fs:listViewed"), // ✅ 추가
+
   readDoc: (arg) => ipcRenderer.invoke("fs:readDoc", { name: toName(arg) }),
   deleteDoc: (arg) => ipcRenderer.invoke("fs:deleteDoc", { name: toName(arg) }),
-  open: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
+  open:     (arg) => ipcRenderer.invoke("fs:open",     { name: toName(arg) }),
   saveDoc: (nameOrObj, maybeContent) => {
     let name = "", content = "";
     if (typeof nameOrObj === "object") { name = toName(nameOrObj); content = nameOrObj?.content ?? ""; }
@@ -91,8 +93,8 @@ const fsBridge = {
     return ipcRenderer.invoke("fs:saveDoc", { name, content });
   },
   openDoc: (arg) => ipcRenderer.invoke("fs:open", { name: toName(arg) }),
-  
-  // 문서 내용 공유를 위한 IPC 메서드들
+
+  // 문서 내용 공유 IPC
   getCurrentDocumentContent: () => ipcRenderer.invoke("document:getCurrentContent"),
   setCurrentDocumentContent: (content) => ipcRenderer.invoke("document:setCurrentContent", content),
   onDocumentUpdate: (callback) => {
