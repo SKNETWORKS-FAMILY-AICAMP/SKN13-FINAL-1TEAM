@@ -6,8 +6,9 @@ from ..prompts.DocumentEditorSystemPrompt import EDITOR_SYSTEM_PROMPT
 from typing import List, Optional, Dict, Any
 from bs4 import BeautifulSoup
 import re
-
+import logging
 # === 기존 도구들 (유지) ===
+logger = logging.getLogger(__name__)
 
 @tool
 def replace_text_in_document(document_content: str, old_text: str, new_text: str) -> str:
@@ -27,321 +28,321 @@ def edit_html_document(document_content: str, instruction: str) -> str:
     """
     try:
         logger.info(f"HTML 문서 편집 시작 - 지시사항: {instruction[:100]}...")
-    
-    # HTML 문서가 비어있거나 매우 간단한 경우 기본 구조 생성
-    if not document_content.strip() or document_content.strip() == '<p></p>':
-        soup = BeautifulSoup('<p></p>', 'html.parser')
-    else:
-        soup = BeautifulSoup(document_content, 'html.parser')
-
-    # 텍스트에서 따옴표나 특정 패턴으로 내용 추출
-    def extract_quoted_text(text, default=""):
-        # 따옴표로 감싸진 텍스트 찾기
-        quote_patterns = [
-            r"'([^']*)'",  # 작은따옴표
-            r'"([^"]*)"',  # 큰따옴표
-            r"「([^」]*)」", # 일본식 따옴표
-            r"『([^』]*)』"  # 한국식 따옴표
-        ]
         
-        for pattern in quote_patterns:
-            match = re.search(pattern, text)
-            if match:
-                return match.group(1)
-        
-        # 따옴표가 없으면 키워드 다음의 내용 추출 시도
-        keywords = ["추가", "작성", "입력", "넣어", "써"]
-        for keyword in keywords:
-            if keyword in text:
-                parts = text.split(keyword, 1)
-                if len(parts) > 1:
-                    content = parts[1].strip()
-                    # 불필요한 조사나 어미 제거
-                    content = re.sub(r'^(해줘|줘|주세요|하세요|.\s*)', '', content)
-                    if content:
-                        return content
-        
-        return default
-
-    # 더 포괄적인 패턴 매칭 및 처리
-    instruction_lower = instruction.lower()
-    
-    # 1. 제목/헤딩 관련
-    if any(keyword in instruction for keyword in ["제목", "헤딩", "heading"]) or re.search(r"h[123]", instruction_lower):
-        level = "h2"  # 기본값
-        if "h1" in instruction_lower or "1단계" in instruction or "큰 제목" in instruction:
-            level = "h1"
-        elif "h2" in instruction_lower or "2단계" in instruction or "중간 제목" in instruction:
-            level = "h2"
-        elif "h3" in instruction_lower or "3단계" in instruction or "작은 제목" in instruction:
-            level = "h3"
-        
-        title_text = extract_quoted_text(instruction, "새로운 제목")
-        
-        # 기존 같은 레벨의 제목이 있으면 수정, 없으면 추가
-        existing_heading = soup.find(level)
-        if existing_heading and "수정" in instruction:
-            existing_heading.string = title_text
+        # HTML 문서가 비어있거나 매우 간단한 경우 기본 구조 생성
+        if not document_content.strip() or document_content.strip() == '<p></p>':
+            soup = BeautifulSoup('<p></p>', 'html.parser')
         else:
-            new_heading = soup.new_tag(level)
-            new_heading.string = title_text
+            soup = BeautifulSoup(document_content, 'html.parser')
+
+        # 텍스트에서 따옴표나 특정 패턴으로 내용 추출
+        def extract_quoted_text(text, default=""):
+            # 따옴표로 감싸진 텍스트 찾기
+            quote_patterns = [
+                r"'([^']*)'",  # 작은따옴표
+                r'"([^"]*)"',  # 큰따옴표
+                r"「([^」]*)」", # 일본식 따옴표
+                r"『([^』]*)』"  # 한국식 따옴표
+            ]
             
-            # 문서 구조에 따라 적절한 위치에 삽입
-            if soup.find('p') or soup.find(['h1', 'h2', 'h3']):
-                # 기존 내용이 있으면 맨 앞에 추가
-                first_element = soup.find(['p', 'h1', 'h2', 'h3', 'ul', 'ol', 'table', 'blockquote'])
-                if first_element:
-                    first_element.insert_before(new_heading)
+            for pattern in quote_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    return match.group(1)
+            
+            # 따옴표가 없으면 키워드 다음의 내용 추출 시도
+            keywords = ["추가", "작성", "입력", "넣어", "써"]
+            for keyword in keywords:
+                if keyword in text:
+                    parts = text.split(keyword, 1)
+                    if len(parts) > 1:
+                        content = parts[1].strip()
+                        # 불필요한 조사나 어미 제거
+                        content = re.sub(r'^(해줘|줘|주세요|하세요|.\s*)', '', content)
+                        if content:
+                            return content
+            
+            return default
+
+        # 더 포괄적인 패턴 매칭 및 처리
+        instruction_lower = instruction.lower()
+        
+        # 1. 제목/헤딩 관련
+        if any(keyword in instruction for keyword in ["제목", "헤딩", "heading"]) or re.search(r"h[123]", instruction_lower):
+            level = "h2"  # 기본값
+            if "h1" in instruction_lower or "1단계" in instruction or "큰 제목" in instruction:
+                level = "h1"
+            elif "h2" in instruction_lower or "2단계" in instruction or "중간 제목" in instruction:
+                level = "h2"
+            elif "h3" in instruction_lower or "3단계" in instruction or "작은 제목" in instruction:
+                level = "h3"
+            
+            title_text = extract_quoted_text(instruction, "새로운 제목")
+            
+            # 기존 같은 레벨의 제목이 있으면 수정, 없으면 추가
+            existing_heading = soup.find(level)
+            if existing_heading and "수정" in instruction:
+                existing_heading.string = title_text
+            else:
+                new_heading = soup.new_tag(level)
+                new_heading.string = title_text
+                
+                # 문서 구조에 따라 적절한 위치에 삽입
+                if soup.find('p') or soup.find(['h1', 'h2', 'h3']):
+                    # 기존 내용이 있으면 맨 앞에 추가
+                    first_element = soup.find(['p', 'h1', 'h2', 'h3', 'ul', 'ol', 'table', 'blockquote'])
+                    if first_element:
+                        first_element.insert_before(new_heading)
+                    else:
+                        soup.append(new_heading)
                 else:
                     soup.append(new_heading)
-            else:
-                soup.append(new_heading)
-    
-    # 2. 문단/텍스트 추가 (가장 일반적인 요청) - 맥락 기반 개선
-    elif any(keyword in instruction for keyword in ["문단", "내용", "텍스트", "글", "추가", "작성", "입력", "써줘", "넣어"]):
-        content_to_add = extract_quoted_text(instruction)
         
-        # 인용된 텍스트가 없으면 문서 주제를 파악해서 관련 내용 생성
-        if not content_to_add or content_to_add == instruction:
-            # 문서에서 주제 추출
-            existing_text = soup.get_text().lower()
+        # 2. 문단/텍스트 추가 (가장 일반적인 요청) - 맥락 기반 개선
+        elif any(keyword in instruction for keyword in ["문단", "내용", "텍스트", "글", "추가", "작성", "입력", "써줘", "넣어"]):
+            content_to_add = extract_quoted_text(instruction)
             
-            if "kobako" in existing_text or "광고" in existing_text:
-                content_to_add = """KoBaKo(한국방송광고진흥공사)는 매년 우수한 광고 작품을 선정하여 시상하고 있습니다. 
+            # 인용된 텍스트가 없으면 문서 주제를 파악해서 관련 내용 생성
+            if not content_to_add or content_to_add == instruction:
+                # 문서에서 주제 추출
+                existing_text = soup.get_text().lower()
                 
+                if "kobako" in existing_text or "광고" in existing_text:
+                    content_to_add = """KoBaKo(한국방송광고진흥공사)는 매년 우수한 광고 작품을 선정하여 시상하고 있습니다. 
+
 선정 기준에는 창의성, 소비자 반응, 사회적 영향력, 제작 기술력 등이 포함됩니다. 
 
 최근 트렌드를 보면 디지털 플랫폼을 활용한 인터랙티브 광고와 사회적 메시지를 담은 광고들이 높은 평가를 받고 있습니다."""
+
+                elif "보고서" in existing_text or "report" in existing_text:
+                    content_to_add = """본 보고서는 체계적인 분석을 통해 작성되었습니다.
+
+    주요 조사 방법론으로는 문헌 조사, 전문가 인터뷰, 데이터 분석 등이 활용되었습니다.
+
+    분석 결과를 바탕으로 실무진을 위한 구체적인 제언사항을 포함하고 있습니다."""
+                
+                elif "프로젝트" in existing_text or "project" in existing_text:
+                    content_to_add = """프로젝트 추진 배경과 목적을 명확히 정의하였습니다.
+
+    단계별 실행 계획과 주요 마일스톤을 설정하였으며, 각 단계별 예상 소요 기간과 필요 자원을 산정하였습니다.
+
+    리스크 관리 방안과 품질 관리 체계도 포함되어 있습니다."""
+                
+                else:
+                    # 기본 내용
+                    content_to_add = "관련 내용을 체계적으로 정리하고 분석한 결과를 제시합니다."
             
-            elif "보고서" in existing_text or "report" in existing_text:
-                content_to_add = """본 보고서는 체계적인 분석을 통해 작성되었습니다.
-
-주요 조사 방법론으로는 문헌 조사, 전문가 인터뷰, 데이터 분석 등이 활용되었습니다.
-
-분석 결과를 바탕으로 실무진을 위한 구체적인 제언사항을 포함하고 있습니다."""
+            # 여러 문단으로 나눠진 경우 처리
+            paragraphs = content_to_add.split('\n\n') if '\n\n' in content_to_add else [content_to_add]
             
-            elif "프로젝트" in existing_text or "project" in existing_text:
-                content_to_add = """프로젝트 추진 배경과 목적을 명확히 정의하였습니다.
-
-단계별 실행 계획과 주요 마일스톤을 설정하였으며, 각 단계별 예상 소요 기간과 필요 자원을 산정하였습니다.
-
-리스크 관리 방안과 품질 관리 체계도 포함되어 있습니다."""
+            for para_content in paragraphs:
+                if para_content.strip():
+                    new_p = soup.new_tag("p")
+                    new_p.string = para_content.strip()
+                    soup.append(new_p)
+        
+        # 3. 텍스트 스타일링
+        elif "굵게" in instruction or "bold" in instruction_lower:
+            target_text = extract_quoted_text(instruction)
+            if target_text:
+                content = str(soup)
+                # 텍스트를 찾아서 <strong> 태그로 감싸기
+                content = content.replace(target_text, f"<strong>{target_text}</strong>")
+                soup = BeautifulSoup(content, 'html.parser')
+        
+        elif "이탤릭" in instruction or "italic" in instruction_lower or "기울임" in instruction:
+            target_text = extract_quoted_text(instruction)
+            if target_text:
+                content = str(soup)
+                content = content.replace(target_text, f"<em>{target_text}</em>")
+                soup = BeautifulSoup(content, 'html.parser')
+        
+        elif "밑줄" in instruction or "underline" in instruction_lower:
+            target_text = extract_quoted_text(instruction)
+            if target_text:
+                content = str(soup)
+                content = content.replace(target_text, f"<u>{target_text}</u>")
+                soup = BeautifulSoup(content, 'html.parser')
+        
+        elif "취소선" in instruction or "strikethrough" in instruction_lower:
+            target_text = extract_quoted_text(instruction)
+            if target_text:
+                content = str(soup)
+                content = content.replace(target_text, f"<s>{target_text}</s>")
+                soup = BeautifulSoup(content, 'html.parser')
+        
+        # 4. 리스트/목록
+        elif any(keyword in instruction for keyword in ["리스트", "목록", "list", "항목"]):
+            list_type = "ul"  # 기본값
+            if any(keyword in instruction for keyword in ["번호", "숫자", "순서", "ol"]):
+                list_type = "ol"
             
+            list_tag = soup.new_tag(list_type)
+            
+            # 사용자가 항목을 제공했는지 확인
+            items_text = extract_quoted_text(instruction)
+            if items_text:
+                # 줄바꿈이나 쉼표로 구분된 항목들 처리
+                items = [item.strip() for item in re.split(r'[,\n]', items_text) if item.strip()]
             else:
-                # 기본 내용
-                content_to_add = "관련 내용을 체계적으로 정리하고 분석한 결과를 제시합니다."
+                # 기본 예시 항목
+                items = ["항목 1", "항목 2", "항목 3"]
+            
+            for item in items:
+                li_tag = soup.new_tag("li")
+                li_tag.string = item
+                list_tag.append(li_tag)
+            
+            soup.append(list_tag)
         
-        # 여러 문단으로 나눠진 경우 처리
-        paragraphs = content_to_add.split('\n\n') if '\n\n' in content_to_add else [content_to_add]
+        # 5. 테이블
+        elif "테이블" in instruction or "table" in instruction_lower or "표" in instruction:
+            # 행과 열 수 파악 (기본값: 2x2)
+            rows = 2
+            cols = 2
+            
+            row_match = re.search(r"(\d+)[x×](\d+)", instruction)
+            if row_match:
+                rows = int(row_match.group(1))
+                cols = int(row_match.group(2))
+            
+            table = soup.new_tag("table", style="border-collapse:collapse;border:1px solid #ddd;width:100%;margin:16px 0")
+            
+            # 헤더가 필요한지 확인
+            has_header = "헤더" in instruction or "제목" in instruction or not ("헤더 없" in instruction)
+            
+            if has_header:
+                thead = soup.new_tag("thead")
+                tr_head = soup.new_tag("tr")
+                for i in range(cols):
+                    th = soup.new_tag("th", style="border:1px solid #ddd;padding:8px;background-color:#f5f5f5")
+                    th.string = f"제목 {i+1}"
+                    tr_head.append(th)
+                thead.append(tr_head)
+                table.append(thead)
+                rows -= 1  # 헤더가 있으면 데이터 행 수 조정
+            
+            # 본문
+            tbody = soup.new_tag("tbody")
+            for i in range(rows):
+                tr = soup.new_tag("tr")
+                for j in range(cols):
+                    td = soup.new_tag("td", style="border:1px solid #ddd;padding:8px")
+                    td.string = f"데이터 {i+1}-{j+1}"
+                    tr.append(td)
+                tbody.append(tr)
+            table.append(tbody)
+            
+            soup.append(table)
         
-        for para_content in paragraphs:
-            if para_content.strip():
-                new_p = soup.new_tag("p")
-                new_p.string = para_content.strip()
-                soup.append(new_p)
-    
-    # 3. 텍스트 스타일링
-    elif "굵게" in instruction or "bold" in instruction_lower:
-        target_text = extract_quoted_text(instruction)
-        if target_text:
-            content = str(soup)
-            # 텍스트를 찾아서 <strong> 태그로 감싸기
-            content = content.replace(target_text, f"<strong>{target_text}</strong>")
-            soup = BeautifulSoup(content, 'html.parser')
-    
-    elif "이탤릭" in instruction or "italic" in instruction_lower or "기울임" in instruction:
-        target_text = extract_quoted_text(instruction)
-        if target_text:
-            content = str(soup)
-            content = content.replace(target_text, f"<em>{target_text}</em>")
-            soup = BeautifulSoup(content, 'html.parser')
-    
-    elif "밑줄" in instruction or "underline" in instruction_lower:
-        target_text = extract_quoted_text(instruction)
-        if target_text:
-            content = str(soup)
-            content = content.replace(target_text, f"<u>{target_text}</u>")
-            soup = BeautifulSoup(content, 'html.parser')
-    
-    elif "취소선" in instruction or "strikethrough" in instruction_lower:
-        target_text = extract_quoted_text(instruction)
-        if target_text:
-            content = str(soup)
-            content = content.replace(target_text, f"<s>{target_text}</s>")
-            soup = BeautifulSoup(content, 'html.parser')
-    
-    # 4. 리스트/목록
-    elif any(keyword in instruction for keyword in ["리스트", "목록", "list", "항목"]):
-        list_type = "ul"  # 기본값
-        if any(keyword in instruction for keyword in ["번호", "숫자", "순서", "ol"]):
-            list_type = "ol"
+        # 6. 들여쓰기/인용문
+        elif any(keyword in instruction for keyword in ["들여쓰기", "인용", "blockquote", "인용문"]):
+            quote_text = extract_quoted_text(instruction, "인용문 내용입니다.")
+            
+            blockquote = soup.new_tag("blockquote")
+            p = soup.new_tag("p")
+            p.string = quote_text
+            blockquote.append(p)
+            soup.append(blockquote)
         
-        list_tag = soup.new_tag(list_type)
+        # 7. 정렬
+        elif "정렬" in instruction or "align" in instruction_lower:
+            alignment = "left"  # 기본값
+            if any(keyword in instruction for keyword in ["가운데", "center", "중앙"]):
+                alignment = "center"
+            elif any(keyword in instruction for keyword in ["오른쪽", "right"]):
+                alignment = "right"
+            
+            # 마지막 요소에 정렬 적용
+            all_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'div'])
+            if all_elements:
+                last_element = all_elements[-1]
+                current_style = last_element.get('style', '')
+                new_style = f"{current_style}; text-align:{alignment}".strip('; ')
+                last_element['style'] = new_style
         
-        # 사용자가 항목을 제공했는지 확인
-        items_text = extract_quoted_text(instruction)
-        if items_text:
-            # 줄바꿈이나 쉼표로 구분된 항목들 처리
-            items = [item.strip() for item in re.split(r'[,\n]', items_text) if item.strip()]
+        # 8. 색상/하이라이트
+        elif "색상" in instruction or "color" in instruction_lower:
+            color_map = {
+                "빨간": "red", "빨강": "red", "red": "red",
+                "파란": "blue", "파랑": "blue", "blue": "blue", 
+                "초록": "green", "녹색": "green", "green": "green",
+                "노란": "yellow", "노랑": "yellow", "yellow": "yellow",
+                "검은": "black", "검정": "black", "black": "black",
+                "흰": "white", "하얀": "white", "white": "white"
+            }
+            
+            target_text = extract_quoted_text(instruction)
+            color = None
+            for korean, english in color_map.items():
+                if korean in instruction:
+                    color = english
+                    break
+            
+            if target_text and color:
+                content = str(soup)
+                content = content.replace(target_text, f'<span style="color:{color}">{target_text}</span>')
+                soup = BeautifulSoup(content, 'html.parser')
+        
+        elif "하이라이트" in instruction or "highlight" in instruction_lower:
+            target_text = extract_quoted_text(instruction)
+            color = "yellow"  # 기본 하이라이트 색상
+            
+            color_map = {"노란": "yellow", "빨간": "red", "파란": "blue", "초록": "green"}
+            for korean, english in color_map.items():
+                if korean in instruction:
+                    color = english
+                    break
+            
+            if target_text:
+                content = str(soup)
+                content = content.replace(target_text, f'<span style="background-color:{color};padding:2px 4px">{target_text}</span>')
+                soup = BeautifulSoup(content, 'html.parser')
+        
+        # 9. 기타 일반적인 요청들 - 맥락 기반 처리
         else:
-            # 기본 예시 항목
-            items = ["항목 1", "항목 2", "항목 3"]
-        
-        for item in items:
-            li_tag = soup.new_tag("li")
-            li_tag.string = item
-            list_tag.append(li_tag)
-        
-        soup.append(list_tag)
-    
-    # 5. 테이블
-    elif "테이블" in instruction or "table" in instruction_lower or "표" in instruction:
-        # 행과 열 수 파악 (기본값: 2x2)
-        rows = 2
-        cols = 2
-        
-        row_match = re.search(r"(\d+)[x×](\d+)", instruction)
-        if row_match:
-            rows = int(row_match.group(1))
-            cols = int(row_match.group(2))
-        
-        table = soup.new_tag("table", style="border-collapse:collapse;border:1px solid #ddd;width:100%;margin:16px 0")
-        
-        # 헤더가 필요한지 확인
-        has_header = "헤더" in instruction or "제목" in instruction or not ("헤더 없" in instruction)
-        
-        if has_header:
-            thead = soup.new_tag("thead")
-            tr_head = soup.new_tag("tr")
-            for i in range(cols):
-                th = soup.new_tag("th", style="border:1px solid #ddd;padding:8px;background-color:#f5f5f5")
-                th.string = f"제목 {i+1}"
-                tr_head.append(th)
-            thead.append(tr_head)
-            table.append(thead)
-            rows -= 1  # 헤더가 있으면 데이터 행 수 조정
-        
-        # 본문
-        tbody = soup.new_tag("tbody")
-        for i in range(rows):
-            tr = soup.new_tag("tr")
-            for j in range(cols):
-                td = soup.new_tag("td", style="border:1px solid #ddd;padding:8px")
-                td.string = f"데이터 {i+1}-{j+1}"
-                tr.append(td)
-            tbody.append(tr)
-        table.append(tbody)
-        
-        soup.append(table)
-    
-    # 6. 들여쓰기/인용문
-    elif any(keyword in instruction for keyword in ["들여쓰기", "인용", "blockquote", "인용문"]):
-        quote_text = extract_quoted_text(instruction, "인용문 내용입니다.")
-        
-        blockquote = soup.new_tag("blockquote")
-        p = soup.new_tag("p")
-        p.string = quote_text
-        blockquote.append(p)
-        soup.append(blockquote)
-    
-    # 7. 정렬
-    elif "정렬" in instruction or "align" in instruction_lower:
-        alignment = "left"  # 기본값
-        if any(keyword in instruction for keyword in ["가운데", "center", "중앙"]):
-            alignment = "center"
-        elif any(keyword in instruction for keyword in ["오른쪽", "right"]):
-            alignment = "right"
-        
-        # 마지막 요소에 정렬 적용
-        all_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'div'])
-        if all_elements:
-            last_element = all_elements[-1]
-            current_style = last_element.get('style', '')
-            new_style = f"{current_style}; text-align:{alignment}".strip('; ')
-            last_element['style'] = new_style
-    
-    # 8. 색상/하이라이트
-    elif "색상" in instruction or "color" in instruction_lower:
-        color_map = {
-            "빨간": "red", "빨강": "red", "red": "red",
-            "파란": "blue", "파랑": "blue", "blue": "blue", 
-            "초록": "green", "녹색": "green", "green": "green",
-            "노란": "yellow", "노랑": "yellow", "yellow": "yellow",
-            "검은": "black", "검정": "black", "black": "black",
-            "흰": "white", "하얀": "white", "white": "white"
-        }
-        
-        target_text = extract_quoted_text(instruction)
-        color = None
-        for korean, english in color_map.items():
-            if korean in instruction:
-                color = english
-                break
-        
-        if target_text and color:
-            content = str(soup)
-            content = content.replace(target_text, f'<span style="color:{color}">{target_text}</span>')
-            soup = BeautifulSoup(content, 'html.parser')
-    
-    elif "하이라이트" in instruction or "highlight" in instruction_lower:
-        target_text = extract_quoted_text(instruction)
-        color = "yellow"  # 기본 하이라이트 색상
-        
-        color_map = {"노란": "yellow", "빨간": "red", "파란": "blue", "초록": "green"}
-        for korean, english in color_map.items():
-            if korean in instruction:
-                color = english
-                break
-        
-        if target_text:
-            content = str(soup)
-            content = content.replace(target_text, f'<span style="background-color:{color};padding:2px 4px">{target_text}</span>')
-            soup = BeautifulSoup(content, 'html.parser')
-    
-    # 9. 기타 일반적인 요청들 - 맥락 기반 처리
-    else:
-        content_to_add = extract_quoted_text(instruction)
-        
-        # 구체적인 내용이 없으면 문서 주제를 파악해서 관련 내용 생성
-        if not content_to_add or content_to_add == instruction:
-            existing_text = soup.get_text().lower()
+            content_to_add = extract_quoted_text(instruction)
             
-            # 요청 패턴 분석
-            if any(word in instruction for word in ["분석", "조사"]):
-                if "kobako" in existing_text or "광고" in existing_text:
-                    content_to_add = "심층적인 광고 분석을 통해 소비자 반응과 시장 트렌드를 파악하였습니다."
+            # 구체적인 내용이 없으면 문서 주제를 파악해서 관련 내용 생성
+            if not content_to_add or content_to_add == instruction:
+                existing_text = soup.get_text().lower()
+                
+                # 요청 패턴 분석
+                if any(word in instruction for word in ["분석", "조사"]):
+                    if "kobako" in existing_text or "광고" in existing_text:
+                        content_to_add = "심층적인 광고 분석을 통해 소비자 반응과 시장 트렌드를 파악하였습니다."
+                    else:
+                        content_to_add = "체계적인 분석을 통해 핵심 인사이트를 도출하였습니다."
+                
+                elif any(word in instruction for word in ["결론", "요약"]):
+                    content_to_add = "종합적인 검토를 통해 다음과 같은 결론에 도달하였습니다."
+                
+                elif any(word in instruction for word in ["제언", "제안", "권고"]):
+                    content_to_add = "분석 결과를 바탕으로 다음과 같이 제언합니다."
+                
                 else:
-                    content_to_add = "체계적인 분석을 통해 핵심 인사이트를 도출하였습니다."
+                    # 기본 처리: 문서 주제에 맞는 일반적인 내용
+                    if "kobako" in existing_text or "광고" in existing_text:
+                        content_to_add = "광고 업계의 최신 동향과 소비자 인식 변화를 반영한 내용입니다."
+                    elif "보고서" in existing_text:
+                        content_to_add = "상세한 조사와 분석을 통해 도출된 결과입니다."
+                    else:
+                        content_to_add = "관련 정보를 종합하여 정리한 내용입니다."
             
-            elif any(word in instruction for word in ["결론", "요약"]):
-                content_to_add = "종합적인 검토를 통해 다음과 같은 결론에 도달하였습니다."
-            
-            elif any(word in instruction for word in ["제언", "제안", "권고"]):
-                content_to_add = "분석 결과를 바탕으로 다음과 같이 제언합니다."
-            
-            else:
-                # 기본 처리: 문서 주제에 맞는 일반적인 내용
-                if "kobako" in existing_text or "광고" in existing_text:
-                    content_to_add = "광고 업계의 최신 동향과 소비자 인식 변화를 반영한 내용입니다."
-                elif "보고서" in existing_text:
-                    content_to_add = "상세한 조사와 분석을 통해 도출된 결과입니다."
-                else:
-                    content_to_add = "관련 정보를 종합하여 정리한 내용입니다."
-        
-        if content_to_add and len(content_to_add) > 1:
-            new_p = soup.new_tag("p")
-            new_p.string = content_to_add
-            soup.append(new_p)
+            if content_to_add and len(content_to_add) > 1:
+                new_p = soup.new_tag("p")
+                new_p.string = content_to_add
+                soup.append(new_p)
 
-        # 결과 반환 전 정리
-        result = str(soup)
-        
-        # 불필요한 HTML 태그 정리
-        result = result.replace('<html><body>', '').replace('</body></html>', '')
-        result = result.strip()
-        
-        logger.info(f"HTML 문서 편집 완료 - 결과 길이: {len(result)}자")
-        return result
+            # 결과 반환 전 정리
+            result = str(soup)
+            
+            # 불필요한 HTML 태그 정리
+            result = result.replace('<html><body>', '').replace('</body></html>', '')
+            result = result.strip()
+            
+            logger.info(f"HTML 문서 편집 완료 - 결과 길이: {len(result)}자")
+            return result
         
     except Exception as e:
         logger.error(f"HTML 문서 편집 중 오류 발생: {str(e)}")
