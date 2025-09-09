@@ -273,7 +273,7 @@ export default function DocEditor({ onClose }) {
         sessionId,
         prompt: userCommand,
         documentContent: current,
-        onDelta: () => {},
+        onDelta: () => {}, 
         onToolMessage: (msg) => console.log("Tool Message:", msg),
         onDone: (full) => {
           try {
