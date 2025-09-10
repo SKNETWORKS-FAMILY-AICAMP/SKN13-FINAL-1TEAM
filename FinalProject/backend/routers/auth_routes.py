@@ -56,7 +56,7 @@ async def create_refresh_token(user_id: int, db: Session) -> str:
     
     to_encode = {
         "sub": str(user_id),
-        "exp": int(expire_at.timestamp),
+        "exp": int(expire_at.timestamp()),
         "jti": jti,
         "type": "refresh"
     }
