@@ -118,11 +118,16 @@ class DocumentSearchAgent:
                     final_prompt = HumanMessage(content="이제 검색 결과를 바탕으로 사용자에게 도움이 되는 답변을 생성해주세요. 검색된 문서들의 내용을 요약하고 사용자의 질문에 답해주세요.")
                     messages.append(final_prompt)
                     
-                    # Generate final response
-                    final_response = self.llm_with_tools.invoke(messages)
+                    # Generate final response - use invoke without tools to get pure text response
+                    final_llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
+                    final_response = final_llm.invoke(messages)
                     messages.append(final_response)
                     
                     print(f">> [SEARCH AGENT] Final response generated: {final_response.content[:100]}...")
+                    
+                    # Ensure the final response content is captured for streaming
+                    if hasattr(final_response, 'content') and final_response.content:
+                        search_results["final_answer"] = final_response.content
                     
                 except Exception as e:
                     print(f">> [SEARCH AGENT] Error generating final response: {e}")

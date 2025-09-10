@@ -257,7 +257,20 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         
         elif kind == "on_end": # 스트림 종료 이벤트
             final_state = event.get("data", {}).get("output", {})
-            # ... (나머지 로직)
+            
+            # Extract and stream final messages from agents
+            if final_state and "messages" in final_state:
+                messages = final_state["messages"]
+                for msg in messages:
+                    if hasattr(msg, 'content') and msg.content and hasattr(msg, 'type'):
+                        # Stream AI messages that haven't been streamed yet
+                        if msg.type == "ai" and msg.content:
+                            content_to_stream = msg.content
+                            # Check if this is new content (not a tool call result)
+                            if not content_to_stream.startswith("{") and len(content_to_stream) > 10:
+                                full_response_content += content_to_stream
+                                yield f"data: {json.dumps({'content': content_to_stream}, ensure_ascii=False)}\n\n"
+            
             yield "data: [DONE]\n\n" # 스트림 종료 신호
 
     if full_response_content: # 전체 응답 내용이 있으면 저장
