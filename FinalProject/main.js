@@ -370,6 +370,7 @@ function createFeatureWindow(role = "employee") {
     if (featureWindow.isMinimized()) featureWindow.restore();
     featureWindow.show();
     featureWindow.focus();
+    featureWindow.setSkipTaskbar?.(false);
     return featureWindow;
   }
 
@@ -408,6 +409,7 @@ function createFeatureWindow(role = "employee") {
     featureWindow = null;
   });
 
+  featureWindow.setSkipTaskbar?.(false);
   return featureWindow;
 }
 
@@ -417,6 +419,7 @@ function createAdminWindow() {
     if (adminWindow.isMinimized()) adminWindow.restore();
     adminWindow.show();
     adminWindow.focus();
+    adminWindow.setSkipTaskbar?.(false);
     return adminWindow;
   }
 
@@ -454,7 +457,8 @@ function createAdminWindow() {
   adminWindow.on("closed", () => {
     adminWindow = null;
   });
-
+  
+  adminWindow.setSkipTaskbar?.(false);
   return adminWindow;
 }
 
@@ -464,6 +468,7 @@ function createChatWindow() {
     if (chatWindow.isMinimized()) chatWindow.restore();
     chatWindow.show();
     chatWindow.focus();
+    chatWindow.setSkipTaskbar?.(false);
     return chatWindow;
   }
 
@@ -505,7 +510,8 @@ function createChatWindow() {
   chatWindow.on("closed", () => {
     chatWindow = null;
   });
-
+  
+  chatWindow.setSkipTaskbar?.(false);
   return chatWindow;
 }
 
@@ -561,18 +567,23 @@ function createTray() {
 
 function showByRole() {
   if (currentRole === "admin") {
-    createAdminWindow();
+    const aw = createAdminWindow();                 // ★ 추가: 반환값 변수에 담기
+    try { aw.setSkipTaskbar?.(false); } catch {}    // ★ 추가: 작업표시줄에 아이콘 보이기
   } else if (currentRole === "employee") {
     // 사원은 두 창 모두 복귀
-    createFeatureWindow("employee");
-    createChatWindow();
+    const fw = createFeatureWindow("employee");     // ★ 추가
+    const cw = createChatWindow();                  // ★ 추가
+    try { fw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
+    try { cw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
   } else {
     // 로그인 상태 모름 → 로그인 창
     const mw = createMainWindow();
     mw.show();
     mw.focus();
+    try { mw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
   }
 }
+
 
 /* ============================================================================
  *   로그아웃 & 종료 처리
@@ -987,12 +998,12 @@ ipcMain.on("auth:success", (_evt, payload) => {
   if (currentRole === "admin") {
     // 관리자는 관리자 창만
     destroyFeatureWindows(); // 혹시 남아있던 기능/챗봇 제거
-    createAdminWindow();
+    const aw = createAdminWindow();                 // ★ 추가: 변수에 담아서
+    try { aw.setSkipTaskbar?.(false); } catch {}    // ★ 추가: 작업표시줄 아이콘 보장
     return;
   }
 
-  // employee: 기능부와 챗봇을 '항상' 새로 보장
-  // (이전 세션 잔재 제거)
+  // employee: 기능부와 챗봇을 '항상' 새로 보장 (이전 세션 잔재 제거)
   try { featureWindow?.destroy?.(); } catch {}
   try { chatWindow?.destroy?.(); } catch {}
   featureWindow = null;
@@ -1000,9 +1011,12 @@ ipcMain.on("auth:success", (_evt, payload) => {
 
   const fw = createFeatureWindow("employee");
   const cw = createChatWindow();
+  try { fw.setSkipTaskbar?.(false); } catch {}      // ★ 추가
+  try { cw.setSkipTaskbar?.(false); } catch {}      // ★ 추가
   try { fw.focus(); } catch {}
   try { cw.show(); cw.focus(); } catch {}
 });
+
 
 ipcMain.handle("open-feature-window", (_evt, role = "employee") => {
   if (role === "admin") createAdminWindow();
@@ -1036,4 +1050,3 @@ ipcMain.on("app:logout-request", (event, scope = "all") => {
   setTimeout(() => mw.setAlwaysOnTop?.(false), 50); // 약간의 지연으로 확실히 해제
   console.log("[MAIN] show+focus mainWindow id=", mw?.id);
 });
-
