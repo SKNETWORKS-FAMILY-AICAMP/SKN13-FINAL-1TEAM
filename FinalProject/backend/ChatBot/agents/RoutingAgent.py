@@ -64,14 +64,7 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
         else:
             next_step = WorkflowStep.WORKFLOW_COMPLETED
     
-    # Check if document is required but missing
-    if any(agent in ["document_search", "document_edit"] for agent in next_agents):
-        if not state.get("document_content") and not state.get("needs_document_content"):
-            return {
-                "needs_document_content": True,
-                "workflow_step": "awaiting_document",
-                "next_agents": next_agents
-            }
+    # Document content is now always sent from frontend, no need to request it
     
     print(f"--- Next step: {next_step}, Next agents: {next_agents} ---")
     

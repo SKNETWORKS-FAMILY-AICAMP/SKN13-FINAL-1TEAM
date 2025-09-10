@@ -184,13 +184,27 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
       console.error('[ERROR] 메시지 저장 실패:', err);
     }
 
+    // 현재 문서 내용 가져오기 (항상 전송)
+    let documentContent = null;
+    if (window.fsBridge?.getCurrentDocumentContent) {
+      try {
+        documentContent = await window.fsBridge.getCurrentDocumentContent();
+        if (documentContent === "<p>문서 작성을 시작하세요...</p>") {
+          documentContent = null; // 빈 문서는 null로 처리
+        }
+      } catch (err) {
+        console.warn('문서 내용 가져오기 실패:', err);
+      }
+    }
+
     // SSE 연결 시작: streamLLM 사용 (토큰 인증 포함)
-    console.log('🚀 ChatWindow에서 streamLLM 호출 시작');
+    console.log('🚀 ChatWindow에서 streamLLM 호출 시작', documentContent ? '(문서 포함)' : '(문서 없음)');
     
-    // streamLLM 호출 (토큰 인증 포함)
+    // streamLLM 호출 (토큰 인증 포함, 문서 내용 항상 포함)
     const cleanupFn = streamLLM({
       sessionId,
       prompt,
+      documentContent, // 항상 문서 내용 전송
       onDelta: (content, full) => {
         updateLastMessage(content);
       },
@@ -205,37 +219,6 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         if (window.fsBridge?.sendDocumentUpdate) {
           window.fsBridge.sendDocumentUpdate(docUpdate);
           console.log('✅ 문서 업데이트를 기능창으로 전달');
-        }
-      },
-      onNeedsDocument: (agentContext) => {
-        console.log('🔍 백엔드에서 문서 내용 요청');
-        if (window.fsBridge?.getCurrentDocumentContent) {
-          window.fsBridge.getCurrentDocumentContent().then(documentContent => {
-            if (documentContent && documentContent !== "<p>문서 작성을 시작하세요...</p>") {
-              console.log('✅ 문서 내용 가져와서 재요청 시작');
-              closeEventSource();
-              
-              const newCleanupFn = streamLLM({
-                sessionId: currentSession?.id,
-                prompt: input.trim(),
-                documentContent,
-                onDelta: (content, full) => updateLastMessage(content),
-                onDocumentUpdate: (docUpdate) => {
-                  console.log('📝 document_update 감지됨:', docUpdate.substring(0, 100) + '...');
-                  if (window.fsBridge?.sendDocumentUpdate) {
-                    window.fsBridge.sendDocumentUpdate(docUpdate);
-                    console.log('✅ 문서 업데이트를 기능창으로 전달');
-                  }
-                },
-                onDone: (full) => { console.log('✅ StreamLLM (문서포함) 완료'); closeEventSource(); },
-                onError: (error) => { console.error('❌ StreamLLM (문서포함) 에러:', error); closeEventSource(); }
-              });
-              eventSourceRef.current = { close: newCleanupFn };
-            } else {
-              appendMessage({ role: 'ai', content: '문서를 먼저 작성해주세요.' });
-              endStream();
-            }
-          });
         }
       },
       onDone: (full) => {

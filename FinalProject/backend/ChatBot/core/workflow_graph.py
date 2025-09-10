@@ -174,9 +174,7 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         
         print(f"--- ROUTING: step={workflow_step}, agents={next_agents}, complete={workflow_complete} ---")
         
-        # Check if document is needed
-        if state.get('needs_document_content') and not state.get('document_content'):
-            return "request_document"
+        # Document content is now always sent from frontend, no need to request it
         
         # Route to specific agents
         if next_agents:
