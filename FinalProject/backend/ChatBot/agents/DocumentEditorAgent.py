@@ -107,7 +107,7 @@ class DocumentEditorAgent:
                 
                 try:
                     from langchain_core.messages import HumanMessage
-                    final_prompt = HumanMessage(content="이제 편집 작업이 완료되었습니다. 사용자에게 어떤 편집이 이루어졌는지 간단히 설명해주세요.")
+                    final_prompt = HumanMessage(content="편집 작업이 완료되었습니다. 한국어로 사용자에게 어떤 편집이 이루어졌는지 간단히 설명해주세요. 반드시 한국어로 답변하세요.")
                     messages.append(final_prompt)
                     
                     # Generate final response without tools

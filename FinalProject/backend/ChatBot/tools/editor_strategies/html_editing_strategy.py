@@ -28,12 +28,10 @@ class HtmlEditingStrategy(BaseEditorStrategy):
         ]
 
 
-@tool
-def edit_html_document(document_content: str, instruction: str) -> str:
+def _edit_html_document_impl(document_content: str, instruction: str) -> str:
     """
-    주어진 HTML 문서 내용과 편집 지시를 바탕으로 HTML 문서를 수정합니다.
-    TipTap 에디터와 완전히 호환되는 HTML 편집을 수행합니다.
-    지원 기능: 헤딩, 텍스트 스타일링, 리스트, 테이블, 블록쿼트, 텍스트 추가/수정 등
+    HTML 문서 편집의 실제 구현 함수.
+    @tool 래퍼 없이 직접 호출할 수 있도록 분리됨.
     """
     try:
         logger.info(f"HTML 문서 편집 시작 - 지시사항: {instruction[:100]}...")
@@ -77,6 +75,16 @@ def edit_html_document(document_content: str, instruction: str) -> str:
         return f"{document_content}\n{error_message}"
 
 
+@tool
+def edit_html_document(document_content: str, instruction: str) -> str:
+    """
+    주어진 HTML 문서 내용과 편집 지시를 바탕으로 HTML 문서를 수정합니다.
+    TipTap 에디터와 완전히 호환되는 HTML 편집을 수행합니다.
+    지원 기능: 헤딩, 텍스트 스타일링, 리스트, 테이블, 블록쿼트, 텍스트 추가/수정 등
+    """
+    return _edit_html_document_impl(document_content, instruction)
+
+
 @tool 
 def run_document_edit(user_command: str, document_content: str) -> str:
     """
@@ -86,8 +94,8 @@ def run_document_edit(user_command: str, document_content: str) -> str:
     logger.info(f"문서 편집 도구 실행 - 명령: {user_command[:100]}...")
     
     try:
-        # Use the comprehensive HTML editing tool
-        return edit_html_document(document_content, user_command)
+        # Call the actual implementation function directly, not the @tool wrapper
+        return _edit_html_document_impl(document_content, user_command)
     except Exception as e:
         logger.error(f"문서 편집 실행 오류: {str(e)}")
         return document_content
