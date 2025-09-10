@@ -108,6 +108,29 @@ class DocumentSearchAgent:
                 messages.append(response)
                 search_results = self._extract_search_results(response)
             
+            # After tool execution, generate final response for the user
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                print(">> [SEARCH AGENT] Generating final user response after tool execution")
+                
+                try:
+                    # Create a prompt for final response generation
+                    from langchain_core.messages import HumanMessage
+                    final_prompt = HumanMessage(content="이제 검색 결과를 바탕으로 사용자에게 도움이 되는 답변을 생성해주세요. 검색된 문서들의 내용을 요약하고 사용자의 질문에 답해주세요.")
+                    messages.append(final_prompt)
+                    
+                    # Generate final response
+                    final_response = self.llm_with_tools.invoke(messages)
+                    messages.append(final_response)
+                    
+                    print(f">> [SEARCH AGENT] Final response generated: {final_response.content[:100]}...")
+                    
+                except Exception as e:
+                    print(f">> [SEARCH AGENT] Error generating final response: {e}")
+                    # Fallback: create a simple response
+                    from langchain_core.messages import AIMessage
+                    fallback_response = AIMessage(content="검색이 완료되었습니다. 검색 결과를 확인해주세요.")
+                    messages.append(fallback_response)
+            
             # 5. 워크플로우 결과 저장
             AgentStateHelper.add_workflow_result(
                 state,
