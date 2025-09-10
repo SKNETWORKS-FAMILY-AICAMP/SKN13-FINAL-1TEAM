@@ -26,21 +26,91 @@ BUCKET_NAME = os.getenv('SHARED_S3_BUCKET')
 if not BUCKET_NAME:
     raise ValueError("이봐, 아들. AWS_S3_BUCKET 환경 변수가 설정되지 않았다.")
 
-def get_upload_url(file_name: str, content_type: str = 'application/octet-stream', expires_in: int = 300, path_hint: str = "") -> Dict[str, str]:
+def get_content_type_from_filename(file_name: str) -> str:
+    """파일 확장자로부터 Content-Type을 추론합니다."""
+    ext = file_name.split('.')[-1].lower() if '.' in file_name else ''
+    
+    mime_types = {
+        # 텍스트
+        'txt': 'text/plain',
+        'md': 'text/markdown',
+        'json': 'application/json',
+        'xml': 'application/xml',
+        'csv': 'text/csv',
+        'html': 'text/html',
+        'css': 'text/css',
+        'js': 'application/javascript',
+        
+        # 문서
+        'pdf': 'application/pdf',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls': 'application/vnd.ms-excel',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'ppt': 'application/vnd.ms-powerpoint',
+        'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        
+        # 이미지
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'bmp': 'image/bmp',
+        'webp': 'image/webp',
+        'svg': 'image/svg+xml',
+        'ico': 'image/x-icon',
+        
+        # 비디오
+        'mp4': 'video/mp4',
+        'avi': 'video/x-msvideo',
+        'mov': 'video/quicktime',
+        'wmv': 'video/x-ms-wmv',
+        'flv': 'video/x-flv',
+        'webm': 'video/webm',
+        
+        # 오디오
+        'mp3': 'audio/mpeg',
+        'wav': 'audio/wav',
+        'flac': 'audio/flac',
+        'aac': 'audio/aac',
+        'ogg': 'audio/ogg',
+        
+        # 압축
+        'zip': 'application/zip',
+        'rar': 'application/vnd.rar',
+        '7z': 'application/x-7z-compressed',
+        'tar': 'application/x-tar',
+        'gz': 'application/gzip',
+        
+        # 기타
+        'exe': 'application/octet-stream',
+        'dmg': 'application/octet-stream',
+        'pkg': 'application/octet-stream',
+        'deb': 'application/octet-stream'
+    }
+    
+    return mime_types.get(ext, 'application/octet-stream')
+
+def get_upload_url(file_name: str, content_type: str = None, expires_in: int = 300, path_hint: str = "") -> Dict[str, str]:
     """
     S3에 파일을 업로드하기 위한 presigned URL을 생성한다.
     
     Args:
         file_name (str): 업로드할 파일의 이름
-        content_type (str): 파일의 MIME 타입 (선택적)
+        content_type (str): 파일의 MIME 타입 (None이면 자동 추론)
         expires_in (int): URL 만료 시간(초), 기본값 5분
+        path_hint (str): 저장 경로 힌트
         
     Returns:
-        Dict[str, str]: uploadUrl과 fileKey를 포함한 딕셔너리
+        Dict[str, str]: uploadUrl, fileKey, contentType을 포함한 딕셔너리
         
     Raises:
         ClientError: AWS S3 클라이언트 오류
     """
+    # Content-Type 결정: 제공되지 않으면 파일 확장자로부터 추론
+    if content_type is None:
+        content_type = get_content_type_from_filename(file_name)
+    
     # 덮어쓰기 방지를 위해 타임스탬프 추가
     timestamp = int(datetime.now().timestamp() * 1000)
     
@@ -62,10 +132,11 @@ def get_upload_url(file_name: str, content_type: str = 'application/octet-stream
             ExpiresIn=expires_in
         )
         
-        print(f"업로드용 서명된 URL 생성 성공: {signed_url}")
+        print(f"업로드용 서명된 URL 생성 성공 - 파일: {file_name}, Content-Type: {content_type}")
         return {
             'uploadUrl': signed_url,
-            'fileKey': file_key
+            'fileKey': file_key,
+            'contentType': content_type  # ★ Content-Type도 함께 반환
         }
     except ClientError as e:
         print(f"젠장. 업로드 URL 생성 중 오류 발생: {e}")

@@ -13,8 +13,8 @@ AGENTS_AVAILABLE = True
 try:
     from backend.ChatBot.agents.RoutingAgent import RoutingAgent, route_question
     from backend.ChatBot.agents.DocumentSearchAgent import DocumentSearchAgent
-    from backend.ChatBot.agents.DocumentEditorAgent import DocumentEditAgent
-    from backend.ChatBot.agents.chat_agent import agent as GeneralChatAgent
+    from backend.ChatBot.agents.DocumentEditorAgent import DocumentEditorAgent
+    from FinalProject.backend.ChatBot.agents.GeneralChatAgent import agent as GeneralChatAgent
     from backend.ChatBot.core.AgentState import AgentState
 except ImportError as e:
     print(f"에이전트 모듈 임포트 실패: {e}")

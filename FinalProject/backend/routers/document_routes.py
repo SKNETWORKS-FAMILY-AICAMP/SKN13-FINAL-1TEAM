@@ -289,12 +289,13 @@ async def create_presigned_url(
         )
     
     try:
-        # pathHint를 포함해서 presigned URL 생성
+        # pathHint를 포함해서 presigned URL 생성 (contentType이 None이면 자동 추론됨)
         result = get_upload_url(request.filename, request.contentType, path_hint=request.pathHint)
         return {
             "uploadUrl": result.get("uploadUrl"),
             "fileKey": result.get("fileKey"), 
-            "displayName": request.filename
+            "displayName": request.filename,
+            "contentType": result.get("contentType")  # ★ 백엔드에서 결정된 최종 Content-Type 사용!
         }
     except Exception as e:
         raise HTTPException(

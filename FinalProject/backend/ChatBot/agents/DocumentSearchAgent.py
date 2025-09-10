@@ -1,71 +1,163 @@
 # DocumentSearchAgent.py
 
-from typing import Any
+from typing import Dict, Any, List
 from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
-from langchain_core.runnables import RunnableConfig
-from langchain_core.messages import SystemMessage 
+from langchain_core.messages import SystemMessage, BaseMessage
 
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.checkpoint.memory import MemorySaver
-
-from ..core.AgentState import AgentState
+from ..core.AgentState import AgentState, AgentStateHelper, AgentType, WorkflowStep
 from ..tools.retriever_tool import RAG_search_tool
 from ..tools.agent_logic import AgentTools
-from ..prompts.DocumentSearchSystemPrompt import get_document_search_system_prompt 
+from ..prompts.DocumentSearchSystemPrompt import get_document_search_system_prompt
 
 load_dotenv()
 
-# --- Main Agent Node ---
 
-def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
-    """Calls the LLM with the current state and returns the AI's response."""
-    messages = state["messages"]
-    if not any(isinstance(msg, SystemMessage) for msg in messages):
-        system_prompt_content = get_document_search_system_prompt()
-        messages = [SystemMessage(content=system_prompt_content)] + messages
-
-    response = llm_with_tools.invoke(messages)
-    return {"messages": [response]}
-
-# --- Graph Factory ---
-
-def DocumentSearchAgent() -> Any:
-    """Compiles and returns the LangGraph agent for document search."""
+class DocumentSearchAgent:
+    """
+    전문 문서 검색 에이전트
+    RAG 검색, 쿼리 확장, 결과 요약 등 문서 검색 관련 전문 기능 제공
+    """
     
-    llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
+    def __init__(self):
+        """문서 검색 전용 도구들과 LLM 초기화"""
+        self.llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
+        self.tool_executor = AgentTools(llm=self.llm)
+        
+        # 문서 검색 전용 도구들
+        self.tools = [
+            RAG_search_tool,
+            self.tool_executor.expand_query_tool,
+            self.tool_executor.route_query_tool,
+            self.tool_executor.handle_follow_up_tool,
+            self.tool_executor.summarize_tool,
+            self.tool_executor.get_presigned_download_url
+        ]
+        
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
+        
+        print("--- DocumentSearchAgent initialized ---")
     
-    tool_executor = AgentTools(llm=llm)
-
-    tools = [
-        RAG_search_tool,
-        tool_executor.expand_query_tool,
-        tool_executor.route_query_tool,
-        tool_executor.handle_follow_up_tool,
-        tool_executor.summarize_tool,
-        tool_executor.get_presigned_download_url # Add the new tool here
-    ]
+    def process(self, state: AgentState) -> Dict[str, Any]:
+        """
+        문서 검색 프로세스 실행
+        1. 사용자 쿼리 분석
+        2. 검색 실행
+        3. 결과 처리 및 상태 업데이트
+        """
+        print("--- DocumentSearchAgent: Starting document search process ---")
+        
+        try:
+            # 1. 사용자 쿼리 추출 및 저장
+            user_query = AgentStateHelper.get_last_user_message(state)
+            if not user_query:
+                return self._handle_error(state, "No user query found")
+            
+            AgentStateHelper.add_agent_data(
+                state, 
+                AgentType.DOCUMENT_SEARCH, 
+                "original_query", 
+                user_query
+            )
+            
+            # 2. 시스템 프롬프트와 메시지 준비
+            messages = self._prepare_messages(state)
+            
+            # 3. LLM 호출 (도구 사용 포함)
+            response = self.llm_with_tools.invoke(messages)
+            
+            # 4. 검색 결과 처리
+            search_results = self._extract_search_results(response)
+            
+            # 5. 워크플로우 결과 저장
+            AgentStateHelper.add_workflow_result(
+                state,
+                AgentType.DOCUMENT_SEARCH,
+                success=bool(search_results),
+                data=search_results
+            )
+            
+            # 6. 워크플로우 단계 업데이트
+            AgentStateHelper.set_workflow_step(state, WorkflowStep.SEARCH_COMPLETED)
+            
+            print(f"--- DocumentSearchAgent: Search completed successfully ---")
+            
+            return {
+                "messages": [response],
+                "workflow_step": WorkflowStep.SEARCH_COMPLETED
+            }
+            
+        except Exception as e:
+            print(f"--- DocumentSearchAgent error: {str(e)} ---")
+            return self._handle_error(state, f"Search failed: {str(e)}")
     
-    llm_with_tools = llm.bind_tools(tools)
+    def _prepare_messages(self, state: AgentState) -> List[BaseMessage]:
+        """시스템 프롬프트와 메시지 준비"""
+        messages = list(state.get("messages", []))
+        
+        # 시스템 메시지가 없으면 추가
+        if not any(isinstance(msg, SystemMessage) for msg in messages):
+            system_prompt_content = get_document_search_system_prompt()
+            messages.insert(0, SystemMessage(content=system_prompt_content))
+        
+        return messages
     
-    def runnable_agent_node(state: AgentState):
-        return agent_node(state, llm_with_tools)
-
-    graph = StateGraph(AgentState)
-    graph.add_node("agent", runnable_agent_node)
-    graph.add_node("tools", ToolNode(tools))
+    def _extract_search_results(self, response: Any) -> Dict[str, Any]:
+        """LLM 응답에서 검색 결과 추출"""
+        results = {}
+        
+        # 도구 호출 결과 확인
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            results["tool_calls"] = [
+                {
+                    "name": tc.get("name", "unknown"),
+                    "args": tc.get("args", {}),
+                    "id": tc.get("id", "")
+                }
+                for tc in response.tool_calls
+            ]
+            results["has_tool_calls"] = True
+        else:
+            results["has_tool_calls"] = False
+        
+        # 응답 내용 저장
+        if hasattr(response, 'content'):
+            results["response_content"] = response.content
+        
+        return results
     
-    graph.set_entry_point("agent")
-    graph.add_conditional_edges("agent", tools_condition,)
-    graph.add_edge("tools", "agent")
+    def _handle_error(self, state: AgentState, error_message: str) -> Dict[str, Any]:
+        """에러 처리 및 상태 업데이트"""
+        AgentStateHelper.set_workflow_error(state, error_message)
+        
+        AgentStateHelper.add_workflow_result(
+            state,
+            AgentType.DOCUMENT_SEARCH,
+            success=False,
+            data={},
+            error=error_message
+        )
+        
+        return {
+            "workflow_error": error_message,
+            "workflow_step": WorkflowStep.ERROR
+        }
+    
+    def get_available_tools(self) -> List[str]:
+        """사용 가능한 도구 목록 반환"""
+        return [tool.name for tool in self.tools]
 
-    return graph.compile(checkpointer=MemorySaver())
 
-def generate_config(session_id: str) -> RunnableConfig:
-    """Generates a config for the agent run."""
-    return RunnableConfig(
-        recursion_limit=50,
-        configurable={"thread_id": session_id},
-    )
+# Legacy support - 기존 코드와의 호환성
+def DocumentSearchAgent_legacy():
+    """
+    DEPRECATED: 기존 그래프 방식 지원 (하위 호환성)
+    새 코드에서는 DocumentSearchAgent 클래스 직접 사용 권장
+    """
+    agent = DocumentSearchAgent()
+    
+    def legacy_wrapper(state: AgentState) -> Dict[str, Any]:
+        return agent.process(state)
+    
+    return legacy_wrapper

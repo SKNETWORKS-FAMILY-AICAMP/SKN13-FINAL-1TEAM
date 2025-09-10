@@ -181,7 +181,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
     )
 
 # LLM 응답 스트리밍을 위한 비동기 함수
-async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
+async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], workflow_agent, config, db: Session) -> Generator:
     # 채팅 세션 가져오기 또는 생성 (외래 키 제약 조건 방지)
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
@@ -210,20 +210,16 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
     if not messages or messages[-1] != ("user", prompt): # 마지막 메시지가 현재 프롬프트와 다르면 추가
         messages.append(("user", prompt))
 
-    # 초기 AgentState 객체 생성
-    initial_state: AgentState = {
-        "prompt": prompt,
-        "document_content": document_content,
-        "messages": messages,
-        # 다음 필드들은 에이전트에 의해 채워질 것임
-        "intent": None,
-        "needs_document_content": False,
-        "intermediate_steps": [],
-        "generation": None,
-    }
+    # 초기 AgentState 생성 (새로운 헬퍼 사용)
+    from ..ChatBot.core.AgentState import AgentStateHelper
+    initial_state = AgentStateHelper.create_initial_state(
+        prompt=prompt,
+        document_content=document_content,
+        messages=messages
+    )
 
     # 에이전트 스트림을 통해 상태 객체 전달
-    async for event in chat_agent.astream_events(initial_state, config=config):
+    async for event in workflow_agent.astream_events(initial_state, config=config):
         
         kind = event["event"] # 이벤트 종류
         name = event.get("name") # 이벤트 이름
@@ -337,10 +333,10 @@ async def get_messages(
 @router.get("/stream")
 async def llm_stream(session_id: str, prompt: str, current_user: User = Depends(get_current_user), document_content: Optional[str] = None, db: Session = Depends(get_db)):
     config = generate_config(session_id) # 세션 ID로 설정 생성
-    chat_agent = RoutingAgent() # 라우팅 에이전트 인스턴스 생성
+    workflow_agent = RoutingAgent() # 멀티스텝 워크플로우 에이전트 인스턴스 생성
 
     # LLM 응답을 스트리밍 형태로 반환
-    return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
+    return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, workflow_agent, config, db), media_type="text/event-stream")
 
 # --- S3 파일 삭제 유틸리티 ---
 def delete_s3_objects(bucket: str, keys: list[str]) -> None:

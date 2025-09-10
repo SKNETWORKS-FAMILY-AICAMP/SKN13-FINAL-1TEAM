@@ -1,224 +1,214 @@
 # DocumentEditorAgent.py
 
-from typing import Any, Optional
+from typing import Dict, Any, List
 from dotenv import load_dotenv
 import logging
 
-from langchain_core.messages import SystemMessage, ToolMessage, HumanMessage
+from langchain_core.messages import SystemMessage, ToolMessage, HumanMessage, BaseMessage
 from langchain_openai import ChatOpenAI
-from langchain_core.runnables import RunnableConfig
-from langchain_core.prompts import ChatPromptTemplate
 
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.checkpoint.memory import MemorySaver
-
-from ..core.AgentState import AgentState
-from ..tools.editor_tool import ALL_EDITOR_TOOLS
+from ..core.AgentState import AgentState, AgentStateHelper, AgentType, WorkflowStep
+from ..tools.editor_tool_new import ALL_EDITOR_TOOLS
 
 load_dotenv()
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
 
-# --- Main Agent Node ---
-
-def agent_node(state: AgentState, llm_with_tools: Any) -> dict:
+class DocumentEditorAgent:
     """
-    DocumentEditorAgent의 메인 노드
-    
-    문서 편집 요청을 처리하고 적절한 응답을 생성합니다.
+    전문 문서 편집 에이전트
+    TipTap 에디터 호환 HTML 편집, 문서 구조 변경 등 문서 편집 전문 기능 제공
     """
-    try:
-        logger.info("DocumentEditorAgent 노드 실행 중")
-        
-        messages = state["messages"].copy()
-        document_content = state.get("document_content", "")
-        
-        # 도구 실행 후 최종 응답 생성
-        if isinstance(messages[-1], ToolMessage):
-            return _generate_completion_response(document_content)
-        
-        # 편집 요청 처리
-        if document_content:
-            messages = _prepare_editing_context(messages, document_content)
-        
-        # LLM 호출 및 응답 반환
-        response = llm_with_tools.invoke(messages)
-        return {"messages": [response]}
-        
-    except Exception as e:
-        logger.error(f"agent_node에서 오류 발생: {str(e)}")
-        error_response = HumanMessage(content=f"문서 편집 중 오류가 발생했습니다: {str(e)}")
-        return {"messages": [error_response]}
-
-
-def _generate_completion_response(document_content: str) -> dict:
-    """도구 실행 완료 후 최종 확인 메시지 생성"""
-    logger.info("도구 실행 완료. 최종 확인 메시지 생성")
     
-    completion_message = HumanMessage(
-        content="요청하신 문서 편집이 완료되었습니다. 수정된 내용을 확인해보세요."
-    )
-    return {"messages": [completion_message]}
-
-
-def _prepare_editing_context(messages: list, document_content: str) -> list:
-    """편집 컨텍스트 준비 - 대화 맥락 포함"""
-    logger.info("문서 내용 포함하여 편집 컨텍스트 준비")
+    def __init__(self):
+        """문서 편집 전용 도구들과 LLM 초기화"""
+        self.llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
+        
+        # 문서 편집 전용 도구들 (1061줄의 괴물 editor_tool.py에서 가져옴)
+        self.tools = ALL_EDITOR_TOOLS
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
+        
+        logger.info("--- DocumentEditorAgent initialized ---")
     
-    # 대화 맥락 추출 - 더 많은 메시지 포함 (최대 10개)
-    recent_messages = messages[-10:] if len(messages) >= 10 else messages
-    conversation_context = ""
-    
-    for msg in recent_messages:
-        if hasattr(msg, 'content') and msg.content:
-            # 메시지 타입에 따른 역할 구분
-            if hasattr(msg, 'type'):
-                if msg.type == "human":
-                    role = "사용자"
-                elif msg.type == "ai":
-                    role = "AI"
-                else:
-                    role = "시스템"
-            else:
-                # content에서 에이전트 이름 추출 시도
-                content_start = msg.content[:50]
-                if "GeneralChatAgent" in content_start:
-                    role = "GeneralChatAgent"
-                elif "DocumentEditorAgent" in content_start:
-                    role = "DocumentEditorAgent"
-                else:
-                    role = "AI"
+    def process(self, state: AgentState) -> Dict[str, Any]:
+        """
+        문서 편집 프로세스 실행
+        1. 편집 요청 분석
+        2. 문서 내용 확인
+        3. 편집 실행
+        4. 결과 처리 및 상태 업데이트
+        """
+        logger.info("--- DocumentEditorAgent: Starting document editing process ---")
+        
+        try:
+            # 1. 문서 내용 확인
+            document_content = state.get("document_content", "")
+            if not document_content:
+                return self._handle_error(state, "No document content available for editing")
             
-            # 더 긴 내용 포함 (500자까지)
-            conversation_context += f"\n{role}: {msg.content[:500]}..."
+            # 2. 편집 요청 분석
+            user_query = AgentStateHelper.get_last_user_message(state)
+            if not user_query:
+                return self._handle_error(state, "No editing request found")
+            
+            AgentStateHelper.add_agent_data(
+                state, 
+                AgentType.DOCUMENT_EDIT, 
+                "original_request", 
+                user_query
+            )
+            
+            # 3. 편집 컨텍스트 준비 (대화 맥락 포함)
+            messages = self._prepare_editing_context(state, document_content)
+            
+            # 4. LLM 호출 (편집 도구 사용)
+            response = self.llm_with_tools.invoke(messages)
+            
+            # 5. 편집 결과 처리
+            edit_results = self._extract_edit_results(response, document_content)
+            
+            # 6. 워크플로우 결과 저장
+            AgentStateHelper.add_workflow_result(
+                state,
+                AgentType.DOCUMENT_EDIT,
+                success=bool(edit_results.get("success")),
+                data=edit_results
+            )
+            
+            # 7. 문서 내용 업데이트 (편집된 내용이 있으면)
+            updated_content = edit_results.get("updated_content", document_content)
+            
+            # 8. 워크플로우 단계 업데이트
+            AgentStateHelper.set_workflow_step(state, WorkflowStep.EDIT_COMPLETED)
+            
+            logger.info("--- DocumentEditorAgent: Editing completed successfully ---")
+            
+            return {
+                "messages": [response],
+                "document_content": updated_content,
+                "workflow_step": WorkflowStep.EDIT_COMPLETED
+            }
+            
+        except Exception as e:
+            from ..utils.error_handler import handle_llm_error, log_error_with_context
+            log_error_with_context(e, {"agent": "DocumentEditorAgent", "state": "processing"})
+            error_info = handle_llm_error(e)
+            return self._handle_error(state, error_info["user_message"])
     
-    context_message = SystemMessage(
-        content=f"""## 문서 편집 지시사항 ##
-당신은 전문 문서 편집자입니다. 아래의 전체 대화 맥락을 **반드시** 참고하여 문서를 편집하세요.
+    def _prepare_editing_context(self, state: AgentState, document_content: str) -> List[BaseMessage]:
+        """편집 컨텍스트 준비 - 새로운 AgentState 활용"""
+        messages = list(state.get("messages", []))
+        
+        # 워크플로우 컨텍스트에서 추가 정보 가져오기
+        workflow_context = state.get("workflow_context", {})
+        search_results = AgentStateHelper.get_workflow_result(state, AgentType.DOCUMENT_SEARCH)
+        
+        # 대화 맥락 구성 (최근 5개 메시지)
+        recent_messages = messages[-5:] if len(messages) >= 5 else messages
+        conversation_context = self._build_conversation_context(recent_messages)
+        
+        # 검색 결과가 있으면 포함
+        search_context = ""
+        if search_results and search_results.success:
+            search_context = f"\n\n**이전 검색 결과**: {search_results.data}"
+        
+        context_message = SystemMessage(
+            content=f"""## 전문 문서 편집 지시사항 ##
+당신은 TipTap 에디터 호환 전문 문서 편집자입니다.
 
-**전체 대화 맥락**:
+**대화 맥락**:
 {conversation_context}
 
-**현재 문서 상태**:
+**현재 문서 내용**:
 {document_content}
 
-**핵심 편집 원칙**:
-1. **대화 맥락 완전 활용**: 위의 대화 내용에서 사용자가 언급한 구체적인 주제, 요구사항, 정보를 모두 파악하세요
-2. **맥락 기반 내용 생성**: 
-   - "작성해줘", "내용 추가해줘" 등의 요청이 있을 때는 대화에서 언급된 구체적인 주제로 실제 내용을 작성하세요
-   - 예: "세계 최고의 광고 Best3" 주제가 언급되었다면, 그에 대한 실제 보고서 내용을 작성
-3. **에이전트 간 정보 연결**: GeneralChatAgent가 제공한 정보를 DocumentEditorAgent가 문서에 반영하세요
-4. **구체적 내용 생성**: 추상적이거나 placeholder 텍스트가 아닌, 실용적이고 구체적인 내용을 생성하세요
+{search_context}
 
-대화 맥락에서 파악한 주제와 요구사항을 바탕으로 적절한 편집 도구를 선택하여 실행하세요.
+**편집 원칙**:
+1. 대화 맥락을 완전히 활용하여 구체적인 내용 생성
+2. TipTap 에디터 호환 HTML 생성  
+3. 사용자 요청에 정확히 맞는 편집 실행
+4. Placeholder가 아닌 실제 유용한 내용 작성
+
+적절한 편집 도구를 선택하여 실행하세요.
 """
-    )
+        )
+        
+        # 시스템 메시지 추가
+        if not any(isinstance(msg, SystemMessage) for msg in messages):
+            messages.insert(0, context_message)
+        
+        return messages
     
-    # 마지막 사용자 메시지 전에 컨텍스트 삽입
-    if len(messages) > 1:
-        messages.insert(-1, context_message)
-    else:
-        messages.append(context_message)
+    def _build_conversation_context(self, messages: List[BaseMessage]) -> str:
+        """대화 맥락 문자열 구성"""
+        context = ""
+        for msg in messages:
+            if hasattr(msg, 'content') and msg.content:
+                role = "사용자" if getattr(msg, 'type', '') == "human" else "AI"
+                content_preview = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+                context += f"\n{role}: {content_preview}"
+        return context
     
-    return messages
-
-# --- State Update Node ---
-
-def update_document_state(state: AgentState) -> dict:
-    """
-    도구 실행 후 문서 상태를 업데이트합니다.
-    """
-    try:
-        logger.info("문서 상태 업데이트 중")
+    def _extract_edit_results(self, response: Any, original_content: str) -> Dict[str, Any]:
+        """편집 결과 추출 및 처리"""
+        results = {
+            "success": False,
+            "updated_content": original_content,
+            "tool_calls": [],
+            "response_content": ""
+        }
         
-        messages = state.get("messages", [])
-        if not messages:
-            return {}
+        # 도구 호출 결과 확인
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            results["tool_calls"] = response.tool_calls
+            results["success"] = True
+            
+            # 편집된 내용 추출 (도구 결과에서)
+            for tool_call in response.tool_calls:
+                if tool_call.get("name") in ["run_document_edit", "edit_html_document"]:
+                    # 실제 편집 결과는 도구에서 반환됨
+                    # 여기서는 성공 여부만 체크
+                    pass
         
-        last_message = messages[-1]
-        if not isinstance(last_message, ToolMessage):
-            logger.warning("마지막 메시지가 ToolMessage가 아닙니다")
-            return {}
-
-        # 마지막 ToolMessage의 내용으로 document_content 업데이트
-        updated_content = last_message.content
-        logger.info(f"새 문서 내용으로 상태 업데이트 (길이: {len(updated_content)}자)")
+        # 응답 내용 저장
+        if hasattr(response, 'content'):
+            results["response_content"] = response.content
         
-        return {"document_content": updated_content}
-        
-    except Exception as e:
-        logger.error(f"update_document_state에서 오류 발생: {str(e)}")
-        return {}
-
-
-# --- Graph Factory ---
-
-def DocumentEditAgent() -> Any:
-    """
-    문서 편집을 위한 LangGraph 에이전트를 생성하고 반환합니다.
+        return results
     
-    Returns:
-        LangGraph: 컴파일된 문서 편집 에이전트
-    """
-    try:
-        logger.info("DocumentEditAgent 그래프 생성 중")
+    def _handle_error(self, state: AgentState, error_message: str) -> Dict[str, Any]:
+        """에러 처리 및 상태 업데이트"""
+        AgentStateHelper.set_workflow_error(state, error_message)
         
-        # LLM 설정
-        llm = ChatOpenAI(model_name='gpt-4o', temperature=0, streaming=True)
+        AgentStateHelper.add_workflow_result(
+            state,
+            AgentType.DOCUMENT_EDIT,
+            success=False,
+            data={},
+            error=error_message
+        )
         
-        # 사용 가능한 도구들
-        tools = ALL_EDITOR_TOOLS
-        
-        # LLM에 도구 바인딩
-        llm_with_tools = llm.bind_tools(tools)
-        
-        def runnable_agent_node(state: AgentState):
-            return agent_node(state, llm_with_tools)
-
-        # 그래프 구성
-        graph = StateGraph(AgentState)
-        graph.add_node("agent", runnable_agent_node)
-        graph.add_node("tools", ToolNode(tools))
-        graph.add_node("update_state", update_document_state)
-        
-        # 진입점 설정
-        graph.set_entry_point("agent")
-        
-        # 조건부 엣지: 에이전트 응답에 따라 도구 호출 또는 종료
-        graph.add_conditional_edges("agent", tools_condition)
-        
-        # 순차적 실행 흐름: 도구 -> 상태 업데이트 -> 에이전트
-        graph.add_edge("tools", "update_state")
-        graph.add_edge("update_state", "agent")
-        
-        # 그래프 컴파일
-        compiled_graph = graph.compile(checkpointer=MemorySaver())
-        logger.info("DocumentEditAgent 그래프 생성 완료")
-        
-        return compiled_graph
-        
-    except Exception as e:
-        logger.error(f"DocumentEditAgent 생성 중 오류 발생: {str(e)}")
-        raise
-
-def generate_config(session_id: str) -> RunnableConfig:
-    """
-    에이전트 실행을 위한 설정을 생성합니다.
+        return {
+            "workflow_error": error_message,
+            "workflow_step": WorkflowStep.ERROR
+        }
     
-    Args:
-        session_id (str): 세션 ID
-        
-    Returns:
-        RunnableConfig: 에이전트 실행 설정
+    def get_available_tools(self) -> List[str]:
+        """사용 가능한 편집 도구 목록 반환"""
+        return [tool.name for tool in self.tools]
+
+
+# Legacy support - 기존 코드와의 호환성
+def DocumentEditAgent_legacy():
     """
-    if not session_id or not isinstance(session_id, str):
-        raise ValueError("유효한 session_id가 필요합니다")
+    DEPRECATED: 기존 그래프 방식 지원 (하위 호환성)
+    새 코드에서는 DocumentEditorAgent 클래스 직접 사용 권장
+    """
+    agent = DocumentEditorAgent()
     
-    return RunnableConfig(
-        recursion_limit=50,
-        configurable={
-            "thread_id": session_id
-        },
-    )
+    def legacy_wrapper(state: AgentState) -> Dict[str, Any]:
+        return agent.process(state)
+    
+    return legacy_wrapper

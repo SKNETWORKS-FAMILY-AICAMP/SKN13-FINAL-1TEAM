@@ -299,7 +299,57 @@ def edit_html_document(document_content: str, instruction: str) -> str:
                 content = content.replace(target_text, f'<span style="background-color:{color};padding:2px 4px">{target_text}</span>')
                 soup = BeautifulSoup(content, 'html.parser')
         
-        # 9. 기타 일반적인 요청들 - 맥락 기반 처리
+        # 9. 빈 부분 채우기 및 완성 요청 처리
+        elif any(word in instruction for word in ["완성", "채워", "빈", "placeholder", "작성하세요"]):
+            # 문서에서 placeholder 텍스트들을 찾아서 AI로 실제 내용 생성
+            existing_html = str(soup)
+            existing_text = soup.get_text()
+            
+            # placeholder 패턴 찾기
+            placeholders = []
+            
+            # [이 부분에 ... 내용을 작성하세요] 패턴
+            import re
+            placeholder_pattern = r'\[이 부분에 ([^]]+) 내용을 작성하세요\]'
+            matches = re.findall(placeholder_pattern, existing_text)
+            
+            if matches:
+                from langchain_openai import ChatOpenAI
+                try:
+                    llm = ChatOpenAI(model_name='gpt-4o', temperature=0.3)
+                    
+                    for placeholder_topic in matches:
+                        # 각 placeholder에 대해 AI가 실제 내용 생성
+                        content_prompt = f"""
+문서 전체 맥락: {existing_text[:500]}...
+
+위 문서에서 "{placeholder_topic}" 섹션에 들어갈 전문적이고 구체적인 내용을 작성해주세요.
+
+요구사항:
+1. 문서의 전체 주제와 일치하는 내용
+2. 해당 섹션의 특성에 맞는 구체적이고 실질적인 정보
+3. 2-3개 문단으로 구성 (각 문단은 2-4문장)
+4. 전문적이고 신뢰할 수 있는 톤앤매너
+5. placeholder나 메타 설명 없이 본문 내용만
+
+직접적으로 본문 내용만 작성해주세요.
+"""
+                        
+                        response = llm.invoke([{"role": "user", "content": content_prompt}])
+                        real_content = response.content.strip()
+                        
+                        if real_content and len(real_content) > 50:
+                            # placeholder를 실제 내용으로 교체
+                            placeholder_text = f"[이 부분에 {placeholder_topic} 내용을 작성하세요]"
+                            existing_html = existing_html.replace(placeholder_text, real_content)
+                        
+                except Exception as e:
+                    logger.error(f"AI 내용 생성 중 오류: {str(e)}")
+            
+            # 수정된 HTML로 soup 재생성
+            soup = BeautifulSoup(existing_html, 'html.parser')
+        
+        # 10. 기타 일반적인 요청들 - 맥락 기반 처리
         else:
             content_to_add = extract_quoted_text(instruction)
             
