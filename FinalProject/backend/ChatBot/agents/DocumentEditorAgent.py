@@ -49,13 +49,21 @@ class DocumentEditorAgent:
             if not user_query:
                 return self._handle_error(state, "No editing request found")
 
+            AgentStateHelper.add_agent_data(
+                state,
+                AgentType.DOCUMENT_EDIT,
+                "original_request",
+                user_query
+            )
+
             messages = self._prepare_editing_context(state, document_content)
             
             # 2. LLM 호출
             response = self.llm_with_tools.invoke(messages)
             
+            edit_results = self._extract_edit_results(response, document_content)
             # 3. 도구 호출 처리
-            updated_content = document_content
+            updated_content = edit_results.get("updated_content", document_content)
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 messages.append(response) # Add AI message with tool calls
                 for tool_call in response.tool_calls:
