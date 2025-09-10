@@ -1,15 +1,19 @@
 // components/FeatureWindow/panels/calendar/AgendaPanel.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
-  filterEventsByRange,
+  normalizeEvent,
   getTodayRange,
   getWeekRange,
   getMonthRange,
   timeRangeLabel,
+  dateRangeLabelShort, 
+  buildLeftLines,  
+  ellipsis, 
 } from "./agendaUtils";
-import { EVENT_TYPE_COLORS } from "./calendarConstants";
-import { format } from "date-fns";
-import { ko } from "date-fns/locale";
+import calendarApi from "../../../services/calendarApi.js";
+import { EVENT_TYPES } from "./calendarConstants";
+// import { format } from "date-fns";
+// import { ko } from "date-fns/locale";
 
 /**
  * props:
@@ -24,29 +28,63 @@ export default function AgendaPanel({
   onSelectEvent,
   onJumpToDate,
 }) {
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+    const timeout = nextMidnight.getTime() - now.getTime();
+    const id = setTimeout(() => setToday(new Date()), timeout); // 자정 + 1s에 오늘 갱신
+    return () => clearTimeout(id);
+  }, []);
+
   const [tab, setTab] = useState("today"); // 'today' | 'week' | 'month'
 
   // 기간 계산
   const { range, title } = useMemo(() => {
     if (tab === "today") {
-      const [s, e] = getTodayRange(currentDate);
+      const [s, e] = getTodayRange(today);
       return { range: [s, e], title: "오늘" };
     }
     if (tab === "week") {
-      const [s, e] = getWeekRange(currentDate);
+      const [s, e] = getWeekRange(today);
       return { range: [s, e], title: "주간" };
     }
-    const [s, e] = getMonthRange(currentDate);
-    return {
-      range: [s, e],
-      title: "월간",
-    };
-  }, [tab, currentDate]);
+    const [s, e] = getMonthRange(today);
+    return { range: [s, e], title: "월간" };
+  }, [tab, today]);
 
-  const list = useMemo(
-    () => filterEventsByRange(events, range[0], range[1]),
-    [events, range]
-  );
+
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [start, end] = range;
+        const data = await calendarApi.getEvents({ start, end });
+        if (!alive) return;
+        setList(
+          (data ?? [])
+            .map(normalizeEvent)
+            .sort((a, b) => {
+              const s = a.start - b.start;      // 시작일 오름차순
+              return s !== 0 ? s : (a.end - b.end); // 같은 날이면 종료가 빠른 것 먼저
+            })
+        );
+      } catch (err) {
+        if (!alive) return;
+        setError(err);
+        setList([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [range]);
 
   return (
     <aside className="bg-white rounded-2xl shadow-sm border border-neutral-200 w-full h-[620px] overflow-hidden flex flex-col">
@@ -57,11 +95,15 @@ export default function AgendaPanel({
       </div>
 
       {/* 리스트 영역 */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
-        {list.length === 0 ? (
-          <div className="text-sm text-neutral-500 px-1">표시할 일정이 없습니다.</div>
+      <div className="flex-1 overflow-y-auto px-3 py-3 simple-scroll">
+        {loading ? (
+          <div className="text-sm text-neutral-500 px-1">불러오는 중…</div>
+        ) : error ? (
+          <div className="text-sm text-rose-600 px-1">일정 불러오기 실패</div>
+        ) : list.length === 0 ? (
+          <div className="text-sm text-neutral-500 px-1">일정이 없습니다.</div>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-4">
             {list.map((ev) => (
               <MonthlyRow
                 key={ev.id}
@@ -72,6 +114,7 @@ export default function AgendaPanel({
             ))}
           </ul>
         )}
+
       </div>
     </aside>
   );
@@ -109,58 +152,51 @@ function TabBar({ tab, onChange }) {
   );
 }
 
-/** 월간/주간/오늘 – 공통 아이템 렌더링 (스크린샷 느낌) */
 function MonthlyRow({ ev, onClick, onJumpToDate }) {
   const start = ev.start instanceof Date ? ev.start : new Date(ev.start);
   const end   = ev.end   instanceof Date ? ev.end   : new Date(ev.end);
-  const base = EVENT_TYPE_COLORS[ev.type ?? "etc"] ?? EVENT_TYPE_COLORS.etc;
+  const base = EVENT_TYPES[ev.type ?? "etc"] ?? EVENT_TYPES.etc;
   const barColor = ev.color ?? base.bg;
+
+  // 왼쪽(컬러바 기준 좌측) 두 줄 라벨
+  const [l1, l2] = buildLeftLines(start, end, !!ev.allDay);
 
   return (
     <li>
-      <div className="grid grid-cols-[52px_10px_1fr] gap-2 items-start">
-        {/* 왼쪽 날짜/시간 */}
+      <div className="grid grid-cols-[90px_6px_1fr] gap-2 items-start">
+        {/* 왼쪽: 날짜/시간(오른쪽 정렬) */}
         <button
           type="button"
           onClick={() => onJumpToDate?.(start)}
           title="이 날짜로 이동"
-          className="text-left"
+          className="text-right"
         >
-          <div className="text-[11px] text-neutral-500 leading-none">
-            {format(start, "d일", { locale: ko })}
-          </div>
-          <div className="text-[11px] text-neutral-500 leading-none mt-1">
-            {format(start, "HH:mm", { locale: ko })}
-          </div>
+          <div className="text-[12px] text-neutral-500 leading-tight">{l1}</div>
+          <div className="text-[12px] text-neutral-500 leading-tight">{l2}</div>
         </button>
 
-        {/* 가운데 색 막대 */}
+        {/* 가운데 컬러바 */}
         <div
-          className="h-10 rounded-sm"
+          className="h-14 rounded-full"
           style={{ backgroundColor: barColor }}
           aria-hidden
         />
 
-        {/* 우측 내용 */}
+        {/* 오른쪽: 제목 + 설명(20자 …) */}
         <button
           type="button"
           onClick={onClick}
-          className="w-full text-left"
+          className="w-full text-left rounded-md hover:bg-neutral-50"
           title={ev.title}
         >
-          <div className="text-sm font-medium text-neutral-900 truncate">
+          <div className="text-[14px] text-neutral-900 font-medium truncate">
             {ev.title}
           </div>
-          <div className="text-[11px] text-neutral-500">
-            {timeRangeLabel(start, end, ev.allDay)}
-            {ev.description ? (
-              <>
-                {"  "}
-                <span className="mx-2 text-neutral-300">•</span>
-                <span className="line-clamp-1">{ev.description}</span>
-              </>
-            ) : null}
-          </div>
+          {ev.description ? (
+            <div className="text-[11px] text-neutral-500">
+              {ellipsis(ev.description, 20)}
+            </div>
+          ) : null}
         </button>
       </div>
     </li>

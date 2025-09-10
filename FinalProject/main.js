@@ -44,8 +44,9 @@ const S3_ROOT = process.env.S3_ROOT || "documents/"; // 공유 루트 prefix
 const S3_SHARED_BUCKET = process.env.S3_SHARED_BUCKET || "skn13-shared-bucket";
 const S3_SHARED_ROOT = process.env.S3_SHARED_ROOT || "";
 
+//===================  이 아래 함수를 바꿔주세요 =============================
 const s3 = new S3Client({ region: AWS_REGION });
-
+//=====================이 위에 함수를 바꿔주세요 =============================
 const {
   app,
   ipcMain,
@@ -369,6 +370,7 @@ function createFeatureWindow(role = "employee") {
     if (featureWindow.isMinimized()) featureWindow.restore();
     featureWindow.show();
     featureWindow.focus();
+    featureWindow.setSkipTaskbar?.(false);
     return featureWindow;
   }
 
@@ -407,6 +409,7 @@ function createFeatureWindow(role = "employee") {
     featureWindow = null;
   });
 
+  featureWindow.setSkipTaskbar?.(false);
   return featureWindow;
 }
 
@@ -416,6 +419,7 @@ function createAdminWindow() {
     if (adminWindow.isMinimized()) adminWindow.restore();
     adminWindow.show();
     adminWindow.focus();
+    adminWindow.setSkipTaskbar?.(false);
     return adminWindow;
   }
 
@@ -453,7 +457,8 @@ function createAdminWindow() {
   adminWindow.on("closed", () => {
     adminWindow = null;
   });
-
+  
+  adminWindow.setSkipTaskbar?.(false);
   return adminWindow;
 }
 
@@ -463,6 +468,7 @@ function createChatWindow() {
     if (chatWindow.isMinimized()) chatWindow.restore();
     chatWindow.show();
     chatWindow.focus();
+    chatWindow.setSkipTaskbar?.(false);
     return chatWindow;
   }
 
@@ -504,7 +510,8 @@ function createChatWindow() {
   chatWindow.on("closed", () => {
     chatWindow = null;
   });
-
+  
+  chatWindow.setSkipTaskbar?.(false);
   return chatWindow;
 }
 
@@ -560,18 +567,23 @@ function createTray() {
 
 function showByRole() {
   if (currentRole === "admin") {
-    createAdminWindow();
+    const aw = createAdminWindow();                 // ★ 추가: 반환값 변수에 담기
+    try { aw.setSkipTaskbar?.(false); } catch {}    // ★ 추가: 작업표시줄에 아이콘 보이기
   } else if (currentRole === "employee") {
     // 사원은 두 창 모두 복귀
-    createFeatureWindow("employee");
-    createChatWindow();
+    const fw = createFeatureWindow("employee");     // ★ 추가
+    const cw = createChatWindow();                  // ★ 추가
+    try { fw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
+    try { cw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
   } else {
     // 로그인 상태 모름 → 로그인 창
     const mw = createMainWindow();
     mw.show();
     mw.focus();
+    try { mw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
   }
 }
+
 
 /* ============================================================================
  *   로그아웃 & 종료 처리
@@ -686,51 +698,62 @@ ipcMain.handle("window:close", (event) => {
 /* ============================================================================
  *   S3 및 FS Bridge (원본 유지 + 기본 경로만 고정)
  * ==========================================================================*/
-ipcMain.handle("get-s3-upload-url", async (_evt, fileName) => {
-  try {
-    const fetch = require("node-fetch");
-    const response = await fetch("http://13.125.105.129:8000/api/v1/files/presigned", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // TODO: JWT 토큰 처리 필요
-      },
-      body: JSON.stringify({
-        filename: fileName,
-        contentType: "application/octet-stream",
-      }),
-    });
+// 렌더러에서 invoke 시 { fileName, token } 형태로 넘겨주세요.
+ipcMain.handle("get-s3-upload-url", async (_evt, { fileName, token }) => {
+  const fetch = require("node-fetch");
+  const res = await fetch("http://13.125.105.129:8000/api/v1/files/presigned", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}), // ★ 토큰 추가
+    },
+    body: JSON.stringify({
+      filename: fileName,
+      contentType: "application/octet-stream", // ★ presign과 PUT 모두 동일하게 사용할 값
+      // 필요 시: bucket/prefix 정보도 명시 가능
+    }),
+  });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    return {
-      uploadUrl: result.uploadUrl,
-      fileKey: result.fileKey,
-      fileName,
-    };
-  } catch (error) {
-    console.error("Error generating presigned URL:", error);
-    return { uploadUrl: "https://example-presigned-url", fields: {}, fileName };
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`presign failed: ${res.status} ${res.statusText} ${txt}`);
   }
+
+  const result = await res.json();
+  if (!result.uploadUrl) {
+    throw new Error("presign payload missing uploadUrl");
+  }
+
+  // ★ 업로드 때 그대로 쓰도록 contentType도 함께 반환
+  return {
+    uploadUrl: result.uploadUrl,
+    fileKey: result.fileKey || null,
+    fileName,
+    contentType: "application/octet-stream",
+  };
 });
 
-ipcMain.handle("upload-file-to-s3", async (evt, { uploadUrl, file, fileName }) => {
+// 렌더러에서 invoke 시 presign 응답의 contentType을 함께 넘겨주세요.
+// ipcRenderer.invoke("upload-file-to-s3", { uploadUrl, file, fileName, contentType })
+ipcMain.handle("upload-file-to-s3", async (evt, { uploadUrl, file, fileName, contentType }) => {
   try {
     const fetch = require("node-fetch");
 
-    const url = new URL(uploadUrl);
-    const contentType = url.searchParams.get("content-type") || file.type || "application/octet-stream";
+    // ★ presign과 동일한 Content-Type을 강제 (특히 .exe 등)
+    let ct = (typeof contentType === "string" && contentType.trim())
+      ? contentType.trim()
+      : "application/octet-stream";
+
+    // presign 실패로 더미 URL이 들어오는 상황 방지
+    if (!uploadUrl || uploadUrl.includes("example-presigned-url")) {
+      throw new Error("invalid presigned URL");
+    }
 
     evt.sender.send("upload-progress", { fileName, progress: 0 });
 
     const response = await fetch(uploadUrl, {
       method: "PUT",
-      headers: {
-        "Content-Type": contentType,
-      },
+      headers: { "Content-Type": ct }, // ★ 서명과 완전히 동일해야 함
       body: Buffer.from(file.buffer),
     });
 
@@ -748,6 +771,7 @@ ipcMain.handle("upload-file-to-s3", async (evt, { uploadUrl, file, fileName }) =
     return { success: false, error: error.message };
   }
 });
+
 
 function extToMime(ext) {
   const map = {
@@ -986,12 +1010,12 @@ ipcMain.on("auth:success", (_evt, payload) => {
   if (currentRole === "admin") {
     // 관리자는 관리자 창만
     destroyFeatureWindows(); // 혹시 남아있던 기능/챗봇 제거
-    createAdminWindow();
+    const aw = createAdminWindow();                 // ★ 추가: 변수에 담아서
+    try { aw.setSkipTaskbar?.(false); } catch {}    // ★ 추가: 작업표시줄 아이콘 보장
     return;
   }
 
-  // employee: 기능부와 챗봇을 '항상' 새로 보장
-  // (이전 세션 잔재 제거)
+  // employee: 기능부와 챗봇을 '항상' 새로 보장 (이전 세션 잔재 제거)
   try { featureWindow?.destroy?.(); } catch {}
   try { chatWindow?.destroy?.(); } catch {}
   featureWindow = null;
@@ -999,9 +1023,12 @@ ipcMain.on("auth:success", (_evt, payload) => {
 
   const fw = createFeatureWindow("employee");
   const cw = createChatWindow();
+  try { fw.setSkipTaskbar?.(false); } catch {}      // ★ 추가
+  try { cw.setSkipTaskbar?.(false); } catch {}      // ★ 추가
   try { fw.focus(); } catch {}
   try { cw.show(); cw.focus(); } catch {}
 });
+
 
 ipcMain.handle("open-feature-window", (_evt, role = "employee") => {
   if (role === "admin") createAdminWindow();
@@ -1035,4 +1062,3 @@ ipcMain.on("app:logout-request", (event, scope = "all") => {
   setTimeout(() => mw.setAlwaysOnTop?.(false), 50); // 약간의 지연으로 확실히 해제
   console.log("[MAIN] show+focus mainWindow id=", mw?.id);
 });
-

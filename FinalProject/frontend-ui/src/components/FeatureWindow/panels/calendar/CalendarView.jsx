@@ -6,7 +6,7 @@ import { ko } from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "./calendarView.css";
 
-import { EVENT_TYPE_COLORS, RBC_KO_MESSAGES } from "./calendarConstants";
+import { EVENT_TYPES, RBC_KO_MESSAGES } from "./calendarConstants";
 
 const locales = { ko };
 const localizer = dateFnsLocalizer({
@@ -93,8 +93,8 @@ export default function CalendarView({
                     onRangeChange={(range) => onRangeChange?.(range)}
                     eventPropGetter={(event) => {
                         const base =
-                            EVENT_TYPE_COLORS[event.type ?? "etc"] ??
-                            EVENT_TYPE_COLORS.etc;
+                            EVENT_TYPES[event.type ?? "etc"] ??
+                            EVENT_TYPES.etc;
                         const bg = event.color ?? base.bg;
                         const fg = event.textColor ?? base.text;
                         return {

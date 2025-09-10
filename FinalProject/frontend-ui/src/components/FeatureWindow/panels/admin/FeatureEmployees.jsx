@@ -83,10 +83,15 @@ export default function FeatureEmployees() {
     // 더보기 드롭다운
     const [openMenuId, setOpenMenuId] = useState(null);
 
-    // ★ 추가: 삭제 확인 모달 상태
+    // 삭제 확인 모달 상태
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [confirmTarget, setConfirmTarget] = useState(null);
-    const [isDeleting, setIsDeleting] = useState(false); // 중복 클릭 방지
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    // 비밀번호 초기화 모달 상태
+    const [resetOpen, setResetOpen] = useState(false);
+    const [resetTarget, setResetTarget] = useState(null);
+    const [isResetting, setIsResetting] = useState(false);
 
     // 목록 조회 (배열/객체 모두 수용) ★ 변경
     const fetchEmployees = async () => {
@@ -156,6 +161,13 @@ export default function FeatureEmployees() {
         setConfirmOpen(true); // 확인 모달 열기
     };
 
+    // 비밀번호 초기화
+    const handleRowActionResetPassword = (u) => {
+        setOpenMenuId(null);
+        setResetTarget(u);
+        setResetOpen(true);
+    };
+
     // ★ 추가: 확인 모달에서 "삭제하기" 클릭 → 실제 삭제 API
     const handleConfirmDelete = async () => {
         if (!confirmTarget || isDeleting) return;
@@ -168,11 +180,29 @@ export default function FeatureEmployees() {
             await fetchEmployees();
         } catch (err) {
             console.error("[사원 삭제] error:", err);
-            toast.success("사원 계정 삭제에 실패했습니다. 다시 시도해주세요.");
+            toast.error("사원 계정 삭제에 실패했습니다. 다시 시도해주세요.");
         } finally {
             setIsDeleting(false);
         }
     };
+
+    // 확인 모달에서 "초기화하기" 클릭 시 호출
+    const handleConfirmReset = async () => {
+        if (!resetTarget || isResetting) return;
+        setIsResetting(true);
+        try {
+            await employeeApi.resetPassword(resetTarget.id);
+            toast.success("해당 사원의 비밀번호를 초기 비밀번호로 재설정했습니다.");
+            setResetOpen(false);
+            setResetTarget(null);
+        } catch (err) {
+            console.error("[비밀번호 초기화] error:", err);
+            toast.error("비밀번호 초기화에 실패했습니다. 다시 시도해주세요.");
+        } finally {
+            setIsResetting(false);
+        }
+    };
+
 
     // 수정 저장 ★ 변경: password 제거
     const handleEditSubmit = async (payloadFromModal) => {
@@ -356,7 +386,7 @@ export default function FeatureEmployees() {
                                                         onMouseDown={(e) =>
                                                             e.stopPropagation()
                                                         }
-                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-red-600"
+                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-600"
                                                         onClick={() =>
                                                             handleRowActionDelete(
                                                                 u
@@ -364,6 +394,17 @@ export default function FeatureEmployees() {
                                                         } // ★ 변경: 여기서는 모달만 띄움
                                                     >
                                                         삭제하기
+                                                    </button>
+                                                    <button                                                    
+                                                        onMouseDown={(e) =>
+                                                            e.stopPropagation()
+                                                        }
+                                                        onClick={() =>
+                                                            handleRowActionResetPassword(u)
+                                                        }
+                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-600"
+                                                    >
+                                                        비밀번호 초기화
                                                     </button>
                                                 </div>
                                             )}
@@ -419,6 +460,34 @@ export default function FeatureEmployees() {
                     confirmVariant="danger" // 빨간 버튼
                     align="center" // 버튼 가운데 정렬 (이미지와 동일)
                     closeOnEsc={!isDeleting}
+                    disableBackdropClick={true}
+                />
+
+                <ConfirmModal
+                    open={resetOpen}
+                    onClose={() => {
+                        if (!isResetting) {
+                        setResetOpen(false);
+                        setResetTarget(null);
+                        }
+                    }}
+                    title="이 사원의 비밀번호를 초기화하시겠습니까?"
+                    content={
+                        resetTarget
+                        && "초기화를 선택하면 초기 비밀번호로 설정됩니다."
+                    }
+                    cancelText="취소"
+                    confirmText={isResetting ? "초기화 중..." : "초기화하기"}
+                    onCancel={() => {
+                        if (!isResetting) {
+                        setResetOpen(false);
+                        setResetTarget(null);
+                        }
+                    }}
+                    onConfirm={handleConfirmReset}
+                    confirmVariant="danger"
+                    align="center"
+                    closeOnEsc={!isResetting}
                     disableBackdropClick={true}
                 />
             </div>
