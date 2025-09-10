@@ -36,6 +36,14 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
         return request_document_node(state)
     
     current_step = state.get('workflow_step', WorkflowStep.INITIAL)
+    # --- Document missing check ---
+    if current_step in [WorkflowStep.EDIT_REQUESTED, WorkflowStep.SEARCH_REQUESTED] \
+       and not state.get("document_content"):
+        print("--- Document missing, forcing request_document step ---")
+        return {"workflow_step": WorkflowStep.REQUEST_DOCUMENT,
+                "next_agents": [],
+                "workflow_complete": False,
+                "needs_document_content": True}
     workflow_complete = state.get('workflow_complete', False)
     
     # If workflow is already complete, just return
