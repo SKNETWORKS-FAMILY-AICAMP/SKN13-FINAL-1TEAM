@@ -85,6 +85,8 @@ const fsBridge = {
   showOpenDialog: (options) => ipcRenderer.invoke("fs:showOpenDialog", options),
   saveFile: (options) => ipcRenderer.invoke("fs:saveFile", options),
   readFileByPath: (options) => ipcRenderer.invoke("fs:readFileByPath", options),
+  // ✅ [추가] DOCX 파일을 HTML로 변환
+  convertDocxToHtml: (filePath) => ipcRenderer.invoke("convert-docx-to-html", filePath),
 
   listDocs: () => ipcRenderer.invoke("fs:listDocs"),
   listViewed: () => ipcRenderer.invoke("fs:listViewed"), // ✅ 추가
