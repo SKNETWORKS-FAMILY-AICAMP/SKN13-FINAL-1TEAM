@@ -22,7 +22,19 @@
 
  //=================================문서 목록 S3연결=========================================
 const fs = require("node:fs");
-const path = require("node:path")
+const path = require("node:path");
+
+// Electron 환경에서 한글 출력을 위한 설정
+if (process.platform === 'win32') {
+  // Windows에서 콘솔 출력 인코딩 설정
+  try {
+    const { spawn } = require('child_process');
+    // chcp 65001 (UTF-8) 설정 시도
+    spawn('chcp', ['65001'], { shell: true, stdio: 'ignore' });
+  } catch (error) {
+    // 설정 실패해도 앱은 계속 실행
+  }
+}
 
 const {
   S3Client,
