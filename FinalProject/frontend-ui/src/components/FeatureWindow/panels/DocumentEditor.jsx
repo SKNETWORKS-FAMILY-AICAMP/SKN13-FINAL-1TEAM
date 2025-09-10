@@ -64,6 +64,8 @@ export default function DocEditor({ onClose }) {
   const [isDirty, setIsDirty] = useState(false);
   const [editorContent, setEditorContent] = useState("<p>문서 작성을 시작하세요...</p>");
   const [isContentLoaded, setIsContentLoaded] = useState(false); // ✅ [추가] 콘텐츠 로드 완료 플래그
+  const [isEditingTitle, setIsEditingTitle] = useState(false); // 제목 편집 상태
+  const [tempTitle, setTempTitle] = useState(""); // 편집 중인 제목 임시 저장
 
   // ✅ ref는 유지하되,
   const editorRef = useRef(null);
@@ -369,11 +371,71 @@ export default function DocEditor({ onClose }) {
       // 제목은 파일명과 문서 제목으로 사용하고, 본문에는 포함하지 않음
       const blob = await fn(html, docxFilename, documentTitle);
       saveAs(blob, docxFilename);
+      
+      // ✅ HTML 저장과 동일한 성공 팝업 추가
+      alert(`'${docxFilename}'로 DOCX 문서가 내보내기되었습니다.`);
     } catch (e) {
       console.error("DOCX 내보내기 실패:", e);
       alert("DOCX 내보내기 중 오류가 발생했습니다.");
     }
   }, [documentTitle]);
+
+  /** 제목 편집 시작 */
+  const handleStartEditTitle = useCallback(() => {
+    setTempTitle(documentTitle);
+    setIsEditingTitle(true);
+  }, [documentTitle]);
+
+  /** 제목 편집 완료 */
+  const handleFinishEditTitle = useCallback(() => {
+    if (tempTitle.trim() && tempTitle.trim() !== documentTitle) {
+      setDocumentTitle(tempTitle.trim());
+      setIsDirty(true);
+      
+      // 로컬스토리지에도 저장
+      try {
+        localStorage.setItem("document-editor-title", tempTitle.trim());
+      } catch {}
+    }
+    setIsEditingTitle(false);
+    setTempTitle("");
+  }, [tempTitle, documentTitle]);
+
+  /** 제목 편집 취소 */
+  const handleCancelEditTitle = useCallback(() => {
+    setIsEditingTitle(false);
+    setTempTitle("");
+  }, []);
+
+  /** 제목 입력 핸들러 */
+  const handleTitleInputChange = useCallback((e) => {
+    setTempTitle(e.target.value);
+  }, []);
+
+  /** 제목 입력 키 핸들러 */
+  const handleTitleKeyDown = useCallback((e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleFinishEditTitle();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelEditTitle();
+    }
+  }, [handleFinishEditTitle, handleCancelEditTitle]);
+
+  /** 제목 편집 모드 진입 시 텍스트 선택 */
+  useEffect(() => {
+    if (isEditingTitle) {
+      // input이 렌더링된 후 텍스트 선택
+      const timer = setTimeout(() => {
+        const input = document.querySelector('input[placeholder="문서 제목을 입력하세요"]');
+        if (input) {
+          input.select();
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isEditingTitle]);
 
   /** AI 편집 - 주석처리 (필요없음) */
   // const handleEditWithAI = useCallback(async () => {
@@ -520,9 +582,31 @@ export default function DocEditor({ onClose }) {
       <div className="flex flex-col h-full rounded-xl border border-gray-200 bg-white">
         {/* 상단 앱바(파일 불러오기/저장/DOCX/AI/닫기) */}
         <div className="flex-shrink-0 p-2 border-b flex items-center justify-between">
-          <span className="font-semibold text-gray-700 ml-2">
-            {documentTitle} {isDirty && "*"}
-          </span>
+          <div className="flex items-center ml-2 flex-1 mr-4">
+            {isEditingTitle ? (
+              /* 제목 편집 모드 */
+              <input
+                type="text"
+                value={tempTitle}
+                onChange={handleTitleInputChange}
+                onKeyDown={handleTitleKeyDown}
+                onBlur={handleFinishEditTitle}
+                className="font-semibold text-gray-700 bg-transparent border-b-2 border-blue-500 outline-none px-1 py-1 w-full max-w-none"
+                placeholder="문서 제목을 입력하세요"
+                autoFocus
+                style={{ fontSize: 'inherit' }}
+              />
+            ) : (
+              /* 제목 표시 모드 */
+              <span 
+                className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 truncate max-w-full"
+                onClick={handleStartEditTitle}
+                title="클릭하여 제목 편집"
+              >
+                {documentTitle} {isDirty && "*"}
+              </span>
+            )}
+          </div>
           <div>
             <button onClick={handleLoad} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-gray-500 text-white hover:bg-gray-600">
               불러오기
