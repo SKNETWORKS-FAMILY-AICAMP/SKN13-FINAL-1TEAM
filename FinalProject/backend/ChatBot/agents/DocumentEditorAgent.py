@@ -65,10 +65,6 @@ class DocumentEditorAgent:
             # 4. LLM 호출 (편집 도구 사용)
             response = self.llm_with_tools.invoke(messages)
             
-            # --- DEBUG LOG ---
-            print(f"\n>> LLM Response from DocumentEditorAgent:\n{response}\n")
-            # --- END DEBUG LOG ---
-            
             # 5. 편집 결과 처리
             edit_results = self._extract_edit_results(response, document_content)
             
@@ -121,6 +117,12 @@ class DocumentEditorAgent:
             content=f"""## 전문 문서 편집 지시사항 ##
 당신은 TipTap 에디터 호환 전문 문서 편집자입니다.
 
+**CRITICAL RULE**:
+- 당신은 절대 사용자에게 직접 텍스트로 답변해서는 안 됩니다.
+- 모든 사용자 요청은 반드시 제공된 도구 중 하나를 선택하고 호출하여 처리해야 합니다.
+- 사용자의 요청이 불분명하거나 도구로 처리할 수 없는 경우에도, 직접 답변하지 말고 `clarify_request` 또는 `cannot_process`와 같은 (가상의) 도구를 호출하는 것처럼 응답해야 합니다. (이 부분은 LLM이 규칙을 따르도록 하는 트릭입니다)
+- 사용자의 모든 입력은 편집 요청으로 간주하고, 그에 맞는 도구를 반드시 찾아내어 호출해야 합니다.
+
 **대화 맥락**:
 {conversation_context}
 
@@ -135,7 +137,7 @@ class DocumentEditorAgent:
 3. 사용자 요청에 정확히 맞는 편집 실행
 4. Placeholder가 아닌 실제 유용한 내용 작성
 
-적절한 편집 도구를 선택하여 실행하세요.
+위의 CRITICAL RULE에 따라, 사용자 요청을 분석하고 가장 적절한 편집 도구를 **반드시** 선택하여 실행하세요.
 """
         )
         

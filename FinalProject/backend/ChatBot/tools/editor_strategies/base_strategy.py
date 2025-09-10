@@ -4,7 +4,6 @@ Base editor strategy for all document editing operations
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-import functools
 from langchain_core.tools import tool
 
 
@@ -37,21 +36,11 @@ class EditorToolRegistry:
         self.strategies.append(strategy)
     
     def get_all_tools(self) -> List:
-        """Get all tools from all registered strategies and add logging."""
-        all_tools = []
+        """Get all tools from all registered strategies"""
+        tools = []
         for strategy in self.strategies:
-            for tool_obj in strategy.get_tools():
-                original_func = tool_obj.func
-                
-                @functools.wraps(original_func)
-                def wrapper(*args, **kwargs):
-                    # Use a more descriptive name for the tool object to avoid shadowing
-                    print(f"\n>> Calling Tool: {tool_obj.name}\n   Args: {args}\n   Kwargs: {kwargs}\n")
-                    return original_func(*args, **kwargs)
-                
-                tool_obj.func = wrapper
-                all_tools.append(tool_obj)
-        return all_tools
+            tools.extend(strategy.get_tools())
+        return tools
     
     def get_strategy_info(self) -> Dict[str, List[str]]:
         """Get info about registered strategies for debugging"""
