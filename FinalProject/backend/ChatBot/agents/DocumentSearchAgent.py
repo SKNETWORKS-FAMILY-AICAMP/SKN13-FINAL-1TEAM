@@ -67,8 +67,46 @@ class DocumentSearchAgent:
             # 3. LLM 호출 (도구 사용 포함)
             response = self.llm_with_tools.invoke(messages)
             
-            # 4. 검색 결과 처리
-            search_results = self._extract_search_results(response)
+            # 4. 도구 호출 처리
+            search_results = {}
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                messages.append(response)  # Add AI message with tool calls
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call.get("name")
+                    tool_args = tool_call.get("args")
+                    
+                    print(f"\n>> [SEARCH AGENT] Calling Tool: {tool_name}\n   Args: {tool_args}\n")
+                    
+                    # Find and execute the tool
+                    tool_function = None
+                    for tool in self.tools:
+                        if hasattr(tool, 'name') and tool.name == tool_name:
+                            tool_function = tool
+                            break
+                    
+                    if tool_function:
+                        try:
+                            # 도구 실행 및 결과 저장
+                            result = tool_function.invoke(tool_args)
+                            search_results.update(result if isinstance(result, dict) else {"result": result})
+                            
+                            print(f">> [SEARCH AGENT] Tool '{tool_name}' executed successfully\n")
+                            
+                            # Add ToolMessage for the graph
+                            from langchain_core.messages import ToolMessage
+                            messages.append(ToolMessage(content=str(result), tool_call_id=tool_call['id']))
+                            
+                        except Exception as e:
+                            error_msg = f"Error executing tool '{tool_name}': {e}"
+                            print(f">> [SEARCH AGENT] {error_msg}")
+                            from langchain_core.messages import ToolMessage
+                            messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call['id']))
+                    else:
+                        print(f">> [SEARCH AGENT] Warning: Tool '{tool_name}' not found.")
+            else:
+                # LLM didn't use tools, add the response message
+                messages.append(response)
+                search_results = self._extract_search_results(response)
             
             # 5. 워크플로우 결과 저장
             AgentStateHelper.add_workflow_result(
@@ -84,7 +122,7 @@ class DocumentSearchAgent:
             print(f"--- DocumentSearchAgent: Search completed successfully ---")
             
             return {
-                "messages": [response],
+                "messages": messages,
                 "workflow_step": WorkflowStep.SEARCH_COMPLETED
             }
             
