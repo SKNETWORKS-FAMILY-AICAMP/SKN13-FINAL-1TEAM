@@ -65,6 +65,10 @@ class DocumentEditorAgent:
             # 4. LLM 호출 (편집 도구 사용)
             response = self.llm_with_tools.invoke(messages)
             
+            # --- DEBUG LOG ---
+            print(f"\n>> LLM Response from DocumentEditorAgent:\n{response}\n")
+            # --- END DEBUG LOG ---
+            
             # 5. 편집 결과 처리
             edit_results = self._extract_edit_results(response, document_content)
             
