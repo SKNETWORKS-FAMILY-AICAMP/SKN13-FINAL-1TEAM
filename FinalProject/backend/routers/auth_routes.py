@@ -236,7 +236,7 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         "id": current_user.id,
         "unique_auth_number": current_user.unique_auth_number,
         "username": current_user.username,
-        "email": current_user.email,
+        "email": current_user.email or "",
         "dept": current_user.dept,
         "position": current_user.position,
         "is_manager": current_user.is_manager,
