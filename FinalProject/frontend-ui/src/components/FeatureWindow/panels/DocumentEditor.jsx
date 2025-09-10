@@ -580,63 +580,68 @@ export default function DocEditor({ onClose }) {
   return (
     <ErrorBoundary>
       <div className="flex flex-col h-full rounded-xl border border-gray-200 bg-white">
-        {/* 상단 앱바(파일 불러오기/저장/DOCX/AI/닫기) */}
-        <div className="flex-shrink-0 p-2 border-b flex items-center justify-between">
-          <div className="flex items-center ml-2 flex-1 mr-4">
-            {isEditingTitle ? (
-              /* 제목 편집 모드 */
-              <input
-                type="text"
-                value={tempTitle}
-                onChange={handleTitleInputChange}
-                onKeyDown={handleTitleKeyDown}
-                onBlur={handleFinishEditTitle}
-                className="font-semibold text-gray-700 bg-transparent border-b-2 border-blue-500 outline-none px-1 py-1 w-full max-w-none"
-                placeholder="문서 제목을 입력하세요"
-                autoFocus
-                style={{ fontSize: 'inherit' }}
-              />
-            ) : (
-              /* 제목 표시 모드 */
-              <span 
-                className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 truncate max-w-full"
-                onClick={handleStartEditTitle}
-                title="클릭하여 제목 편집"
-              >
-                {documentTitle} {isDirty && "*"}
-              </span>
-            )}
+        {/* 상단 전체 영역 (헤더 + 툴바) - 고정 및 하얀색 배경 */}
+        <div className="fixed z-20 bg-white" style={{ top: '40px', paddingTop: '0px' }}>
+          {/* 상단 앱바(파일 불러오기/저장/DOCX/AI/닫기) */}
+          <div className="flex-shrink-0 p-2 border-b flex items-center justify-between">
+            <div className="flex items-center ml-2 flex-1 mr-4">
+              {isEditingTitle ? (
+                /* 제목 편집 모드 */
+                <input
+                  type="text"
+                  value={tempTitle}
+                  onChange={handleTitleInputChange}
+                  onKeyDown={handleTitleKeyDown}
+                  onBlur={handleFinishEditTitle}
+                  className="font-semibold text-gray-700 bg-transparent border-b-2 border-blue-500 outline-none px-1 py-1 w-full max-w-none"
+                  placeholder="문서 제목을 입력하세요"
+                  autoFocus
+                  style={{ fontSize: 'inherit' }}
+                />
+              ) : (
+                /* 제목 표시 모드 */
+                <span 
+                  className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 truncate max-w-full"
+                  onClick={handleStartEditTitle}
+                  title="클릭하여 제목 편집"
+                >
+                  {documentTitle} {isDirty && "*"}
+                </span>
+              )}
+            </div>
+            <div>
+              <button onClick={handleLoad} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-gray-500 text-white hover:bg-gray-600">
+                불러오기
+              </button>
+              <button onClick={handleSave} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-blue-500 text-white hover:bg-blue-600">
+                저장
+              </button>
+              <button onClick={handleExportDocx} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-green-600 text-white hover:bg-green-700">
+                DOCX로 내보내기
+              </button>
+              {/* AI편집 버튼 주석처리 - 필요없음 */}
+              {/* <button onClick={handleEditWithAI} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-purple-600 text-white hover:bg-purple-700">
+                AI 편집
+              </button> */}
+              {/* 닫기 버튼 주석처리 - 필요없음 */}
+              {/* <button onClick={handleClose} className="px-4 py-2 text-sm font-semibold rounded-xl bg-red-500 text-white hover:bg-red-600">
+                닫기
+              </button> */}
+            </div>
           </div>
-          <div>
-            <button onClick={handleLoad} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-gray-500 text-white hover:bg-gray-600">
-              불러오기
-            </button>
-            <button onClick={handleSave} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-blue-500 text-white hover:bg-blue-600">
-              저장
-            </button>
-            <button onClick={handleExportDocx} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-green-600 text-white hover:bg-green-700">
-              DOCX로 내보내기
-            </button>
-            {/* AI편집 버튼 주석처리 - 필요없음 */}
-            {/* <button onClick={handleEditWithAI} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-purple-600 text-white hover:bg-purple-700">
-              AI 편집
-            </button> */}
-            {/* 닫기 버튼 주석처리 - 필요없음 */}
-            {/* <button onClick={handleClose} className="px-4 py-2 text-sm font-semibold rounded-xl bg-red-500 text-white hover:bg-red-600">
-              닫기
-            </button> */}
+
+          {/* 서식 툴바 */}
+          <div className="flex-shrink-0 border-b">
+            {editor ? (
+              <EditorToolbar editor={editor} />
+            ) : (
+              <div className="h-10" />
+            )}
           </div>
         </div>
 
-        {/* 서식 툴바 — ✅ editor state 기준으로 렌더 */}
-        {editor ? (
-          <EditorToolbar editor={editor} />
-        ) : (
-          <div className="h-10 border-b bg-white" />
-        )}
-
         {/* 본문 에디터 */}
-        <div className="flex-1 overflow-y-auto" onClick={() => editorRef.current?.commands.focus()}>
+        <div className="flex-1 overflow-y-auto bg-white" style={{ marginTop: '150px' }} onClick={() => editorRef.current?.commands.focus()}>
           <RichEditor
             initialHTML={editorContent}
             setEditorRef={(inst) => {
