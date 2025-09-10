@@ -26,6 +26,15 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
     """
     print(f"--- WORKFLOW ORCHESTRATOR: Current step = {state.get('workflow_step', 'INITIAL')} ---")
     
+    # --- Global check: if document is required but missing ---
+    requires_document = state.get("workflow_step") in [
+        WorkflowStep.EDIT_REQUESTED,
+        WorkflowStep.SEARCH_REQUESTED
+    ]
+    if requires_document and not state.get("document_content"):
+        print("--- Document missing, requesting from frontend ---")
+        return request_document_node(state)
+    
     current_step = state.get('workflow_step', WorkflowStep.INITIAL)
     workflow_complete = state.get('workflow_complete', False)
     
@@ -75,9 +84,12 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
     }
 
 def request_document_node(state: AgentState) -> dict:
-    """This node sets the flag to request the document from the frontend."""
-    print("--- Setting flag to request document from frontend ---")
-    return {"needs_document_content": True}
+    """
+    Sets the flag to request the document from the frontend.
+    This node can now be safely called in any state where document_content is missing.
+    """
+    print("--- REQUESTING DOCUMENT CONTENT FROM FRONTEND ---")
+    return {"needs_document_content": True, "workflow_step": WorkflowStep.REQUEST_DOCUMENT}
 
 # --- Intent Analysis Functions ---
 
