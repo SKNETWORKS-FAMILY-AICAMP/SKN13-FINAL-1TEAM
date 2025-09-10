@@ -94,7 +94,36 @@ class DocumentEditorAgent:
                  # 도구 호출이 없는 경우, LLM의 텍스트 응답을 메시지에 추가
                 messages.append(response)
 
-            # 4. 상태 업데이트
+            # 4. 도구 호출 후 최종 사용자 응답 생성
+            print(f">> [EDIT AGENT DEBUG] response type: {type(response)}")
+            print(f">> [EDIT AGENT DEBUG] has tool_calls: {hasattr(response, 'tool_calls')}")
+            if hasattr(response, 'tool_calls'):
+                print(f">> [EDIT AGENT DEBUG] tool_calls: {response.tool_calls}")
+            
+            # Always generate final response after processing (regardless of tool calls)
+            print(">> [EDIT AGENT] Generating final user response after tool execution")
+            
+            if True:  # Always execute final response generation
+                
+                try:
+                    from langchain_core.messages import HumanMessage
+                    final_prompt = HumanMessage(content="이제 편집 작업이 완료되었습니다. 사용자에게 어떤 편집이 이루어졌는지 간단히 설명해주세요.")
+                    messages.append(final_prompt)
+                    
+                    # Generate final response without tools
+                    final_llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
+                    final_response = final_llm.invoke(messages)
+                    messages.append(final_response)
+                    
+                    print(f">> [EDIT AGENT] Final response generated: {final_response.content[:100]}...")
+                    
+                except Exception as e:
+                    print(f">> [EDIT AGENT] Error generating final response: {e}")
+                    from langchain_core.messages import AIMessage
+                    fallback_response = AIMessage(content="문서 편집이 완료되었습니다.")
+                    messages.append(fallback_response)
+
+            # 5. 상태 업데이트
             AgentStateHelper.set_workflow_step(state, WorkflowStep.EDIT_COMPLETED)
             logger.info("--- DocumentEditorAgent: Editing completed successfully ---")
             
