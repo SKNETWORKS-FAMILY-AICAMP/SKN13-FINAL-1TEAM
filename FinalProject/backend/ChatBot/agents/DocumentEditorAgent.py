@@ -27,6 +27,7 @@ class DocumentEditorAgent:
         
         # 문서 편집 전용 도구들 (1061줄의 괴물 editor_tool.py에서 가져옴)
         self.tools = ALL_EDITOR_TOOLS
+        self.tool_map = {tool.name: tool for tool in self.tools}
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
         logger.info("--- DocumentEditorAgent initialized ---")
@@ -36,56 +37,61 @@ class DocumentEditorAgent:
         문서 편집 프로세스 실행
         1. 편집 요청 분석
         2. 문서 내용 확인
-        3. 편집 실행
-        4. 결과 처리 및 상태 업데이트
+        3. 편집 실행 및 결과 처리
+        4. 상태 업데이트
         """
         logger.info("--- DocumentEditorAgent: Starting document editing process ---")
         
         try:
-            # 1. 문서 내용 확인
+            # 1. 컨텍스트 준비
             document_content = state.get("document_content", "")
-            if not document_content:
-                return self._handle_error(state, "No document content available for editing")
-            
-            # 2. 편집 요청 분석
             user_query = AgentStateHelper.get_last_user_message(state)
             if not user_query:
                 return self._handle_error(state, "No editing request found")
-            
-            AgentStateHelper.add_agent_data(
-                state, 
-                AgentType.DOCUMENT_EDIT, 
-                "original_request", 
-                user_query
-            )
-            
-            # 3. 편집 컨텍스트 준비 (대화 맥락 포함)
+
             messages = self._prepare_editing_context(state, document_content)
             
-            # 4. LLM 호출 (편집 도구 사용)
+            # 2. LLM 호출
             response = self.llm_with_tools.invoke(messages)
             
-            # 5. 편집 결과 처리
-            edit_results = self._extract_edit_results(response, document_content)
-            
-            # 6. 워크플로우 결과 저장
-            AgentStateHelper.add_workflow_result(
-                state,
-                AgentType.DOCUMENT_EDIT,
-                success=bool(edit_results.get("success")),
-                data=edit_results
-            )
-            
-            # 7. 문서 내용 업데이트 (편집된 내용이 있으면)
-            updated_content = edit_results.get("updated_content", document_content)
-            
-            # 8. 워크플로우 단계 업데이트
+            # 3. 도구 호출 처리
+            updated_content = document_content
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                messages.append(response) # Add AI message with tool calls
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call.get("name")
+                    tool_args = tool_call.get("args")
+                    
+                    print(f"\n>> [AGENT] Calling Tool: {tool_name}\n   Args: {tool_args}\n")
+                    
+                    if tool_name in self.tool_map:
+                        tool_function = self.tool_map[tool_name]
+                        try:
+                            # 도구 실행 및 결과 저장
+                            result = tool_function.invoke(tool_args)
+                            updated_content = result # 도구 결과로 문서 내용 업데이트
+                            
+                            print(f">> [AGENT] Tool '{tool_name}' executed. Result length: {len(str(result))}\n")
+                            
+                            # 그래프의 다음 단계를 위해 ToolMessage 추가
+                            messages.append(ToolMessage(content=str(result), tool_call_id=tool_call['id']))
+
+                        except Exception as e:
+                            error_msg = f"Error executing tool '{tool_name}': {e}"
+                            print(f">> [AGENT] {error_msg}")
+                            messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call['id']))
+                    else:
+                        print(f">> [AGENT] Warning: Tool '{tool_name}' not found.")
+            else:
+                 # 도구 호출이 없는 경우, LLM의 텍스트 응답을 메시지에 추가
+                messages.append(response)
+
+            # 4. 상태 업데이트
             AgentStateHelper.set_workflow_step(state, WorkflowStep.EDIT_COMPLETED)
-            
             logger.info("--- DocumentEditorAgent: Editing completed successfully ---")
             
             return {
-                "messages": [response],
+                "messages": messages,
                 "document_content": updated_content,
                 "workflow_step": WorkflowStep.EDIT_COMPLETED
             }
