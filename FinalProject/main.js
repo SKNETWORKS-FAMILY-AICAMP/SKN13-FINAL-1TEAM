@@ -56,9 +56,9 @@ const S3_ROOT = process.env.S3_ROOT || "documents/"; // 공유 루트 prefix
 const S3_SHARED_BUCKET = process.env.S3_SHARED_BUCKET || "skn13-shared-bucket";
 const S3_SHARED_ROOT = process.env.S3_SHARED_ROOT || "";
 
-//===================  이 아래 함수를 바꿔주세요 =============================
+//===================  이 아래 함수를 바꿔주세요 ===============================
 const s3 = new S3Client({ region: AWS_REGION });
-//=====================이 위에 함수를 바꿔주세요 =============================
+//=====================이 위에 함수를 바꿔주세요 ===============================
 const {
   app,
   ipcMain,
@@ -711,20 +711,26 @@ ipcMain.handle("window:close", (event) => {
  *   S3 및 FS Bridge (원본 유지 + 기본 경로만 고정)
  * ==========================================================================*/
 // 렌더러에서 invoke 시 { fileName, token } 형태로 넘겨주세요.
-ipcMain.handle("get-s3-upload-url", async (_evt, { fileName, token }) => {
+ipcMain.handle("get-s3-upload-url", async (_evt, { fileName, token, contentType }) => {
   const fetch = require("node-fetch");
+
+  // contentType이 없으면 기본값으로 octet-stream
+  const ct = (typeof contentType === "string" && contentType.trim())
+    ? contentType.trim()
+    : "application/octet-stream";
+
   const res = await fetch("http://13.125.105.129:8000/api/v1/files/presigned", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}), // ★ 토큰 추가
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({
       filename: fileName,
-      contentType: "application/octet-stream", // ★ presign과 PUT 모두 동일하게 사용할 값
-      // 필요 시: bucket/prefix 정보도 명시 가능
+      contentType: ct, // ★ renderer가 넘긴 실제 MIME 타입 사용
     }),
   });
+
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");

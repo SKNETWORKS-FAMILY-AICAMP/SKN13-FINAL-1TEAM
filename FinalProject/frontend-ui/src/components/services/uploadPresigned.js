@@ -73,7 +73,9 @@ async function getPresignedUrlViaBridge(params) {
       body: JSON.stringify({
         filename,
         contentType,
-        pathHint: dir || ""
+        pathHint: dir || "",
+        path_hint: dir || "",
+        path: dir || ""
       })
     });
 
@@ -83,11 +85,13 @@ async function getPresignedUrlViaBridge(params) {
     }
 
     const result = await response.json();
-    return { 
-      url: result.uploadUrl,
-      uploadUrl: result.uploadUrl,
-      fileKey: result.fileKey,
-      displayName: result.displayName
+    const finalUrl = result.uploadUrl || result.url || result.presigned_url;
+    const finalKey = result.fileKey || result.key || result.object_key;
+    return {
+      url: finalUrl,
+      uploadUrl: finalUrl,
+      fileKey: finalKey,
+      displayName: result.displayName || result.filename || result.name
     };
   } catch (apiError) {
     console.warn("Direct API call failed, trying Electron bridge:", apiError.message);
@@ -168,11 +172,20 @@ export async function uploadFileWithDedup(file, meta = {}) {
           buffer: fileBuffer,
           type: contentType
         },
-        fileName: filename
+        fileName: filename,
+        contentType,
       });
       
-      if (!uploadResult.success) {
-        throw new Error(`S3 업로드 실패: ${uploadResult.error}`);
+      // success=true 이거나, status 2xx 이면 성공으로 인정
+      const ok =
+        uploadResult &&
+        (uploadResult.success === true ||
+         uploadResult.ok === true ||
+         (typeof uploadResult.status === 'number' &&
+          uploadResult.status >= 200 && uploadResult.status < 300));
+      if (!ok) {
+        const detail = uploadResult?.error || JSON.stringify(uploadResult);
+        throw new Error(`S3 업로드 실패: ${detail}`);
       }
     } else {
       // 브라우저 환경 폴백 (CORS 문제 발생 가능)

@@ -33,7 +33,7 @@ const electronAPI = {
   },
   offWindowResize: (cb) => ipcRenderer.removeListener("window-resized", cb),
 
-  getS3UploadUrl: (fileName) => ipcRenderer.invoke("get-s3-upload-url", fileName),
+  getS3UploadUrl: (arg) => ipcRenderer.invoke("get-s3-upload-url", arg),
   uploadFileToS3: (uploadData) => ipcRenderer.invoke("upload-file-to-s3", uploadData),
   onUploadProgress: (callback) => {
     const handler = (_evt, data) => callback(data);
