@@ -1074,3 +1074,30 @@ ipcMain.on("app:logout-request", (event, scope = "all") => {
   setTimeout(() => mw.setAlwaysOnTop?.(false), 50); // 약간의 지연으로 확실히 해제
   console.log("[MAIN] show+focus mainWindow id=", mw?.id);
 });
+
+// ===== DOCX 파일 처리 =====
+const mammoth = require('mammoth');
+
+// DOCX 파일을 HTML로 변환하는 함수
+async function convertDocxToHtml(filePath) {
+  try {
+    const result = await mammoth.convertToHtml({ path: filePath });
+    return {
+      success: true,
+      html: result.value,
+      messages: result.messages // 변환 중 발생한 메시지들
+    };
+  } catch (error) {
+    console.error('DOCX 변환 오류:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// IPC 핸들러: DOCX 파일 변환
+ipcMain.handle("convert-docx-to-html", async (event, filePath) => {
+  console.log("[MAIN] DOCX 변환 요청:", filePath);
+  return await convertDocxToHtml(filePath);
+});

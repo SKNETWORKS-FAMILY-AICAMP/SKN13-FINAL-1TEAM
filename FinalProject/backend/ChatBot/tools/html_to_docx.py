@@ -254,8 +254,8 @@ class HTMLToDocxConverter:
             doc = Document()
             
             # 제목 추가 (옵션)
-            if title:
-                doc.add_heading(title, level=0)
+            # if title:
+            #     doc.add_heading(title, level=0)
             
             # HTML 파싱
             soup = BeautifulSoup(html_content, 'html.parser')

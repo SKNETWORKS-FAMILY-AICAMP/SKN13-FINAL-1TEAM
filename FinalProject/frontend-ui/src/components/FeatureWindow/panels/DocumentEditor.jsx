@@ -205,6 +205,7 @@ export default function DocEditor({ onClose }) {
         properties: ["openFile"],
         filters: [
           { name: "HTML Files", extensions: ["html"] },
+          { name: "Word Documents", extensions: ["docx"] },
           { name: "Text Files", extensions: ["txt", "md"] },
           { name: "All Files", extensions: ["*"] },
         ],
@@ -215,25 +216,83 @@ export default function DocEditor({ onClose }) {
       }
       const filePath = filePaths[0];
 
-      // 2. 파일 내용 읽기
-      // ✅ [수정] 새로운 readFileByPath IPC 핸들러 호출
-      const resp = await window.fsBridge.readFileByPath({ filePath });
-      const { ok, content, mime, reason } = resp || {};
-
-      if (!ok) {
-        alert(`파일을 읽는 중 문제가 발생했습니다: ${reason || "알 수 없는 오류"}`);
-        return;
-      }
-
-      // 3. 에디터에 내용 적용
+      // 2. 파일 확장자 확인 및 처리
+      const fileExtension = filePath.toLowerCase().split('.').pop();
+      const fileName = filePath.split(/[\\/]/).pop();
       let processedContent = "";
-      if (mime === "text/html") {
-        processedContent = content || "";
-      } else if (mime === "text/plain" || mime === "text/markdown") {
-        processedContent = toSimpleHTML(content || "");
+      let newTitle = fileName || "문서";
+
+      if (fileExtension === 'docx') {
+        // DOCX 파일 처리
+        try {
+          console.log('DOCX 파일 변환 시작:', filePath);
+          const docxResult = await window.fsBridge.convertDocxToHtml(filePath);
+          
+          if (!docxResult.success) {
+            alert(`DOCX 파일 변환에 실패했습니다: ${docxResult.error}`);
+            return;
+          }
+          
+          let docxHtml = docxResult.html || "";
+          console.log('DOCX 변환 완료, HTML 길이:', docxHtml.length);
+          
+          // DOCX에서 제목과 본문 분리 처리
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = docxHtml;
+          
+          // 첫 번째 h1 태그를 찾아서 제목으로 사용
+          const firstH1 = tempDiv.querySelector('h1');
+          let extractedTitle = null;
+          
+          if (firstH1 && firstH1.textContent && firstH1.textContent.trim()) {
+            extractedTitle = firstH1.textContent.trim();
+            console.log('DOCX에서 추출한 제목:', extractedTitle);
+            
+            // 제목을 본문에서 제거
+            firstH1.remove();
+          }
+          
+          // 본문만 남김
+          processedContent = tempDiv.innerHTML.trim();
+          
+          // 제목이 추출되었다면 문서 제목으로 설정
+          if (extractedTitle) {
+            // 파일명에서 확장자 제거한 것과 추출된 제목 중 선택
+            const fileBaseName = fileName.replace(/\.[^/.]+$/, "");
+            // 추출된 제목을 우선 사용, 없으면 파일명 사용
+            newTitle = extractedTitle || fileBaseName;
+          }
+          
+          console.log('제목 분리 후 - 제목:', newTitle, '본문 길이:', processedContent.length);
+          
+          // 변환 중 발생한 메시지가 있으면 콘솔에 출력
+          if (docxResult.messages && docxResult.messages.length > 0) {
+            console.log('DOCX 변환 메시지:', docxResult.messages);
+          }
+        } catch (error) {
+          console.error('DOCX 변환 오류:', error);
+          alert(`DOCX 파일 처리 중 오류가 발생했습니다: ${error.message}`);
+          return;
+        }
       } else {
-        alert(`지원하지 않는 파일 형식입니다: ${mime}`);
-        return;
+        // 기존 파일 형식 처리 (HTML, TXT, MD)
+        const resp = await window.fsBridge.readFileByPath({ filePath });
+        const { ok, content, mime, reason } = resp || {};
+
+        if (!ok) {
+          alert(`파일을 읽는 중 문제가 발생했습니다: ${reason || "알 수 없는 오류"}`);
+          return;
+        }
+
+        // 3. 에디터에 내용 적용
+        if (mime === "text/html") {
+          processedContent = content || "";
+        } else if (mime === "text/plain" || mime === "text/markdown") {
+          processedContent = toSimpleHTML(content || "");
+        } else {
+          alert(`지원하지 않는 파일 형식입니다: ${mime}`);
+          return;
+        }
       }
 
       editorRef.current?.commands.setContent(processedContent, false);
@@ -241,8 +300,6 @@ export default function DocEditor({ onClose }) {
       setIsDirty(false);
 
       // 4. 상태 업데이트
-      const fileName = filePath.split(/[\\/]/).pop();
-      const newTitle = fileName || "문서";
       setDocumentTitle(newTitle);
 
       // 로컬스토리지에도 저장 (기존 로직 유지)
@@ -265,9 +322,38 @@ export default function DocEditor({ onClose }) {
   const handleExportDocx = useCallback(async () => {
     const ed = editorRef.current;
     if (!ed) return;
-    const html = ed.getHTML();
+    let html = ed.getHTML();
     if (!html || html === "<p></p>") { alert("내보낼 내용이 없습니다."); return; }
+    
+    // 파일명에서 확장자 제거하고 .docx 추가
     const docxFilename = documentTitle.replace(/\.[^/.]+$/, "") + ".docx";
+    
+    // 본문에서 문서 제목과 일치하는 내용을 미리 제거
+    if (documentTitle && documentTitle.trim()) {
+      const titleToRemove = documentTitle.trim();
+      
+      // DOM 파서를 사용해서 정확하게 제거
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = html;
+      
+      // 첫 번째 요소가 제목과 같으면 제거
+      const firstElement = tempDiv.firstElementChild;
+      if (firstElement && firstElement.textContent && firstElement.textContent.trim() === titleToRemove) {
+        firstElement.remove();
+      }
+      
+      // 모든 요소 중에서 제목과 정확히 일치하는 것들 제거
+      const allElements = tempDiv.querySelectorAll('*');
+      allElements.forEach(element => {
+        if (element.textContent && element.textContent.trim() === titleToRemove) {
+          element.remove();
+        }
+      });
+      
+      html = tempDiv.innerHTML;
+      console.log('제목 제거 후 HTML:', html.substring(0, 200) + '...');
+    }
+    
     try {
       const fn =
         documentsApi.exportToDocx ||
@@ -278,7 +364,10 @@ export default function DocEditor({ onClose }) {
         alert("DOCX 내보내기 함수가 없습니다. services/documentsApi.js를 확인하세요.");
         return;
       }
-      const blob = await fn(html, docxFilename);
+      
+      // DOCX 내보내기 시 제목과 본문을 분리해서 전달
+      // 제목은 파일명과 문서 제목으로 사용하고, 본문에는 포함하지 않음
+      const blob = await fn(html, docxFilename, documentTitle);
       saveAs(blob, docxFilename);
     } catch (e) {
       console.error("DOCX 내보내기 실패:", e);

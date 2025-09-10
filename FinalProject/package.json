@@ -29,7 +29,12 @@
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "frontend-ui/src/assets/icon.ico"
     },
@@ -65,6 +70,7 @@
     "electron-builder": "^26.0.12"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.883.0"
+    "@aws-sdk/client-s3": "^3.883.0",
+    "mammoth": "^1.10.0"
   }
 }
