@@ -58,6 +58,19 @@ function toSimpleHTML(text) {
   return text.replace(/\n/g, "<br>");
 }
 
+// ✅ [추가] Blob을 Base64 문자열로 변환하는 헬퍼 함수
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // "data:*/*;base64," 접두사 제거
+      resolve(reader.result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 /** 페이지 컨테이너 */
 export default function DocEditor({ onClose }) {
   const [documentTitle, setDocumentTitle] = useState("새 문서");
@@ -327,53 +340,40 @@ export default function DocEditor({ onClose }) {
     let html = ed.getHTML();
     if (!html || html === "<p></p>") { alert("내보낼 내용이 없습니다."); return; }
     
-    // 파일명에서 확장자 제거하고 .docx 추가
     const docxFilename = documentTitle.replace(/\.[^/.]+$/, "") + ".docx";
     
-    // 본문에서 문서 제목과 일치하는 내용을 미리 제거
-    if (documentTitle && documentTitle.trim()) {
-      const titleToRemove = documentTitle.trim();
-      
-      // DOM 파서를 사용해서 정확하게 제거
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = html;
-      
-      // 첫 번째 요소가 제목과 같으면 제거
-      const firstElement = tempDiv.firstElementChild;
-      if (firstElement && firstElement.textContent && firstElement.textContent.trim() === titleToRemove) {
-        firstElement.remove();
+    try {
+      // 1. DOCX 데이터를 Blob 형태로 생성 (API 또는 클라이언트 라이브러리)
+      const blob = await documentsApi.exportToDocx(html, docxFilename, documentTitle);
+      if (!blob) {
+        throw new Error("DOCX 데이터 생성에 실패했습니다.");
+      }
+
+      // 2. Electron의 저장 대화상자 호출
+      const result = await window.fsBridge.showSaveDialog({
+        title: "DOCX로 내보내기",
+        defaultPath: docxFilename,
+        filters: [{ name: "Word Documents", extensions: ["docx"] }, { name: "All Files", extensions: ["*"] }],
+      });
+
+      const { canceled, filePath } = result || {};
+      if (canceled || !filePath) {
+        return; // 사용자가 취소
       }
       
-      // 모든 요소 중에서 제목과 정확히 일치하는 것들 제거
-      const allElements = tempDiv.querySelectorAll('*');
-      allElements.forEach(element => {
-        if (element.textContent && element.textContent.trim() === titleToRemove) {
-          element.remove();
-        }
+      // 3. Blob을 Base64로 변환
+      const base64Content = await blobToBase64(blob);
+
+      // 4. Main 프로세스에 파일 저장 요청 (Base64)
+      await window.fsBridge.saveFile({
+        filePath,
+        content: base64Content,
+        encoding: 'base64'
       });
       
-      html = tempDiv.innerHTML;
-      console.log('제목 제거 후 HTML:', html.substring(0, 200) + '...');
-    }
-    
-    try {
-      const fn =
-        documentsApi.exportToDocx ||
-        documentsApi.exportDocx ||
-        documentsApi.htmlToDocx ||
-        documentsApi.default;
-      if (!fn) {
-        alert("DOCX 내보내기 함수가 없습니다. services/documentsApi.js를 확인하세요.");
-        return;
-      }
-      
-      // DOCX 내보내기 시 제목과 본문을 분리해서 전달
-      // 제목은 파일명과 문서 제목으로 사용하고, 본문에는 포함하지 않음
-      const blob = await fn(html, docxFilename, documentTitle);
-      saveAs(blob, docxFilename);
-      
-      // ✅ HTML 저장과 동일한 성공 팝업 추가
-      alert(`'${docxFilename}'로 DOCX 문서가 내보내기되었습니다.`);
+      // 5. 저장이 완료된 후 알림창 표시
+      alert(`'${filePath}'로 문서가 저장되었습니다.`);
+
     } catch (e) {
       console.error("DOCX 내보내기 실패:", e);
       alert("DOCX 내보내기 중 오류가 발생했습니다.");

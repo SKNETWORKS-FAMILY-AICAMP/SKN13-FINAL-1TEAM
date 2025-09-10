@@ -940,12 +940,16 @@ ipcMain.handle("fs:showSaveDialog", async (evt, options) => {
 });
 
 // ✅ [추가] 절대 경로 파일 저장 핸들러
-ipcMain.handle("fs:saveFile", async (_evt, { filePath, content }) => {
-  if (!filePath) throw new Error("filePath is required for fs:saveFile");
-  await fs.promises.writeFile(filePath, content ?? "", "utf-8");
-  // 최근 열어본 목록에도 추가
-  await upsertOpened({ path: filePath, name: path.basename(filePath) });
-  return { ok: true };
+ipcMain.handle("fs:saveFile", async (_evt, { filePath, content, encoding = "utf-8" }) => {
+  if (!filePath) throw new Error("filePath is required");
+  try {
+    // writeFile은 base64 인코딩을 네이티브로 지원합니다.
+    await fs.promises.writeFile(filePath, content || "", encoding);
+    return { ok: true };
+  } catch (e) {
+    console.error(`Failed to save file ${filePath}:`, e);
+    return { ok: false, error: e.message };
+  }
 });
 
 // ✅ [추가] 파일 열기 대화상자 핸들러
