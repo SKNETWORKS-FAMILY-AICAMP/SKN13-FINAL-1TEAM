@@ -85,7 +85,7 @@ def process_s3_pdfs_to_chroma(bucket_name: str, collection):
     paginator = s3_client.get_paginator('list_objects_v2')
     
     try:
-        s3_prefix = "kobaco_data/내부문서/투자/"
+        s3_prefix = "kobaco_data_md/"
         logger.info(f"S3 경로 '{s3_prefix}'에서 파일을 찾습니다.")
 
         pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_prefix)
