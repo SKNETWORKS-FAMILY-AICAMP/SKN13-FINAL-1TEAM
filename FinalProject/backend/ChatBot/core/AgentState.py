@@ -62,9 +62,8 @@ class AgentStateHelper:
     ) -> AgentState:
         """Create a clean initial state."""
         return AgentState(
-            prompt=prompt,
             document_content=document_content,
-            messages=messages or [],
+            messages=(messages or []) + [HumanMessage(content=prompt)], # Add current prompt as HumanMessage
             generation=None,
             needs_document_content=False,
             workflow_step=WorkflowStep.INITIAL,
@@ -73,7 +72,8 @@ class AgentStateHelper:
             next_agents=[],
             workflow_context={},
             workflow_error=None,
-            agent_data={}
+            agent_data={},
+            search_results=[] # Ensure search_results is initialized
         )
     
     @staticmethod
