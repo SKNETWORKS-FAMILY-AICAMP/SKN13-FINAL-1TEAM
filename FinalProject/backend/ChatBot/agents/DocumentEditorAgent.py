@@ -3,6 +3,7 @@
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 import logging
+import traceback # Added this line
 
 from langchain_core.messages import SystemMessage, ToolMessage, HumanMessage, BaseMessage
 from langchain_openai import ChatOpenAI
@@ -85,7 +86,7 @@ class DocumentEditorAgent:
                             messages.append(ToolMessage(content=str(result), tool_call_id=tool_call['id']))
 
                         except Exception as e:
-                            error_msg = f"Error executing tool '{tool_name}': {e}"
+                            error_msg = f"Error executing tool '{tool_name}': {e}\n{traceback.format_exc()}"
                             print(f">> [AGENT] {error_msg}")
                             messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call['id']))
                     else:
