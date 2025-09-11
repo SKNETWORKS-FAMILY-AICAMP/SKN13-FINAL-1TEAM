@@ -25,12 +25,12 @@ export default function FeatureShell({ userType = "user" }) {
 
     // 🚩 2) 초기 활성 탭
     const [activeKey, setActiveKey] = useState(() =>
-        role === "admin" ? "employees" : "docs"
+        role === "admin" ? "employees" : "calendar"
     );
 
     // 🚩 3) role 바뀌면 기본 탭 리셋
     useEffect(() => {
-        setActiveKey(role === "admin" ? "employees" : "docs");
+        setActiveKey(role === "admin" ? "employees" : "calendar");
     }, [role]);
 
     // 사이드바 메뉴 선택

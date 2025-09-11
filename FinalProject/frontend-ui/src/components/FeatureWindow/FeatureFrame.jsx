@@ -34,9 +34,10 @@ export default function FeatureFrame({ defaultTab }) {
     // 관리자용
     if (defaultTab === "employees") return <FeatureEmployees />; // 사원 관리 페이지
     // 사원용
+    if (defaultTab === "calendar") return <FeatureCalendar />; // 일정 관리 페이지
     if (defaultTab === "docs") return <FeatureDocs />; // 문서 관리 페이지
     if (defaultTab === "forms")    return <DocumentEditor />;
-    if (defaultTab === "calendar") return <FeatureCalendar />; // 일정 관리 페이지
+    
 
     // 공통
     if (defaultTab === "mypage") return <FeatureMypage />; // 마이페이지

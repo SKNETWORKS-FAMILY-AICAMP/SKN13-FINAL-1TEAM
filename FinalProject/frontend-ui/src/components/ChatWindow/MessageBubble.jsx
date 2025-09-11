@@ -140,7 +140,7 @@ export default function MessageBubble({ message }) {
   const openViewer = useCallback((idx) => { setViewerIndex(idx); setViewerOpen(true); }, []);
   const closeViewer = useCallback(() => setViewerOpen(false), []);
   const prevImg = useCallback(() => { if (images.length) setViewerIndex(i => (i - 1 + images.length) % images.length); }, [images.length]);
-  const nextImg = useCallback(() => { if (images.length) setViewerIndex(i => (i + 1) % images.length); }, [images.length]);
+  const nextImg = useCallback(() => { if (images.length) setViewerIndex(i => (i + 1) % images.length) }, [images.length]);
 
   // 키보드 핸들러: ESC, ArrowLeft, ArrowRight
   useEffect(() => {
@@ -218,15 +218,15 @@ export default function MessageBubble({ message }) {
               if (allBubble) {
                 return hasFenced ? (
                   <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                    <div className="max-w-full">
+                    <div className="max-w-full overflow-x-auto">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
                           code({ inline, children }) {
                             if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
                             return (
-                              <pre className="px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full">
-                                <code className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{children}</code>
+                              <pre className="px-4 py-3 text-sm leading-6 whitespace-pre max-w-full">
+                                <code className="whitespace-pre">{children}</code>
                               </pre>
                             );
                           },
@@ -241,8 +241,8 @@ export default function MessageBubble({ message }) {
                   </div>
                 ) : (
                   <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                    <div className="max-w-full">
-                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                    <div className="max-w-full overflow-x-auto">
+                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre">
                         {message.content}
                       </pre>
                     </div>
@@ -258,15 +258,15 @@ export default function MessageBubble({ message }) {
                       if (seg.mode === 'fenced') {
                         return (
                           <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                            <div className="max-w-full">
+                            <div className="max-w-full overflow-x-auto">
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
                                   code({ inline, children }) {
                                     if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
                                     return (
-                                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full">
-                                        <code className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{children}</code>
+                                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre max-w-full">
+                                        <code className="whitespace-pre">{children}</code>
                                       </pre>
                                     );
                                   },
@@ -283,8 +283,8 @@ export default function MessageBubble({ message }) {
                       }
                       return (
                         <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                          <div className="max-w-full">
-                            <pre className="px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0">
+                          <div className="max-w-full overflow-x-auto">
+                            <pre className="px-4 py-3 text-sm leading-6 whitespace-pre min-w-0">
                               {seg.content}
                             </pre>
                           </div>
