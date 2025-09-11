@@ -182,9 +182,9 @@ def rule_based_intent_analysis(user_input: str) -> Dict[str, Any]:
                 "confidence": 0.85
             }
     
-    # Default to general chat
+    # Default to business rejection
     return {
-        "agents": ["general_chat"],
+        "agents": ["business_rejection"],
         "next_step": WorkflowStep.WORKFLOW_COMPLETED,
         "confidence": 0.6
     }
@@ -208,8 +208,8 @@ def pattern_based_intent_analysis(user_input: str, state: AgentState) -> Dict[st
             }
         elif any(keyword in user_input for keyword in analysis_keywords):
             return {
-                "agents": ["general_chat"],
-                "next_step": WorkflowStep.ANALYSIS_NEEDED,
+                "agents": ["document_search"],
+                "next_step": WorkflowStep.SEARCH_REQUESTED,
                 "confidence": 0.75
             }
     
@@ -226,16 +226,16 @@ User input: "{user_input}"
 
 Respond with JSON only:
 {{
-    "primary_intent": "search|edit|chat|multi_step",
-    "agents": ["document_search"|"document_edit"|"general_chat"],
-    "next_step": "search_requested|edit_requested|analysis_needed|workflow_completed",
+    "primary_intent": "search|edit|rejection|multi_step",
+    "agents": ["document_search"|"document_edit"|"business_rejection"],
+    "next_step": "search_requested|edit_requested|workflow_completed",
     "confidence": 0.0-1.0
 }}
 
 Rules:
 - search: finding/downloading documents
 - edit: modifying document content  
-- chat: general conversation/analysis
+- rejection: general conversation/analysis or anything not related to search or edit
 - multi_step: requires multiple agents (e.g., "find report and summarize")"""
 
     try:
@@ -251,7 +251,7 @@ Rules:
         confidence = 0.4 if is_retryable_error(e) else 0.2
         
         return {
-            "agents": ["general_chat"],
+            "agents": ["business_rejection"],
             "next_step": WorkflowStep.WORKFLOW_COMPLETED,
             "confidence": confidence
         }
@@ -280,8 +280,8 @@ def determine_post_search_agents(state: AgentState) -> list:
         if any(keyword in last_message for keyword in ['추가', '편집', '넣어', '작성']):
             return ["document_edit"]
         else:
-            return ["general_chat"]  # For analysis/summarization
-    return ["general_chat"]
+            return ["document_search"]  # For analysis/summarization
+    return ["document_search"]
 
 def needs_editing_after_analysis(state: AgentState) -> bool:
     """Check if editing is needed after analysis."""
