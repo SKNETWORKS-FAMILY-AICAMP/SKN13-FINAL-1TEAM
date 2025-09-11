@@ -115,6 +115,12 @@ def insert_content_at_position(
     logger.info("--- EXECUTING NEWLINE-SAFE INSERTION LOGIC ---")
     logger.info(f"텍스트 내용 삽입: 위치='{position}', 내용='{content[:30]}...'")
 
+    # --- DEBUG LOGGING START ---
+    print("--- insert_content_at_position DEBUG ---")
+    print(f"[BEFORE] document_content: {document_content}")
+    print(f"[BEFORE] content to insert: {content}")
+    # --- DEBUG LOGGING END ---
+
     # 새로 추가되는 내용의 줄바꿈만 <br />로 변환합니다.
     content_with_br = content.replace('\n', '<br />')
 
@@ -124,7 +130,13 @@ def insert_content_at_position(
     else:  # end 또는 미지원 위치
         result = document_content + content_with_br
     
+    # --- DEBUG LOGGING START ---
+    print(f"[AFTER] final result: {result}")
+    print("--- END DEBUG ---")
+    # --- DEBUG LOGGING END ---
+
     return result
+
 
 
 # === Helper Functions ===
