@@ -88,7 +88,7 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
                 # Agent routing
                 "document_search": "document_search", 
                 "document_edit": "document_edit",
-                # "general_chat": "general_chat",  # 업무 전용으로 비활성화
+                "general_chat": "business_rejection",
                 "business_rejection": "business_rejection",
                 
                 # Workflow control
@@ -250,7 +250,7 @@ class SimpleRoutingGraph(BaseWorkflowGraph):
             self._legacy_route_question,
             {
                 "document_search": "document_search",
-                # "general_chat": "general_chat",  # 업무 전용으로 비활성화
+                "general_chat": "business_rejection",
                 "business_rejection": "business_rejection",
                 "document_edit": "document_edit",
                 "request_document": "request_document"
