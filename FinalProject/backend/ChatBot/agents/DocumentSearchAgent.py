@@ -73,6 +73,7 @@ class DocumentSearchAgent:
             
             # 4. 도구 호출 처리
             search_results = {}
+            skip_final_response_generation = False  # 플래그 추가
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 messages.append(response)  # Add AI message with tool calls
                 for tool_call in response.tool_calls:
@@ -92,6 +93,15 @@ class DocumentSearchAgent:
                         try:
                             # 도구 실행 및 결과 저장
                             result = tool_function.invoke(tool_args)
+                            
+                            # 다운로드 링크 도구 특별 처리
+                            if tool_name == "get_presigned_download_url":
+                                final_answer = f"요청하신 문서의 다운로드 링크입니다: [다운로드]({result})"
+                                search_results["final_answer"] = final_answer
+                                skip_final_response_generation = True # 최종 응답 생성 건너뛰기
+                                from langchain_core.messages import AIMessage
+                                messages.append(AIMessage(content=final_answer))
+
                             search_results.update(result if isinstance(result, dict) else {"result": result})
                             
                             print(f">> [SEARCH AGENT] Tool '{tool_name}' executed successfully\n")
@@ -113,7 +123,7 @@ class DocumentSearchAgent:
                 search_results = self._extract_search_results(response)
             
             # After tool execution, generate final response for the user
-            if hasattr(response, 'tool_calls') and response.tool_calls:
+            if not skip_final_response_generation and hasattr(response, 'tool_calls') and response.tool_calls:
                 print(">> [SEARCH AGENT] Generating final user response after tool execution")
                 
                 try:

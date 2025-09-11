@@ -11,9 +11,10 @@ from langchain_core.runnables import RunnableConfig
 
 # Import the comprehensive state and the sub-agents
 from ..core.AgentState import AgentState, WorkflowStep
-from .GeneralChatAgent import GeneralChatAgent
+from .GeneralChatAgent import GeneralChatAgent  # 주석처리 예정
 from .DocumentSearchAgent import DocumentSearchAgent
 from .DocumentEditorAgent import DocumentEditorAgent
+from .BusinessRejectionAgent import BusinessRejectionAgent
 
 load_dotenv()
 
@@ -87,8 +88,7 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
     
     return {
         "workflow_step": next_step,
-        "next_agents": next_agents,
-        "workflow_complete": (next_step == WorkflowStep.WORKFLOW_COMPLETED)
+        "next_agents": next_agents
     }
 
 def request_document_node(state: AgentState) -> dict:
@@ -181,9 +181,9 @@ def rule_based_intent_analysis(user_input: str) -> Dict[str, Any]:
                 "confidence": 0.85
             }
     
-    # Default to general chat
+    # Default to business rejection
     return {
-        "agents": ["general_chat"],
+        "agents": ["business_rejection"],
         "next_step": WorkflowStep.WORKFLOW_COMPLETED,
         "confidence": 0.6
     }
@@ -207,8 +207,8 @@ def pattern_based_intent_analysis(user_input: str, state: AgentState) -> Dict[st
             }
         elif any(keyword in user_input for keyword in analysis_keywords):
             return {
-                "agents": ["general_chat"],
-                "next_step": WorkflowStep.ANALYSIS_NEEDED,
+                "agents": ["document_search"],
+                "next_step": WorkflowStep.SEARCH_REQUESTED,
                 "confidence": 0.75
             }
     
@@ -217,43 +217,68 @@ def pattern_based_intent_analysis(user_input: str, state: AgentState) -> Dict[st
 def llm_based_intent_analysis(user_input: str, state: AgentState) -> Dict[str, Any]:
     """LLM-based fallback for complex intent analysis."""
     
-    llm = ChatOpenAI(model_name='gpt-4o-mini', temperature=0)  # Use cheaper model
+    llm = ChatOpenAI(model_name='gpt-4o-mini', temperature=0)
     
-    prompt = f"""Classify user intent concisely:
+    prompt = f"""Classify user intent concisely based on the rules.
 
 User input: "{user_input}"
 
-Respond with JSON only:
-{{
-    "primary_intent": "search|edit|chat|multi_step",
-    "agents": ["document_search"|"document_edit"|"general_chat"],
-    "next_step": "search_requested|edit_requested|analysis_needed|workflow_completed",
-    "confidence": 0.0-1.0
-}}
+Respond with JSON only.
 
-Rules:
-- search: finding/downloading documents
-- edit: modifying document content  
-- chat: general conversation/analysis
-- multi_step: requires multiple agents (e.g., "find report and summarize")"""
+**Rules & JSON format:**
+- **For document search:**
+  {{
+      "primary_intent": "search",
+      "agents": ["document_search"],
+      "next_step": "search_requested",
+      "confidence": 0.9
+  }}
+- **For document editing:**
+  {{
+      "primary_intent": "edit",
+      "agents": ["document_edit"],
+      "next_step": "edit_requested",
+      "confidence": 0.9
+  }}
+- **For multi-step tasks (e.g., "find and summarize"):**
+  {{
+      "primary_intent": "multi_step",
+      "agents": ["document_search", "document_edit"],
+      "next_step": "search_requested",
+      "confidence": 0.9
+  }}
+- **For anything else (general chat, non-work topics):**
+  {{
+      "primary_intent": "rejection",
+      "agents": ["business_rejection"],
+      "next_step": "workflow_completed",
+      "confidence": 0.9
+  }}
+"""
 
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
         import json
-        result = json.loads(response.content)
+        # Find the JSON block in the response
+        json_match = re.search(r'```json\n(.*?)\n```', response.content, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # Fallback for raw JSON
+            json_str = response.content
+        
+        result = json.loads(json_str)
         return result
     except Exception as e:
         from ..utils.error_handler import log_error_with_context, is_retryable_error
         log_error_with_context(e, {"function": "llm_based_intent_analysis", "input": user_input[:50]})
         
-        # 재시도 가능한 에러면 confidence를 낮추고, 아니면 더 낮춤
-        confidence = 0.4 if is_retryable_error(e) else 0.2
-        
         return {
-            "agents": ["general_chat"],
+            "agents": ["business_rejection"],
             "next_step": WorkflowStep.WORKFLOW_COMPLETED,
-            "confidence": confidence
+            "confidence": 0.4
         }
+
 
 # --- Workflow Decision Functions ---
 
@@ -279,8 +304,8 @@ def determine_post_search_agents(state: AgentState) -> list:
         if any(keyword in last_message for keyword in ['추가', '편집', '넣어', '작성']):
             return ["document_edit"]
         else:
-            return ["general_chat"]  # For analysis/summarization
-    return ["general_chat"]
+            return ["document_search"]  # For analysis/summarization
+    return ["document_search"]
 
 def needs_editing_after_analysis(state: AgentState) -> bool:
     """Check if editing is needed after analysis."""
@@ -289,45 +314,53 @@ def needs_editing_after_analysis(state: AgentState) -> bool:
 
 # --- Legacy Router Function (for backward compatibility) ---
 
-def route_question(state: AgentState) -> Literal["document_search", "general_chat", "document_edit", "request_document"]:
+def route_question(state: AgentState) -> Literal["document_search", "business_rejection", "document_edit", "request_document"]:
     """
-    Classifies the user's question to decide which agent should handle it, considering conversation history.
-    If the agent requires a document but it's not present, it routes to request the document.
+    업무 전용 챗봇 라우팅 - 문서 편집/검색만 허용, 나머지는 거부
     """
-    print("---ROUTING QUESTION---")
+    print("---ROUTING QUESTION (업무 전용)---")
     
     # Pass the entire message history to the LLM for better context
     messages = state["messages"]
     
     llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
     
-    # Upgraded system_prompt for more robust routing
-    system_prompt = f"""당신은 사용자의 질문을 분석하여 가장 적절한 전문가에게 전달하는 라우팅 전문가입니다. 대화의 전체 맥락을 고려하여 최적의 결정을 내리십시오.
+    # 업무 전용 라우팅 프롬프트
+    system_prompt = f"""당신은 업무 전용 AI 어시스턴트의 라우팅 전문가입니다. 사용자의 요청이 업무 관련인지 판단하고 적절한 처리 방향을 결정합니다.
 
-**세 명의 전문가:**
+**허용되는 업무 영역:**
 
-1.  **DocumentSearchAgent**:
-    - **역할**: 내부 문서(재무 보고서, 감사 결과, 규정 등)를 검색하고 관련 정보를 제공합니다.
-    - **트리거**: 사용자가 명시적으로 문서를 찾아달라고 요청하거나, 문서의 다운로드 링크를 요구할 때 활성화됩니다.
+1. **DocumentSearchAgent** (문서 검색):
+   - 내부 문서 검색 요청
+   - 문서 찾기, 다운로드 링크 요청
+   - 문서 관련 정보 검색
 
-2.  **DocumentEditorAgent**:
-    - **역할**: 현재 활성화된 문서를 수정, 변경, 추가 또는 삭제합니다.
-    - **트리거**: 사용자가 문서 내용에 대한 **구체적인 변경을 지시**할 때 활성화됩니다. ('...해줘', '...으로 바꿔줘', '...내용 추가해줘' 등)
-    - **중요**: 문서 편집 세션(`is_document_editing_session`=True)에서는 사용자의 발언이 **편집과 관련된 지시일 가능성이 높다고 가정**하고, 우선적으로 이 에이전트를 고려해야 합니다. 단순 질문처럼 보여도 맥락상 편집 의도가 있다면 이 에이전트를 선택하세요.
+2. **DocumentEditorAgent** (문서 편집):
+   - 문서 내용 수정, 변경, 추가, 삭제
+   - 문서 편집 지시사항
+   - 문서 구조 변경 요청
 
-3.  **GeneralChatAgent**:
-    - **역할**: 일반적인 대화, 인사, 그리고 다른 두 전문가의 역할에 해당하지 않는 모든 질문을 처리합니다.
-    - **트리거**: 사용자가 문서 내용을 제공하며 **설명이나 요약을 요청**하는 경우, 또는 문서 검색/편집과 무관한 대화를 나눌 때 활성화됩니다.
+3. **업무 관련 질문** (DocumentSearchAgent로 처리):
+   - 문서 내용에 대한 설명이나 요약 요청
+   - "이 문서는 언제 작성된 건가요?" 같은 문서 관련 질문
+   - 업무 프로세스나 규정에 대한 질문
 
-**라우팅 결정 프로세스:**
+**거부 대상 (BusinessRejection):**
+- 일반적인 대화 (안녕하세요, 날씨, 개인적인 질문 등)
+- 업무와 무관한 정보 요청
+- 오락, 게임, 개인적 상담
+- 회사 업무와 직접 관련 없는 모든 요청
+- 모호하여 업무 관련인지 불분명한 요청
 
-1.  **문서 편집 세션 확인**: `is_document_editing_session`이 `True`인지 확인합니다. `True`라면, 사용자의 요청이 편집 명령일 가능성을 높게 평가합니다.
-2.  **사용자 요청 분석**: 최신 사용자 메시지와 대화 맥락을 종합하여, 위의 세 가지 역할 중 어디에 가장 부합하는지 판단합니다.
-3.  **최종 결정**: 가장 적합한 전문가의 이름('DocumentSearchAgent', 'DocumentEditorAgent', 'GeneralChatAgent')을 정확하게 반환합니다.
+**판단 기준:**
+1. 문서 편집/검색과 직접 관련이 있는가?
+2. 회사 업무 수행에 필요한 정보인가?
+3. 문서나 업무 프로세스와 연관이 있는가?
 
-**대화 기록과 사용자의 최신 질문을 바탕으로, 어떤 전문가를 사용해야 합니까?**
-
-오직 'DocumentSearchAgent', 'DocumentEditorAgent', 'GeneralChatAgent' 중 하나로만 대답하십시오.
+**결과:** 다음 중 하나로만 응답하세요:
+- "DocumentSearchAgent" (문서 검색/업무 질문)
+- "DocumentEditorAgent" (문서 편집)
+- "BusinessRejection" (업무 외 요청 거부)
 """
 
     # Invoke LLM with the system prompt and the entire message history
@@ -339,14 +372,14 @@ def route_question(state: AgentState) -> Literal["document_search", "general_cha
         print(f"--- Decision: {decision}, but document not found. Routing to request_document. ---")
         return "request_document"
     
-    print(f"Routing decision: {decision}")
+    print(f"업무 전용 라우팅 결과: {decision}")
 
     if "DocumentSearchAgent" in decision:
         return "document_search"
     elif "DocumentEditorAgent" in decision:
         return "document_edit"
     else:
-        return "general_chat"
+        return "business_rejection"
 
 # --- Workflow Graph Creation ---
 
@@ -359,9 +392,10 @@ def RoutingAgent(workflow_type: str = "multi_step"):
     """
     from ..core.workflow_graph import WorkflowGraphFactory
     
-    # Create agents registry with new class-based agents
+    # Create agents registry with new class-based agents (업무 전용)
     agents_registry = {
-        "general_chat": GeneralChatAgent(),
+        # "general_chat": GeneralChatAgent(),  # 업무 전용으로 비활성화
+        "business_rejection": BusinessRejectionAgent(),  # 업무 외 요청 거부
         "document_search": DocumentSearchAgent(), 
         "document_edit": DocumentEditorAgent()
     }
