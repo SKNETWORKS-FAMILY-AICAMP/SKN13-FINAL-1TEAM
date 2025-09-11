@@ -218,6 +218,7 @@ class DocumentEditorAgent:
     
     def _handle_error(self, state: AgentState, error_message: str) -> Dict[str, Any]:
         """에러 처리 및 상태 업데이트"""
+        print(f"--- DocumentEditorAgent Error: {error_message} ---") # Added this line for direct visibility
         AgentStateHelper.set_workflow_error(state, error_message)
         
         AgentStateHelper.add_workflow_result(
