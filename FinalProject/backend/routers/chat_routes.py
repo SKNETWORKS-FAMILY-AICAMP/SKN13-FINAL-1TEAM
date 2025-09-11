@@ -116,6 +116,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
 
     # 문서 업데이트 관련 도구 목록
     DOCUMENT_UPDATE_TOOLS = {
+    "insert_content_at_position", # 방금 추가
     "run_document_edit",  # 메인 편집 도구 (기존)
     "replace_text_in_document",  # 기존 도구
     "create_document_structure",  # 문서 구조 생성
