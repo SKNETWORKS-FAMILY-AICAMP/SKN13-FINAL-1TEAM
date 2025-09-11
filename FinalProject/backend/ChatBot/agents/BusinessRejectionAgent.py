@@ -26,28 +26,25 @@ class BusinessRejectionAgent:
     def process(self, state: AgentState) -> Dict[str, Any]:
         """
         업무 외 요청 거부 프로세스
-        1. 사용자 요청 분석
-        2. 친근한 거부 메시지 생성
-        3. 업무 기능 안내
         """
         print("--- BusinessRejectionAgent: 업무 외 요청 거부 처리 ---")
         
         try:
-            # 1. 사용자 쿼리 추출
-            user_query = AgentStateHelper.get_last_user_message(state)
-            if not user_query:
-                user_query = "일반적인 질문"
-            
+            # 1. 사용자 쿼리 내용(content) 추출
+            last_user_message = AgentStateHelper.get_last_user_message(state)
+            user_query_content = getattr(last_user_message, 'content', "일반적인 질문")
+
             # 2. 거부 메시지 생성
-            rejection_message = self._generate_rejection_message(user_query)
+            rejection_message = self._generate_rejection_message(user_query_content)
             
-            # 3. 워크플로우 완료 처리
-            AgentStateHelper.set_workflow_step(state, WorkflowStep.WORKFLOW_COMPLETED)
+            # 3. 상태 업데이트 및 워크플로우 완료 처리
+            state["messages"].append(rejection_message)
+            state["workflow_complete"] = True
             
             print("--- BusinessRejectionAgent: 거부 메시지 생성 완료 ---")
             
             return {
-                "messages": [rejection_message],
+                "messages": state["messages"],
                 "generation": rejection_message.content,
                 "workflow_complete": True
             }
@@ -58,7 +55,8 @@ class BusinessRejectionAgent:
     
     def _generate_rejection_message(self, user_query: str) -> BaseMessage:
         """친근하지만 명확한 거부 메시지 생성"""
-        
+        from langchain_core.messages import HumanMessage
+
         system_prompt = """당신은 업무 전용 AI 어시스턴트입니다. 사용자의 업무 외 요청에 대해 친근하지만 명확하게 거부 메시지를 작성해주세요.
 
 **거부 메시지 작성 가이드라인:**
@@ -80,11 +78,11 @@ class BusinessRejectionAgent:
 
 사용자 요청에 맞춰 자연스럽고 도움이 되는 거부 메시지를 작성해주세요."""
 
-        user_message = f"사용자 요청: {user_query}"
+        user_message_content = f"사용자 요청: {user_query}"
         
         messages = [
             SystemMessage(content=system_prompt),
-            BaseMessage(content=user_message, type="human")
+            HumanMessage(content=user_message_content)
         ]
         
         response = self.llm.invoke(messages)

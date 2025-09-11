@@ -119,8 +119,8 @@ class AgentTools:
             "sources": unique_sources
         }
 
-    @tool
-    def get_presigned_download_url(self, file_key: str) -> Dict[str, Any]:
+    @tool.staticmethod
+    def get_presigned_download_url(file_key: str) -> Dict[str, Any]:
         """
         파일 다운로드용 presigned URL 생성.
         """

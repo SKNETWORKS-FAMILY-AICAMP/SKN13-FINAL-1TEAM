@@ -118,6 +118,7 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
     
     def _workflow_orchestrator_node(self, state: AgentState) -> Dict[str, Any]:
         """Central orchestrator that manages workflow steps."""
+        print("--- EXECUTING NODE: workflow_orchestrator ---")
         from ..agents.RoutingAgent import workflow_orchestrator_node
         return workflow_orchestrator_node(state)
     
@@ -149,6 +150,7 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
     
     def _business_rejection_node(self, state: AgentState) -> Dict[str, Any]:
         """Business rejection processing node."""
+        print("--- EXECUTING NODE: business_rejection ---")
         rejection_agent = self.agents_registry.get("business_rejection")
         if rejection_agent:
             return rejection_agent.process(state)
@@ -156,6 +158,7 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
     
     def _workflow_tracker_node(self, state: AgentState) -> Dict[str, Any]:
         """Track workflow progress and update state."""
+        print("--- EXECUTING NODE: workflow_tracker ---")
         print(f"--- WORKFLOW TRACKER: Processing step {state.get('workflow_step')} ---")
         
         current_step = state.get('workflow_step')
