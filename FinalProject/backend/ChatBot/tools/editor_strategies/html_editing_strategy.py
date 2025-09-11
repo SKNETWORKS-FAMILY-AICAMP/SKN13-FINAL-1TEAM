@@ -112,6 +112,7 @@ def insert_content_at_position(
     문서의 특정 위치에 내용을 삽입합니다. (텍스트 문서용)
     position: start, end
     """
+    logger.info("--- EXECUTING NEWLINE-SAFE INSERTION LOGIC ---")
     logger.info(f"텍스트 내용 삽입: 위치='{position}', 내용='{content[:30]}...'")
     
     # BeautifulSoup을 사용하지 않고 직접 문자열을 조작하여 줄바꿈을 보존합니다.
