@@ -110,6 +110,7 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
     yield f"data: {json.dumps({'thinking_message': thinking_message}, ensure_ascii=False)}\n\n"
 
 
+
 # 도구 종료 이벤트를 처리하고 SSE를 전송하는 함수
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
     tool_name = event.get("name") # 도구 이름
