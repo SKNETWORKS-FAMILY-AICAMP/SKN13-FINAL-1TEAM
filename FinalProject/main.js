@@ -68,6 +68,7 @@ const {
   Tray,
   nativeImage,
   dialog,
+  globalShortcut,
 } = require("electron");
 
 // 윈도우 작업표시줄/트레이 아이콘 정상 표시용
@@ -336,6 +337,14 @@ function wireWindowDebugEvents(win, label) {
     console.error(`[WIN:${label}] did-fail-load`, { code, desc, url });
   });
   win.on("closed", () => console.log(`[WIN:${label}] closed (id=${win.id})`));
+}
+
+// DevTools 토글 헬퍼
+function toggleDevtools(win) {
+  if (!win) return;
+  const wc = win.webContents;
+  if (wc.isDevToolsOpened()) wc.closeDevTools();
+  else wc.openDevTools({ mode: "detach" }); // 붙여 열고 싶으면 'right' / 'bottom'
 }
 
 /* ============================================================================
@@ -635,6 +644,11 @@ if (!gotLock) {
 }
 
 app.whenReady().then(() => {
+  // 전역 F12 보강
+  globalShortcut.register("F12", () => {
+    const w = BrowserWindow.getFocusedWindow();
+    if (w) toggleDevtools(w);
+  });
   ensureDocumentsFolder();     // ✅ 실행 시 문서 폴더 보장
   createMainWindow();
   createTray();
@@ -642,6 +656,12 @@ app.whenReady().then(() => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
+});
+
+// 종료 시 단축키 해제
+app.on("will-quit", () => {
+  globalShortcut.unregister("F12");
+  globalShortcut.unregisterAll();
 });
 
 // 모든 창이 닫혀도 종료하지 않음(트레이 상주)
@@ -675,6 +695,25 @@ app.on("browser-window-created", (_e, win) => {
   win.on("resize", broadcastResize);
   win.on("maximize", broadcastResize);
   win.on("unmaximize", broadcastResize);
+
+  // ⬇ F12 / Ctrl+Shift+I (macOS는 Cmd+Alt+I) 로 DevTools 토글
+  win.webContents.on("before-input-event", (event, input) => {
+    // F12
+    if (input.type === "keyDown" && input.key === "F12") {
+      event.preventDefault();
+      toggleDevtools(win);
+    }
+    // Ctrl+Shift+I / Cmd+Alt+I
+    if (
+      input.type === "keyDown" &&
+      input.code === "KeyI" &&
+      (input.control || input.meta) &&
+      input.shift
+    ) {
+      event.preventDefault();
+      toggleDevtools(win);
+    }
+  });
 });
 const getSenderWindow = (event) => BrowserWindow.fromWebContents(event.sender);
 ipcMain.handle("window:minimize", (event) => {
