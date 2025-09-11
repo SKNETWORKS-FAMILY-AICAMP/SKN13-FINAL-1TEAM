@@ -26,7 +26,7 @@ AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")
 CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "../chroma_db") 
 CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "kobaco_pdf_collection")
 
-embedding_function = OpenAIEmbeddings(model="text-embedding-3-large")
+embedding_function = OpenAIEmbeddings(model="text-embedding-3-large",chunk_size=300)
 
 # ======================== ChromaDB 클라이언트 초기화 ========================
 def get_chroma_collection():
