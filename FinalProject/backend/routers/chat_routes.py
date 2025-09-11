@@ -89,8 +89,7 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
     thinking_message = user_friendly_message
 
     # 1. ChatMessage 저장 (AI의 생각 중 메시지) - DB에는 상세 정보 저장
-    db_message_content = f"[Tool Start: {tool_name}]\nInput:\n```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}
-```"
+    db_message_content = f"[Tool Start: {tool_name}]\nInput:\n```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
     chat_msg = _create_chat_message(db, session_id, "assistant", db_message_content)
 
     # 2. ToolMessageRecord 저장 (기존 로직 유지)
