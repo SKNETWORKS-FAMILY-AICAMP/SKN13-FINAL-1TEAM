@@ -28,11 +28,7 @@ import remarkGfm from 'remark-gfm';
 
 /* ------------------------- 추가 유틸: 출력 분류/세그먼트 ------------------------- */
 
-/** 어시스턴트 출력 분류
- * - 'fenced': 코드펜스(```lang) 시작 또는 순수 JSON/배열 전체
- * - 'log'   : 툴 로그/혼합 JSON(긴 줄, tool_call_id 등 키워드, 중괄호 밀도)
- * - 'plain' : 일반 텍스트
- */
+/** 어시스턴트 출력 분류 */
 const classifyAssistantOutput = (raw = '') => {
   const s = String(raw || '').trim();
   const startsWithFence = s.startsWith('```');
@@ -164,8 +160,9 @@ export default function MessageBubble({ message }) {
     [isUser, message?.content]
   );
 
+  // 🔒 방어 로직 반영: 최상단 컨테이너 overflow-hidden (예비 안전망)
   return (
-    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}>
+    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'} mb-2 overflow-hidden`}>
       {/* 세로 스택: [첨부] -> [텍스트] */}
       <div className={`flex flex-col gap-2 max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
         {/* ⬆ 첨부: 파일칩 + 이미지 썸네일(최대 4) + +N 표시 */}
@@ -221,15 +218,15 @@ export default function MessageBubble({ message }) {
               if (allBubble) {
                 return hasFenced ? (
                   <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                    <div className="max-w-full overflow-x-auto">
+                    <div className="max-w-full">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
                           code({ inline, children }) {
                             if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
                             return (
-                              <pre className="whitespace-pre-wrap word-wrap-break-word px-4 py-3 text-sm leading-6 max-w-full overflow-x-auto">
-                                <code className="whitespace-pre-wrap word-wrap-break-word">{children}</code>
+                              <pre className="px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full">
+                                <code className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{children}</code>
                               </pre>
                             );
                           },
@@ -244,8 +241,8 @@ export default function MessageBubble({ message }) {
                   </div>
                 ) : (
                   <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                    <div className="max-w-full overflow-x-auto">
-                      <pre className="whitespace-pre-wrap word-wrap-break-word px-4 py-3 text-sm leading-6 min-w-0 overflow-x-auto">
+                    <div className="max-w-full">
+                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                         {message.content}
                       </pre>
                     </div>
@@ -261,15 +258,15 @@ export default function MessageBubble({ message }) {
                       if (seg.mode === 'fenced') {
                         return (
                           <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                            <div className="max-w-full overflow-x-auto">
+                            <div className="max-w-full">
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
                                   code({ inline, children }) {
                                     if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
                                     return (
-                                      <pre className="whitespace-pre-wrap word-wrap-break-word px-4 py-3 text-sm leading-6 max-w-full overflow-x-auto">
-                                        <code className="whitespace-pre-wrap word-wrap-break-word">{children}</code>
+                                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full">
+                                        <code className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{children}</code>
                                       </pre>
                                     );
                                   },
@@ -286,8 +283,8 @@ export default function MessageBubble({ message }) {
                       }
                       return (
                         <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                          <div className="max-w-full overflow-x-auto">
-                            <pre className="whitespace-pre-wrap word-wrap-break-word px-4 py-3 text-sm leading-6 min-w-0 overflow-x-auto">
+                          <div className="max-w-full">
+                            <pre className="px-4 py-3 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0">
                               {seg.content}
                             </pre>
                           </div>
@@ -304,8 +301,8 @@ export default function MessageBubble({ message }) {
                             code({ inline, children }) {
                               if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
                               return (
-                                <pre className="whitespace-pre-wrap word-wrap-break-word overflow-x-auto max-w-full">
-                                  <code className="whitespace-pre-wrap word-wrap-break-word">{children}</code>
+                                <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full">
+                                  <code className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{children}</code>
                                 </pre>
                               );
                             },

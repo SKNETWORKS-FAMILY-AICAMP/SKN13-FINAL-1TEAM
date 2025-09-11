@@ -337,11 +337,10 @@ export default function App() {
 
                     {/* 채팅 영역 */}
                     <div
-                    className={`flex flex-col transition-all duration-300
+                      className={`chat-pane flex flex-col transition-all duration-300
                         ${isMaximized
-                        // 기존: basis-5/6
-                        ? "flex-auto min-w-0"
-                        : "flex-1"
+                          ? "flex-auto"
+                          : "flex-1"
                         }`}
                     >
                     <ChatWindow

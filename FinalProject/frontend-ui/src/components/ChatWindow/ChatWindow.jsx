@@ -75,10 +75,10 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     })();
   }, [currentSession]);
 
-  // 새 메시지 도착 때 오토스크롤 (✅ 병합된 목록 기준으로 스크롤)
+  // 새 메시지 도착 때 오토스크롤
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]); // displayMessages로 바꿔도 OK. (아래 useMemo에서 messages만 의존)
+  }, [messages]);
 
   // 언마운트 시 SSE 정리
   useEffect(() => () => closeEventSource(), [closeEventSource]);
@@ -118,22 +118,20 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     });
   }, []);
 
-  // 스트림 종료 공통 처리: SSE 정리 + 상태 갱신 + 세션 목록 새로고침 신호
+  // 스트림 종료 공통 처리
   const endStream = useCallback(() => {
     closeEventSource();
     setIsStreaming(false);
     onSessionUpdated?.();
   }, [closeEventSource, onSessionUpdated]);
 
-  // ⛔ 중지(Abort): 진행 중 스트림 종료 + 즉시 새 질문 가능
+  // ⛔ 중지(Abort)
   const handleAbort = useCallback(() => {
     closeEventSource();
     setIsStreaming(false);
   }, [closeEventSource]);
 
-  /* 메시지 전송: 파일 업로드(프리사인드) + 메시지 저장 + SSE 스트림 수신
-     - UX 원칙: 화면에는 즉시 미리보기(파일/이미지) → 업로드는 비동기로 진행
-     - 에러는 콘솔 로깅(필요 시 토스트 등 UI 처리 확장 가능) */
+  // 메시지 전송
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
     const sessionId = currentSession?.id;
@@ -148,7 +146,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
 
     setIsStreaming(true);
 
-    // 사용자 말풍선에 즉시 미리보기 첨부(이미지는 objectURL)
+    // 사용자 말풍선에 즉시 미리보기 첨부
     const attachmentsForPreview = (files || []).map(f => ({
       name: f.name,
       type: f.type || 'application/octet-stream',
@@ -159,52 +157,50 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
       ? { role: 'user', content: prompt, attachments: attachmentsForPreview }
       : { role: 'user', content: prompt });
 
-    // 입력/첨부 초기화: UX 상 즉시 비움
+    // 입력/첨부 초기화
     setInput('');
     setFiles([]);
 
-    // (신규) 프리사인드 업로드를 비동기 병렬 수행(UX 방해 없음)
+    // 프리사인드 업로드 비동기
     if (hasFiles) {
       (async () => {
         try {
           await Promise.all(
             (files || []).map(f => uploadChatbotFilePresigned(f, { sessionId }))
           );
-          // 필요 시: 업로드 완료 후 attachments의 실제 URL로 UI 갱신 로직 추가 가능
         } catch (err) {
           console.error('[ERROR] 파일 업로드 실패:', err);
         }
       })();
     }
 
-    // 사용자 메시지 저장(첨부 메타는 별도 업로드 경로에서 처리됨)
+    // 사용자 메시지 저장
     try {
       await saveMessage({ sessionId, role: 'user', content: prompt });
     } catch (err) {
       console.error('[ERROR] 메시지 저장 실패:', err);
     }
 
-    // 현재 문서 내용 가져오기 (항상 전송)
+    // 현재 문서 내용 가져오기 (옵션)
     let documentContent = null;
     if (window.fsBridge?.getCurrentDocumentContent) {
       try {
         documentContent = await window.fsBridge.getCurrentDocumentContent();
         if (documentContent === "<p>문서 작성을 시작하세요...</p>") {
-          documentContent = null; // 빈 문서는 null로 처리
+          documentContent = null;
         }
       } catch (err) {
         console.warn('문서 내용 가져오기 실패:', err);
       }
     }
 
-    // SSE 연결 시작: streamLLM 사용 (토큰 인증 포함)
+    // SSE 연결 시작
     console.log('🚀 ChatWindow에서 streamLLM 호출 시작', documentContent ? '(문서 포함)' : '(문서 없음)');
-    
-    // streamLLM 호출 (토큰 인증 포함, 문서 내용 항상 포함)
+
     const cleanupFn = streamLLM({
       sessionId,
       prompt,
-      documentContent, // 항상 문서 내용 전송
+      documentContent,
       onDelta: (content, full) => {
         updateLastMessage(content);
       },
@@ -231,8 +227,8 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         alert('채팅 중 오류가 발생했습니다: ' + error.message);
       }
     });
-    
-    // cleanup 함수를 eventSourceRef에 저장
+
+    // cleanup 저장
     eventSourceRef.current = { close: cleanupFn };
 
     // AI 말풍선 프레임 추가(토큰 누적용)
@@ -244,8 +240,6 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
   ]);
 
   /* -------------------- ✅ 연속 assistant/tool/thinking 병합 -------------------- */
-  // 같은 턴에서 연속으로 오는 assistant 계열 메시지들을 하나로 합쳐
-  // MessageBubble 하나가 그 턴 전체를 담당하도록 만든다.
   const displayMessages = useMemo(() => {
     const out = [];
     const normalizeRoleForMerge = (r) => {
@@ -280,9 +274,13 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
   }, [messages]);
   /* --------------------------------------------------------------------------- */
 
+  // 🔒 방어 로직 반영: 루트 overflow-hidden + 메시지 리스트 overflow-x-hidden + 하단 인풋 고정(flex-none)
   return (
-    <div className="flex flex-col h-full min-w-0">
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 max-w-full">
+    <div className="flex flex-col h-full w-full overflow-hidden min-w-0">
+      <div
+        className="flex-1 min_h-0 overflow-y-auto overflow-x-hidden px-4 py-6 max-w-full"
+        style={{ scrollbarGutter: 'stable both-edges', overscrollBehavior: 'contain' }}
+      >
         {displayMessages.length === 0 ? (
           <div className="text-center text-gray-400 mt-10 text-sm">무엇이든 물어보세요.</div>
         ) : (
@@ -291,17 +289,19 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         <div ref={messagesEndRef} />
       </div>
 
-      <ChatInput
-        input={input}
-        setInput={setInput}
-        onSend={handleSend}
-        files={files}
-        setFiles={setFiles}
-        isMaximized={isMaximized}
-        // ⬇ 전송/중지 토글 제어
-        isStreaming={isStreaming}
-        onAbort={handleAbort}
-      />
+      {/* 하단 고정 래퍼 */}
+      <div className="flex-none bg-white">
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          onSend={handleSend}
+          files={files}
+          setFiles={setFiles}
+          isMaximized={isMaximized}
+          isStreaming={isStreaming}
+          onAbort={handleAbort}
+        />
+      </div>
     </div>
   );
 }

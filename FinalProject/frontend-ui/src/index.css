@@ -10,6 +10,20 @@
     -webkit-app-region: no-drag;
 }
 
+/* 레이아웃 흔들림 방지: 최상위 래퍼들 고정 */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;   /* 가로/세로 스크롤을 상위에서 막고, 내부 스크롤러만 쓰게 */
+}
+
+/* 우측 패널(채팅을 감싸는 부모)에 붙일 클래스용 */
+.chat-pane {
+  min-width: 0;       /* flex 자식 가로 확장 금지 */
+  overflow: hidden;   /* 가로 확장/가로 스크롤 차단 */
+}
+
+
 /* 스크롤바 숨기기 유틸리티 */
 .no-scrollbar::-webkit-scrollbar {
     display: none;
