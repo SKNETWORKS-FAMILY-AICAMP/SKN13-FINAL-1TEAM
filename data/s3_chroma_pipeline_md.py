@@ -70,29 +70,33 @@ def build_s3_url(bucket_name: str, s3_key: str) -> str:
     return f"s3://{bucket_name}/{s3_key}"
 
 # ======================== S3 PDF 처리 및 임베딩 ========================
-def process_s3_pdfs_to_chroma(bucket_name: str, collection):
+def process_s3_mds_to_chroma(bucket_name: str, collection, s3_prefix: str = "kobaco_data_md/"):
     """
-    S3 버킷에서 PDF 파일을 다운로드하고, 텍스트로 변환한 후,
-    Chunking 및 임베딩을 거쳐 ChromaDB에 저장합니다.
-    
+    지정한 S3 prefix 경로 내부를 walk-in 하며 Markdown 파일만 처리하고 ChromaDB에 저장.
+
     Metadata 구조:
-    - source: 파일명만 (예: "보고서_2023.pdf")
-    - s3_path: 완전한 S3 URL (예: "s3://bucket/path/file.pdf")
+    - source: 파일명만 (예: "보고서_2023.md")
+    - s3_path: 완전한 S3 URL
     - chunk_index: 청크 번호
     - processed_at: 처리 시간
+    - file_size_bytes: 원본 파일 크기
     """
     s3_client = boto3.client('s3', region_name=AWS_REGION)
     paginator = s3_client.get_paginator('list_objects_v2')
-    
-    try:
-        s3_prefix = "kobaco_data/"
-        logger.info(f"S3 경로 '{s3_prefix}'에서 파일을 찾습니다.")
 
+    try:
+        logger.info(f"S3 경로 '{s3_prefix}'에서 Markdown 파일을 검색합니다...")
         pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_prefix)
-        pdf_files = [obj['Key'] for page in pages for obj in page.get('Contents', []) if obj['Key'].lower().endswith('.pdf')]
-        logger.info(f"S3 버킷 '{bucket_name}'의 '{s3_prefix}' 경로에서 {len(pdf_files)}개의 PDF 파일을 찾았습니다.")
+
+        md_files = [
+            obj['Key']
+            for page in pages
+            for obj in page.get('Contents', [])
+            if obj['Key'].lower().endswith('.md')
+        ]
+        logger.info(f"총 {len(md_files)}개의 Markdown 파일을 발견했습니다.")
     except Exception as e:
-        logger.error(f"S3 버킷에서 파일 목록을 가져오는 데 실패했습니다: {e}")
+        logger.error(f"S3 버킷에서 Markdown 파일 목록 가져오기 실패: {e}", exc_info=True)
         return
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -104,66 +108,55 @@ def process_s3_pdfs_to_chroma(bucket_name: str, collection):
 
     processed_at = datetime.now().isoformat()
 
-    for s3_key in pdf_files:
-        # 파일명과 S3 경로 분리
+    for s3_key in md_files:
         filename = extract_filename_from_s3_key(s3_key)
         s3_full_path = build_s3_url(bucket_name, s3_key)
-        
+
         logger.info(f"📄 파일명: {filename}")
         logger.info(f"🔗 S3 경로: {s3_full_path}")
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
-            local_pdf_path = temp_dir_path / filename  # 파일명만 사용
-            
+            local_md_path = temp_dir_path / filename
+
             try:
                 logger.info(f"'{filename}' 다운로드 중...")
-                s3_client.download_file(bucket_name, s3_key, str(local_pdf_path))
+                s3_client.download_file(bucket_name, s3_key, str(local_md_path))
 
-                logger.info(f"'{filename}' 처리 중...")
-                processed_md_path = process_pdf_to_markdown(local_pdf_path, temp_dir_path)
-                
-                if not processed_md_path or not processed_md_path.exists():
-                    logger.warning(f"'{filename}' 처리 후 결과 파일이 생성되지 않았습니다.")
-                    continue
-
-                full_text = processed_md_path.read_text(encoding='utf-8')
+                full_text = local_md_path.read_text(encoding='utf-8')
                 if not full_text.strip():
-                    logger.warning(f"'{filename}'에서 텍스트를 추출하지 못했습니다.")
+                    logger.warning(f"'{filename}'에서 텍스트 추출 실패.")
                     continue
-                
+
                 chunks = text_splitter.split_text(full_text)
                 logger.info(f"'{filename}'를 {len(chunks)}개의 chunk로 분할했습니다.")
 
-                # 📝 개선된 Metadata 구조
                 metadatas = []
                 for i, chunk in enumerate(chunks):
                     metadata = {
-                        "source": filename,           # 🏷️ 파일명만 (예: "보고서_2023.pdf")
-                        "s3_path": s3_full_path,     # 🔗 완전한 S3 URL
-                        "chunk_index": i,            # 📊 청크 번호
-                        "total_chunks": len(chunks), # 📊 전체 청크 수
-                        "processed_at": processed_at, # ⏰ 처리 시간
-                        "file_size_bytes": os.path.getsize(local_pdf_path), # 📏 파일 크기
+                        "source": filename,
+                        "s3_path": s3_full_path,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
+                        "processed_at": processed_at,
+                        "file_size_bytes": os.path.getsize(local_md_path),
+                        "file_type": "markdown",
                     }
                     metadatas.append(metadata)
 
                 if chunks:
-                    # 고유한 ID 생성 (파일명 기반으로 더 깔끔하게)
                     doc_ids = [f"{filename.replace('.', '_')}_chunk_{i}" for i in range(len(chunks))]
-                    
                     collection.add_texts(
                         texts=chunks,
                         metadatas=metadatas,
                         ids=doc_ids
                     )
-                    logger.info(f"✅ '{filename}'의 {len(chunks)}개 chunk를 ChromaDB에 성공적으로 추가했습니다.")
-                    
-                    # 디버깅 정보 출력
+                    logger.info(f"✅ '{filename}'의 {len(chunks)}개 chunk를 ChromaDB에 저장 완료.")
                     logger.info(f"   📋 Sample metadata: {metadatas[0]}")
 
             except Exception as e:
                 logger.error(f"❌ '{filename}' 처리 중 오류 발생: {e}", exc_info=True)
+
 
 def verify_stored_data(collection, sample_filename: str = None):
     """
@@ -205,14 +198,14 @@ if __name__ == "__main__":
     else:
         try:
             chroma_collection = get_chroma_collection()
-            
-            logger.info("🚀 S3 PDF 처리를 시작합니다...")
-            process_s3_pdfs_to_chroma(AWS_S3_BUCKET, chroma_collection)
-            
+
+            logger.info("🚀 S3 Markdown 처리 시작...")
+            process_s3_mds_to_chroma(AWS_S3_BUCKET, chroma_collection, s3_prefix="kobaco_data_md/")
+
             logger.info("🔍 처리된 데이터 검증 중...")
             verify_stored_data(chroma_collection)
-            
-            logger.info("✅ 모든 PDF 파일 처리가 완료되었습니다.")
-            
+
+            logger.info("✅ 모든 Markdown 파일 처리가 완료되었습니다.")
+
         except Exception as e:
             logger.critical(f"💥 파이프라인 실행 중 심각한 오류 발생: {e}", exc_info=True)
