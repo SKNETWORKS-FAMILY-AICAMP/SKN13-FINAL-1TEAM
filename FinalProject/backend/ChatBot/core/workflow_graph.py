@@ -68,7 +68,8 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         # Add specialized agent nodes (using new class-based agents)
         workflow.add_node("document_search", self._document_search_node)
         workflow.add_node("document_edit", self._document_edit_node) 
-        workflow.add_node("general_chat", self._general_chat_node)
+        # workflow.add_node("general_chat", self._general_chat_node)  # 업무 전용으로 비활성화
+        workflow.add_node("business_rejection", self._business_rejection_node)
         
         # Add workflow completion tracker
         workflow.add_node("workflow_tracker", self._workflow_tracker_node)
@@ -87,7 +88,8 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
                 # Agent routing
                 "document_search": "document_search", 
                 "document_edit": "document_edit",
-                "general_chat": "general_chat",
+                # "general_chat": "general_chat",  # 업무 전용으로 비활성화
+                "business_rejection": "business_rejection",
                 
                 # Workflow control
                 "workflow_tracker": "workflow_tracker",
@@ -138,12 +140,19 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
             return edit_agent.process(state)
         return {"workflow_error": "DocumentEditorAgent not found"}
     
-    def _general_chat_node(self, state: AgentState) -> Dict[str, Any]:
-        """General chat processing node."""
-        chat_agent = self.agents_registry.get("general_chat")
-        if chat_agent:
-            return chat_agent.process(state)
-        return {"workflow_error": "GeneralChatAgent not found"}
+    # def _general_chat_node(self, state: AgentState) -> Dict[str, Any]:
+    #     """General chat processing node."""
+    #     chat_agent = self.agents_registry.get("general_chat")
+    #     if chat_agent:
+    #         return chat_agent.process(state)
+    #     return {"workflow_error": "GeneralChatAgent not found"}
+    
+    def _business_rejection_node(self, state: AgentState) -> Dict[str, Any]:
+        """Business rejection processing node."""
+        rejection_agent = self.agents_registry.get("business_rejection")
+        if rejection_agent:
+            return rejection_agent.process(state)
+        return {"workflow_error": "BusinessRejectionAgent not found"}
     
     def _workflow_tracker_node(self, state: AgentState) -> Dict[str, Any]:
         """Track workflow progress and update state."""
@@ -241,7 +250,8 @@ class SimpleRoutingGraph(BaseWorkflowGraph):
             self._legacy_route_question,
             {
                 "document_search": "document_search",
-                "general_chat": "general_chat", 
+                # "general_chat": "general_chat",  # 업무 전용으로 비활성화
+                "business_rejection": "business_rejection",
                 "document_edit": "document_edit",
                 "request_document": "request_document"
             }
