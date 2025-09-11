@@ -88,8 +88,7 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
     
     return {
         "workflow_step": next_step,
-        "next_agents": next_agents,
-        "workflow_complete": (next_step == WorkflowStep.WORKFLOW_COMPLETED)
+        "next_agents": next_agents
     }
 
 def request_document_node(state: AgentState) -> dict:
@@ -218,43 +217,68 @@ def pattern_based_intent_analysis(user_input: str, state: AgentState) -> Dict[st
 def llm_based_intent_analysis(user_input: str, state: AgentState) -> Dict[str, Any]:
     """LLM-based fallback for complex intent analysis."""
     
-    llm = ChatOpenAI(model_name='gpt-4o-mini', temperature=0)  # Use cheaper model
+    llm = ChatOpenAI(model_name='gpt-4o-mini', temperature=0)
     
-    prompt = f"""Classify user intent concisely:
+    prompt = f"""Classify user intent concisely based on the rules.
 
 User input: "{user_input}"
 
-Respond with JSON only:
-{{
-    "primary_intent": "search|edit|rejection|multi_step",
-    "agents": ["document_search"|"document_edit"|"business_rejection"],
-    "next_step": "search_requested|edit_requested|workflow_completed",
-    "confidence": 0.0-1.0
-}}
+Respond with JSON only.
 
-Rules:
-- search: finding/downloading documents
-- edit: modifying document content  
-- rejection: general conversation/analysis or anything not related to search or edit
-- multi_step: requires multiple agents (e.g., "find report and summarize")"""
+**Rules & JSON format:**
+- **For document search:**
+  {{
+      "primary_intent": "search",
+      "agents": ["document_search"],
+      "next_step": "search_requested",
+      "confidence": 0.9
+  }}
+- **For document editing:**
+  {{
+      "primary_intent": "edit",
+      "agents": ["document_edit"],
+      "next_step": "edit_requested",
+      "confidence": 0.9
+  }}
+- **For multi-step tasks (e.g., "find and summarize"):**
+  {{
+      "primary_intent": "multi_step",
+      "agents": ["document_search", "document_edit"],
+      "next_step": "search_requested",
+      "confidence": 0.9
+  }}
+- **For anything else (general chat, non-work topics):**
+  {{
+      "primary_intent": "rejection",
+      "agents": ["business_rejection"],
+      "next_step": "workflow_completed",
+      "confidence": 0.9
+  }}
+"""
 
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
         import json
-        result = json.loads(response.content)
+        # Find the JSON block in the response
+        json_match = re.search(r'```json\n(.*?)\n```', response.content, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # Fallback for raw JSON
+            json_str = response.content
+        
+        result = json.loads(json_str)
         return result
     except Exception as e:
         from ..utils.error_handler import log_error_with_context, is_retryable_error
         log_error_with_context(e, {"function": "llm_based_intent_analysis", "input": user_input[:50]})
         
-        # 재시도 가능한 에러면 confidence를 낮추고, 아니면 더 낮춤
-        confidence = 0.4 if is_retryable_error(e) else 0.2
-        
         return {
             "agents": ["business_rejection"],
             "next_step": WorkflowStep.WORKFLOW_COMPLETED,
-            "confidence": confidence
+            "confidence": 0.4
         }
+
 
 # --- Workflow Decision Functions ---
 

@@ -66,21 +66,36 @@ def _create_tool_message(
 
 # 도구 시작 이벤트를 처리하고 SSE(Server-Sent Events)를 전송하는 함수
 async def _handle_tool_start(event: dict, session_id: str, db: Session):
-    tool_name = event.get("name", "Unknown Tool") # 도구 이름
-    tool_input = event.get("data", {}).get("input", {}) # 도구 입력
-    tool_call_id = event.get("tool_call_id") # 도구 호출 ID
-    tool_artifact = event.get("artifact") # 도구 아티팩트
+    tool_name = event.get("name", "Unknown Tool")
+    tool_input = event.get("data", {}).get("input", {})
 
-    # 사용자 화면에 표시할 생각 중 메시지
-    thinking_message = (
-#        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
-        f"```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
-    )
+    # 사용자 친화적인 메시지 생성
+    user_friendly_message = ""
+    if tool_name == "hybrid_document_search_tool":
+        keywords = tool_input.get('keywords', [])
+        if keywords:
+            user_friendly_message = f"'{', '.join(keywords)}' 관련 문서를 검색하고 있습니다... 🔎"
+        else:
+            user_friendly_message = "문서를 검색하고 있습니다... 🔎"
+    elif tool_name == "get_presigned_download_url":
+        file_key = tool_input.get('file_key', '문서')
+        user_friendly_message = f"'{file_key}'의 다운로드 링크를 생성하고 있습니다... 🔗"
+    elif tool_name == "run_document_edit":
+        user_friendly_message = "문서 편집 작업을 준비하고 있습니다... ✍️"
+    else:
+        user_friendly_message = "요청하신 작업을 처리하기 위해 도구를 준비하고 있습니다... ⚙️"
 
-    # 1. ChatMessage 저장 (AI의 생각 중 메시지)
-    chat_msg = _create_chat_message(db, session_id, "assistant", thinking_message)
+    # thinking_message를 사용자 친화적인 메시지로 교체
+    thinking_message = user_friendly_message
 
-    # 2. ToolMessageRecord 저장 (도구 호출 시작 기록)
+    # 1. ChatMessage 저장 (AI의 생각 중 메시지) - DB에는 상세 정보 저장
+    db_message_content = f"[Tool Start: {tool_name}]\nInput:\n```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}
+```"
+    chat_msg = _create_chat_message(db, session_id, "assistant", db_message_content)
+
+    # 2. ToolMessageRecord 저장 (기존 로직 유지)
+    tool_call_id = event.get("tool_call_id")
+    tool_artifact = event.get("artifact")
     tool_raw_content = {"tool_name": tool_name, "input": tool_input}
     _create_tool_message(
         db,
@@ -91,8 +106,9 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
         raw_content=tool_raw_content,
     )
 
-    # 3. SSE 전송 (프론트엔드로 생각 중 메시지 전송)
+    # 3. SSE 전송 (프론트엔드로 사용자 친화적 메시지 전송)
     yield f"data: {json.dumps({'thinking_message': thinking_message}, ensure_ascii=False)}\n\n"
+
 
 # 도구 종료 이벤트를 처리하고 SSE를 전송하는 함수
 async def _handle_tool_end(event: dict, session_id: str, db: Session):
