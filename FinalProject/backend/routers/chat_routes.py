@@ -120,6 +120,35 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
         content_to_send = raw_output.content if isinstance(raw_output, ToolMessage) else raw_output
         print(f"--- Sending document_update for replace_text_in_document. Content length: {len(content_to_send) if isinstance(content_to_send, str) else 'N/A'} ---")
         yield f"data: {json.dumps({'document_update': content_to_send}, ensure_ascii=False)}\n\n"
+    
+    # 로컬 문서 검색 도구 또는 하이브리드 검색 도구인 경우, 프론트엔드에 문서 목록 전송
+    if tool_name in ["local_document_search_tool", "hybrid_document_search_tool"]:
+        try:
+            # raw_output이 ToolMessage 객체인 경우 content 추출
+            if isinstance(raw_output, ToolMessage):
+                tool_output = raw_output.content
+            else:
+                tool_output = raw_output
+            
+            # 문자열인 경우 JSON으로 파싱 시도
+            if isinstance(tool_output, str):
+                import json as json_module
+                try:
+                    parsed_output = json_module.loads(tool_output)
+                except json_module.JSONDecodeError:
+                    parsed_output = {"found_documents": []}
+            else:
+                parsed_output = tool_output
+            
+            # 찾은 문서가 있으면 프론트엔드로 전송
+            if isinstance(parsed_output, dict) and "found_documents" in parsed_output:
+                documents = parsed_output["found_documents"]
+                if documents:
+                    print(f"--- Sending local_documents. Found {len(documents)} documents ---")
+                    yield f"data: {json.dumps({'local_documents': documents}, ensure_ascii=False)}\n\n"
+                    
+        except Exception as e:
+            print(f"--- Error processing local document search results: {e} ---")
 
 #    formatted_output = "[Tool Output]: " # 도구 출력 포맷팅을 위한 초기 문자열
     formatted_output = ""

@@ -131,6 +131,41 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     setIsStreaming(false);
   }, [closeEventSource]);
 
+  // 문서 선택 처리
+  const handleDocumentSelect = useCallback(async (document) => {
+    console.log('[ChatWindow] 문서 선택됨:', document);
+    
+    try {
+      // Electron IPC를 통해 문서 열기 요청
+      const result = await window.electron?.invoke?.('document:openFromChat', {
+        filePath: document.path,
+        filename: document.filename,
+        source: document.source  // S3 또는 local 구분
+      });
+      
+      if (result?.success) {
+        console.log('[ChatWindow] 문서 열기 성공');
+        // 성공 메시지 추가
+        appendMessage({
+          role: 'assistant',
+          content: `✅ "${document.filename}" 문서를 문서편집창에서 열었습니다.`
+        });
+      } else {
+        console.error('[ChatWindow] 문서 열기 실패:', result?.error);
+        appendMessage({
+          role: 'assistant',
+          content: `❌ 문서를 여는 중 오류가 발생했습니다: ${result?.error || '알 수 없는 오류'}`
+        });
+      }
+    } catch (error) {
+      console.error('[ChatWindow] 문서 선택 처리 중 오류:', error);
+      appendMessage({
+        role: 'assistant',
+        content: `❌ 문서를 여는 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
+  }, [appendMessage]);
+
   // 메시지 전송
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
@@ -210,6 +245,59 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
       onThinking: (msg) => {
         appendMessage({ role: 'thinking', content: msg });
       },
+      onLocalDocuments: async (s3Documents) => {
+        console.log('📄 S3 문서 검색 결과:', s3Documents);
+        
+        // 로컬 문서 검색 병행 실행
+        let localDocuments = [];
+        try {
+          const localResult = await window.electron?.searchLocalDocuments?.(prompt, 3);
+          if (localResult?.success && localResult.documents) {
+            localDocuments = localResult.documents;
+            console.log('📁 로컬 문서 검색 결과:', localDocuments.length, '개');
+          }
+        } catch (error) {
+          console.error('❌ 로컬 문서 검색 실패:', error);
+        }
+        
+        // 로컬 + S3 결과 통합 (로컬 우선)
+        const allDocuments = [...localDocuments, ...s3Documents];
+        
+        // 중복 제거 (같은 파일명인 경우 로컬 우선)
+        const uniqueDocuments = [];
+        const seenFilenames = new Set();
+        
+        for (const doc of allDocuments) {
+          const baseName = doc.filename.toLowerCase().replace(/\.[^/.]+$/, ""); // 확장자 제거
+          if (!seenFilenames.has(baseName)) {
+            seenFilenames.add(baseName);
+            uniqueDocuments.push(doc);
+          }
+        }
+        
+        // 최대 3개로 제한
+        const finalDocuments = uniqueDocuments.slice(0, 3);
+        
+        console.log('🔄 통합 검색 결과:', {
+          local: localDocuments.length,
+          s3: s3Documents.length,
+          unique: uniqueDocuments.length,
+          final: finalDocuments.length
+        });
+        
+        // 마지막 AI 메시지에 문서 정보 추가
+        setMessages(prev => {
+          const newMessages = [...prev];
+          const lastIdx = newMessages.length - 1;
+          if (lastIdx >= 0 && newMessages[lastIdx].role === 'assistant') {
+            newMessages[lastIdx] = {
+              ...newMessages[lastIdx],
+              documents: finalDocuments
+            };
+          }
+          return newMessages;
+        });
+      },
       onDocumentUpdate: (docUpdate) => {
         console.log('📝 document_update 감지됨:', docUpdate.substring(0, 100) + '...');
         if (window.fsBridge?.sendDocumentUpdate) {
@@ -284,7 +372,13 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         {displayMessages.length === 0 ? (
           <div className="text-center text-gray-400 mt-10 text-sm">무엇이든 물어보세요.</div>
         ) : (
-          displayMessages.map((msg, idx) => <MessageBubble key={idx} message={msg} />)
+          displayMessages.map((msg, idx) => (
+            <MessageBubble 
+              key={idx} 
+              message={msg} 
+              onDocumentSelect={handleDocumentSelect}
+            />
+          ))
         )}
         <div ref={messagesEndRef} />
       </div>

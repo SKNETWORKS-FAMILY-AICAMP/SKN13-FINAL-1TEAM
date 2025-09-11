@@ -17,3 +17,6 @@ python-jose[cryptography]
 html2docx
 python-docx
 beautifulsoup4
+scikit-learn
+numpy
+boto3

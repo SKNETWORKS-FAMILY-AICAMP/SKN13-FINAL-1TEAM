@@ -101,6 +101,42 @@ export default function DocEditor({ onClose }) {
     return () => { typeof off === "function" && off(); };
   }, []);
 
+  // ✅ [NEW] 챗봇에서 온 문서 열기 요청 처리
+  useEffect(() => {
+    if (!window.electron?.onDocumentOpenFromChat) return;
+    
+    const handleDocumentOpen = ({ content, filename, filePath }) => {
+      console.log('📄 [DocEditor] 챗봇에서 문서 열기 요청:', { filename, filePath });
+      
+      try {
+        // 에디터에 내용 설정
+        if (editorRef.current && !editorRef.current.isDestroyed) {
+          editorRef.current.commands.setContent(content || "", false);
+        }
+        
+        setEditorContent(content || "");
+        setDocumentTitle(filename || "문서");
+        setIsDirty(false);
+        
+        // 로컬스토리지에도 저장
+        try {
+          localStorage.setItem("document-editor-content", content || "");
+          localStorage.setItem("document-editor-title", filename || "문서");
+        } catch (e) {
+          console.warn('로컬스토리지 저장 실패:', e);
+        }
+        
+        console.log('✅ [DocEditor] 챗봇 요청 문서 로드 완료');
+        
+      } catch (error) {
+        console.error('❌ [DocEditor] 챗봇 문서 로드 중 오류:', error);
+      }
+    };
+    
+    const off = window.electron.onDocumentOpenFromChat(handleDocumentOpen);
+    return () => { typeof off === "function" && off(); };
+  }, []);
+
   // 로컬 저장 복원
   useEffect(() => {
     try {
