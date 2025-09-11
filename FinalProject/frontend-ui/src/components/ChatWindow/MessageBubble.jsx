@@ -119,7 +119,63 @@ const FileChip = ({ name, url }) => (
   </a>
 );
 
-export default function MessageBubble({ message }) {
+// 문서 선택 컴포넌트
+const DocumentSelector = ({ documents, onSelect }) => {
+  if (!documents || documents.length === 0) return null;
+
+  return (
+    <div className="w-full mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+      <div className="text-sm font-medium text-blue-800 mb-2">
+        📄 찾은 문서 ({documents.length}개)
+      </div>
+      <div className="space-y-2">
+        {documents.map((doc, index) => (
+          <button
+            key={index}
+            onClick={() => onSelect(doc)}
+            className="w-full text-left p-3 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-gray-900 truncate">
+                    {doc.filename}
+                  </div>
+                  {doc.source === 's3' && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                      ☁️ S3
+                    </span>
+                  )}
+                  {doc.source === 'local' && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                      📁 로컬
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-gray-500 truncate">
+                  {doc.relative_path}
+                </div>
+              </div>
+              <div className="ml-3 flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  {doc.extension.replace('.', '').toUpperCase()}
+                </span>
+                <span className="text-xs text-blue-600 font-medium">
+                  {Math.round(doc.score * 100)}% 일치
+                </span>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 text-xs text-gray-500">
+        원하는 문서를 클릭하면 문서편집창에서 열립니다.
+      </div>
+    </div>
+  );
+};
+
+export default function MessageBubble({ message, onDocumentSelect }) {
   const role = message?.role || 'assistant';
   const isUser = role === 'user';
 
@@ -320,6 +376,14 @@ export default function MessageBubble({ message }) {
               );
             })()
           )
+        )}
+
+        {/* 문서 선택기 - AI 메시지이고 documents가 있을 때만 표시 */}
+        {!isUser && message?.documents && (
+          <DocumentSelector 
+            documents={message.documents} 
+            onSelect={onDocumentSelect}
+          />
         )}
       </div>
 

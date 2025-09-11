@@ -10,6 +10,7 @@ export function streamLLM({
   onThinking,
   onDocumentUpdate,
   onNeedsDocument,
+  onLocalDocuments,
   onDone,
   onError,
 }) {
@@ -148,6 +149,11 @@ export function streamLLM({
 
               if (parsed.needs_document_content) {
                 onNeedsDocument?.(parsed.agent_context);
+              }
+
+              if (parsed.local_documents) {
+                console.log('🎯 local_documents 감지!', parsed.local_documents);
+                onLocalDocuments?.(parsed.local_documents);
               }
 
             } catch (parseError) {

@@ -55,6 +55,13 @@ const electronAPI = {
 /* ✅ (추가) 메인 로그인 창 다시 띄우기 */
 electronAPI.showMain = () => ipcRenderer.send("app:show-main");
 
+/* ✅ (추가) 챗봇 문서 열기 관련 */
+electronAPI.onDocumentOpenFromChat = (cb) => {
+  const handler = (_evt, ...args) => cb?.(...args);
+  ipcRenderer.on("document:openFromChat", handler);
+  return () => ipcRenderer.removeListener("document:openFromChat", handler);
+};
+
 /* ✅ 로그아웃 전용 브리지 — 기본 스코프 'all' */
 const authAPI = {
   requestLogout: (scope = "all") => ipcRenderer.send("app:logout-request", scope),
@@ -111,6 +118,16 @@ const fsBridge = {
     return () => ipcRenderer.removeListener("document:updated", handler);
   },
   sendDocumentUpdate: (content) => ipcRenderer.send("document:sendUpdate", content),
+  
+  // ✅ [NEW] 챗봇에서 문서 열기 요청 처리
+  onDocumentOpenFromChat: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("document:openFromChat", handler);
+    return () => ipcRenderer.removeListener("document:openFromChat", handler);
+  },
+  
+  // ✅ [NEW] 로컬 문서 검색
+  searchLocalDocuments: (query, maxResults = 3) => ipcRenderer.invoke('document:searchLocal', { query, maxResults }),
 };
 
 /* S3 공유 브리지 */
