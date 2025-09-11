@@ -34,6 +34,14 @@ function isTempOrSystemName(name) {
   return false;
 }
 
+// ✅ KEY에 포함된 타임스탬프 접두사(예: 1757575714855-파일명.ext) 제거 → 표시/저장용 "문서 제목" 생성
+function prettyName(raw) {
+  const base = String(raw || "").split("/").pop();     // 키에서 파일명만 추출
+  // 10자리 이상 숫자 + 구분자(- 또는 _) 접두사 제거
+  const cleaned = base.replace(/^\d{10,}[-_]+/, "");
+  return cleaned || base;
+}
+
 export default function S3Explorer({ onPrefixChange }) {
   // 현재 prefix (빈 문자열이면 루트)
   const [prefix, setPrefix] = useState("");
@@ -84,7 +92,10 @@ export default function S3Explorer({ onPrefixChange }) {
       // 폴더/파일 (임시/시스템 파일은 UI에서 숨김)
       const folders = (out?.folders || []).filter(f => !!f);
       const filesRaw = (out?.files || []).filter(f => !!f);
-      const files = filesRaw.filter(f => !isTempOrSystemName(f.name));
+      // ✅ 목록 표시/저장용 displayName 생성(키/접두사 숨김)
+      const files = filesRaw
+        .filter(f => !isTempOrSystemName(f.name))
+        .map(f => ({ ...f, displayName: prettyName(f.name) }));
 
       // (선택) 정렬: 폴더는 이름 오름차순, 파일은 최근 수정 내림차순
       folders.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
@@ -139,7 +150,7 @@ export default function S3Explorer({ onPrefixChange }) {
 
   const openFile = async (f) => {
     try {
-      await window.s3Shared.downloadAndOpen(f.key, f.name);
+      await window.s3Shared.downloadAndOpen(f.key, f.displayName || f.name);
     } catch (e) {
       setError(`다운로드/열기 실패: ${String(e?.message || e)}`);
     }
@@ -184,10 +195,8 @@ export default function S3Explorer({ onPrefixChange }) {
                 key={f.id}
                 className="border rounded-xl p-3 text-left hover:bg-gray-50"
                 onClick={() => enterFolder(f.prefix)}
-                title={f.prefix}
               >
                 <div className="font-medium">{f.name || "(이름없음)"}</div>
-                <div className="text-xs text-gray-500 truncate">{f.prefix}</div>
               </button>
             ))}
             {(!loading && data.folders.length === 0) && (
@@ -203,7 +212,7 @@ export default function S3Explorer({ onPrefixChange }) {
             {data.files.map(f => (
               <div key={f.id} className="flex items-center justify-between p-3">
                 <div className="min-w-0">
-                  <div className="font-medium truncate">{f.name}</div>
+                  <div className="font-medium truncate">{f.displayName || f.name}</div>
                   <div className="text-xs text-gray-500">
                     {f.size?.toLocaleString?.()} byte · {f.lastModified || ""}
                   </div>

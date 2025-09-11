@@ -74,8 +74,6 @@ const {
 // 윈도우 작업표시줄/트레이 아이콘 정상 표시용
 app.setAppUserModelId("com.yourteam.clicka");
 
-// 📂 로컬 다운로드 디렉토리
-const LOCAL_DOWNLOAD_DIR = path.join(app.getPath("documents"), "S3-Shared-Downloads");
 
 // 📂 고정 기본 문서 디렉토리: C:\ClickA Documents
 const FIXED_DOCS_PATH = "C:\\ClickA Documents";
@@ -172,18 +170,6 @@ ipcMain.handle("s3:list", async (_evt, { prefix }) => {
   return { prefix: Prefix, folders, files };
 });
 
-ipcMain.handle("s3:downloadAndOpen", async (_evt, { key, saveAs }) => {
-  await ensureDir(LOCAL_DOWNLOAD_DIR);
-  const filename = saveAs || path.basename(key);
-  const target = path.join(LOCAL_DOWNLOAD_DIR, filename);
-
-  const res = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-  await pipe(res.Body, fs.createWriteStream(target));
-
-  await shell.openPath(target);
-  return { localPath: target };
-});
-
 /* [ADD] S3에 로컬 경로의 파일을 업로드하는 IPC */
 ipcMain.handle("s3shared:uploadFromPath", async (_evt, { localPath, destPrefix = "" }) => {
   if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
@@ -257,9 +243,10 @@ ipcMain.handle("s3shared:list", async (_evt, { prefix = "" }) => {
 ipcMain.handle("s3shared:downloadAndOpen", async (_evt, { key, saveAs }) => {
   if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
 
-  await ensureDir(LOCAL_DOWNLOAD_DIR);
+  const base = resolveBaseDir();       // => C:\ClickA Documents
+  await ensureDir(base);
   const filename = saveAs || path.basename(key);
-  const target = path.join(LOCAL_DOWNLOAD_DIR, filename);
+  const target = path.join(base, filename);
 
   const res = await s3.send(new GetObjectCommand({ Bucket: S3_SHARED_BUCKET, Key: key }));
   await pipe(res.Body, fs.createWriteStream(target));
@@ -1050,224 +1037,6 @@ ipcMain.on("document:sendUpdate", (_evt, content) => {
     console.warn("[MAIN] 기능창이 없거나 파괴됨, 이벤트 전송 실패");
   }
 });
-
-// ✅ [NEW] 로컬 문서 검색 IPC 핸들러
-ipcMain.handle("document:searchLocal", async (_evt, { query, maxResults = 3 }) => {
-  console.log("[MAIN] 로컬 문서 검색 요청:", { query, maxResults });
-  
-  const LOCAL_DOCS_PATH = "C:\\ClickA Documents";
-  const SUPPORTED_EXTENSIONS = ['.html', '.docx', '.md', '.txt'];
-  const EXTENSION_PRIORITY = {'.html': 1, '.docx': 2, '.md': 3, '.txt': 4};
-  
-  try {
-    // 로컬 디렉토리 존재 확인
-    if (!fs.existsSync(LOCAL_DOCS_PATH)) {
-      console.log("[MAIN] 로컬 문서 디렉토리가 존재하지 않음:", LOCAL_DOCS_PATH);
-      return { success: true, documents: [] };
-    }
-    
-    // 모든 지원 파일 찾기
-    const files = [];
-    
-    function scanDirectory(dirPath) {
-      try {
-        const items = fs.readdirSync(dirPath);
-        
-        for (const item of items) {
-          const fullPath = path.join(dirPath, item);
-          const stat = fs.statSync(fullPath);
-          
-          if (stat.isDirectory()) {
-            scanDirectory(fullPath); // 하위 디렉토리 재귀 검색
-          } else {
-            const extension = path.extname(item).toLowerCase();
-            if (SUPPORTED_EXTENSIONS.includes(extension)) {
-              files.push({
-                filename: item,
-                path: fullPath,
-                extension: extension,
-                priority: EXTENSION_PRIORITY[extension],
-                size: stat.size,
-                modified_time: stat.mtime.getTime(),
-                relative_path: path.relative(LOCAL_DOCS_PATH, fullPath),
-                source: 'local'
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error("[MAIN] 디렉토리 스캔 에러:", error);
-      }
-    }
-    
-    scanDirectory(LOCAL_DOCS_PATH);
-    console.log(`[MAIN] 로컬에서 ${files.length}개 파일 발견`);
-    
-    // 파일명 유사도 계산
-    const queryLower = query.toLowerCase();
-    const scoredFiles = [];
-    
-    for (const file of files) {
-      const filenameLower = file.filename.toLowerCase();
-      let score = 0;
-      
-      // 정확한 매치
-      if (filenameLower.includes(queryLower)) {
-        score = 1.0;
-      }
-      // 부분 매치
-      else {
-        const queryWords = queryLower.split(/\s+/);
-        const matchCount = queryWords.filter(word => filenameLower.includes(word)).length;
-        score = matchCount / queryWords.length * 0.7;
-      }
-      
-      if (score > 0) {
-        scoredFiles.push({
-          ...file,
-          filename_score: score,
-          content_score: 0,
-          total_score: score,
-          score: Math.round(score * 1000) / 1000
-        });
-      }
-    }
-    
-    // 점수순 정렬 및 결과 제한
-    scoredFiles.sort((a, b) => b.total_score - a.total_score);
-    const results = scoredFiles.slice(0, maxResults);
-    
-    console.log(`[MAIN] 로컬 검색 결과: ${results.length}개`);
-    for (let i = 0; i < results.length; i++) {
-      console.log(`  ${i+1}. ${results[i].filename} (score: ${results[i].total_score.toFixed(3)})`);
-    }
-    
-    return { success: true, documents: results };
-    
-  } catch (error) {
-    console.error("[MAIN] 로컬 문서 검색 에러:", error);
-    return { success: false, error: error.message, documents: [] };
-  }
-});
-
-// ✅ [NEW] 챗봇에서 문서편집창으로 파일 열기 요청
-ipcMain.handle("document:openFromChat", async (_evt, { filePath, filename, source = 'local' }) => {
-  console.log("[MAIN] 챗봇에서 문서 열기 요청:", { filePath, filename, source });
-  
-  try {
-    let content = "";
-    let actualFilename = filename;
-    
-    if (source === 's3') {
-      // S3 파일 처리: 다운로드해서 내용 읽기
-      console.log("[MAIN] S3 파일 다운로드 중:", filePath);
-      
-      try {
-        // S3에서 파일 다운로드
-        const getObjectResponse = await s3.send(new GetObjectCommand({ 
-          Bucket: "clickabbbucket", 
-          Key: filePath 
-        }));
-        
-        // 스트림을 문자열로 변환
-        const chunks = [];
-        for await (const chunk of getObjectResponse.Body) {
-          chunks.push(chunk);
-        }
-        content = Buffer.concat(chunks).toString('utf-8');
-        console.log("[MAIN] S3 파일 다운로드 완료");
-        
-      } catch (s3Error) {
-        console.error("[MAIN] S3 파일 다운로드 실패:", s3Error);
-        return { success: false, error: `S3 파일 다운로드 실패: ${s3Error.message}` };
-      }
-      
-    } else {
-      // 로컬 파일 처리
-      if (!fs.existsSync(filePath)) {
-        console.error("[MAIN] 로컬 파일이 존재하지 않음:", filePath);
-        return { success: false, error: "파일을 찾을 수 없습니다." };
-      }
-      
-      // 파일 내용 읽기
-      content = await fs.promises.readFile(filePath, "utf-8");
-    }
-    
-    // 파일 확장자에 따른 처리
-    const extension = path.extname(actualFilename).toLowerCase();
-    let processedContent = content;
-    
-    if (extension === '.md' || extension === '.txt') {
-      // 마크다운/텍스트를 간단한 HTML로 변환
-      processedContent = content
-        .replace(/\n/g, '<br>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>');
-    } else if (extension === '.docx') {
-      // DOCX 파일은 mammoth로 변환
-      const mammoth = require('mammoth');
-      
-      if (source === 's3') {
-        // S3 DOCX 파일: 바이너리 데이터로 다시 다운로드
-        try {
-          const getObjectResponse = await s3.send(new GetObjectCommand({ 
-            Bucket: "clickabbbucket", 
-            Key: filePath 
-          }));
-          
-          const chunks = [];
-          for await (const chunk of getObjectResponse.Body) {
-            chunks.push(chunk);
-          }
-          const buffer = Buffer.concat(chunks);
-          
-          // 바이너리 버퍼로 변환
-          const result = await mammoth.convertToHtml({ buffer: buffer });
-          processedContent = result.value;
-          
-        } catch (docxError) {
-          console.error("[MAIN] S3 DOCX 변환 실패:", docxError);
-          return { success: false, error: `DOCX 파일 처리 실패: ${docxError.message}` };
-        }
-      } else {
-        // 로컬 DOCX 파일
-        const result = await mammoth.convertToHtml({ path: filePath });
-        processedContent = result.value;
-      }
-    }
-    // HTML은 그대로 사용
-
-    // 문서 내용을 전역 상태에 저장
-    currentDocumentContent = processedContent;
-    
-    // 기능창에 문서 열기 신호 전송
-    if (featureWindow && !featureWindow.isDestroyed()) {
-      featureWindow.webContents.send("document:openFromChat", {
-        content: processedContent,
-        filename: actualFilename || (source === 's3' ? filePath.split('/').pop() : path.basename(filePath)),
-        filePath: filePath,
-        source: source
-      });
-      
-      // 기능창을 앞으로 가져오기
-      if (featureWindow.isMinimized()) featureWindow.restore();
-      featureWindow.show();
-      featureWindow.focus();
-      featureWindow.setSkipTaskbar(false);
-      
-      console.log("[MAIN] 문서 열기 신호를 기능창으로 전송 완료");
-      return { success: true };
-    } else {
-      console.warn("[MAIN] 기능창이 없거나 파괴됨");
-      return { success: false, error: "문서편집창을 찾을 수 없습니다." };
-    }
-    
-  } catch (error) {
-    console.error("[MAIN] 문서 열기 중 오류:", error);
-    return { success: false, error: error.message };
-  }
-});
-
 
 /* ============================================================================
  *   역할/로그인 관련 IPC
