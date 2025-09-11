@@ -151,7 +151,7 @@ def process_s3_pdfs_to_chroma(bucket_name: str, collection):
                 if chunks:
                     # 고유한 ID 생성 (파일명 기반으로 더 깔끔하게)
                     doc_ids = [f"{filename.replace('.', '_')}_chunk_{i}" for i in range(len(chunks))]
-                    add_texts_in_batches(collection, chunks, metadatas, doc_ids, batch_size=100)
+                    add_texts_in_batches(collection, chunks, metadatas, doc_ids, batch_size=50)
 
                     logger.info(f"✅ '{filename}'의 {len(chunks)}개 chunk를 ChromaDB에 성공적으로 추가했습니다.")
                     
@@ -194,12 +194,15 @@ def verify_stored_data(collection, sample_filename: str = None):
     except Exception as e:
         logger.error(f"❌ 데이터 검증 중 오류 발생: {e}")
 
-def add_texts_in_batches(collection, texts, metadatas, ids, batch_size=100):
+def add_texts_in_batches(collection, texts, metadatas, ids, batch_size=50):
     for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i+batch_size]
+        batch_metas = metadatas[i:i+batch_size]
+        batch_ids   = ids[i:i+batch_size]
         collection.add_texts(
-            texts=texts[i:i+batch_size],
-            metadatas=metadatas[i:i+batch_size],
-            ids=ids[i:i+batch_size],
+            texts=batch_texts,
+            metadatas=batch_metas,
+            ids=batch_ids
         )
 
 # ======================== 메인 실행 ========================
