@@ -8,7 +8,7 @@ from langchain_core.messages import SystemMessage, BaseMessage
 
 from ..core.AgentState import AgentState, AgentStateHelper, AgentType, WorkflowStep
 from ..tools.retriever_tool import RAG_search_tool
-from ..tools.local_document_search_tool import local_document_search_tool
+from ..tools.local_document_search_tool import local_document_search_tool, HybridDocumentSearcher
 from ..tools.hybrid_document_search_tool import hybrid_document_search_tool
 from ..tools.agent_logic import AgentTools
 from ..prompts.DocumentSearchSystemPrompt import get_document_search_system_prompt

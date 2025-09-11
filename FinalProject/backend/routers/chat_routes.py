@@ -302,20 +302,34 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         elif kind == "on_end": # 스트림 종료 이벤트
             final_state = event.get("data", {}).get("output", {})
             
-            # Extract and stream final messages from agents
+            # --- NEW LOGIC FOR HANDLING SPECIAL ACTION PAYLOAD ---
+            if final_state and "response" in final_state:
+                try:
+                    # Attempt to parse the final response as JSON
+                    parsed_response = json.loads(final_state["response"])
+                    if "action" in parsed_response:
+                        # If it contains an "action" key, stream the whole JSON
+                        yield f"data: {json.dumps(parsed_response, ensure_ascii=False)}\n\n"
+                        # Do not process further as this is a special action
+                        yield "data: [DONE]\n\n" # Stream end signal
+                        return # Exit the generator
+                except json.JSONDecodeError:
+                    # Not a JSON action payload, continue with normal processing
+                    pass
+            # --- END NEW LOGIC ---
+
+            # Extract and stream final messages from agents (existing logic)
             if final_state and "messages" in final_state:
                 messages = final_state["messages"]
                 for msg in messages:
                     if hasattr(msg, 'content') and msg.content and hasattr(msg, 'type'):
-                        # Stream AI messages that haven't been streamed yet
                         if msg.type == "ai" and msg.content:
                             content_to_stream = msg.content
-                            # Check if this is new content (not a tool call result)
-                            if not content_to_stream.startswith("{") and len(content_to_stream) > 10:
+                            if not content_to_stream.startswith("{}") and len(content_to_stream) > 10:
                                 full_response_content += content_to_stream
                                 yield f"data: {json.dumps({'content': content_to_stream}, ensure_ascii=False)}\n\n"
             
-            yield "data: [DONE]\n\n" # 스트림 종료 신호
+            yield "data: [DONE]\n\n"
 
     if full_response_content: # 전체 응답 내용이 있으면 저장
         _create_chat_message(db, session_id, "assistant", full_response_content)
