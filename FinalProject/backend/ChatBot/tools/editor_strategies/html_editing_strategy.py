@@ -106,33 +106,24 @@ def insert_content_at_position(
     document_content: str,
     content: str,
     position: str = "end",
-    target_element: str = ""
+    target_element: str = ""  # 이 인자는 텍스트 모드에서 사용되지 않음
 ) -> str:
     """
-    문서의 특정 위치에 내용을 삽입합니다.
-    position: start, end, before, after
+    문서의 특정 위치에 내용을 삽입합니다. (텍스트 문서용)
+    position: start, end
     """
-    try:
-        soup = _initialize_soup(document_content)
-        new_element = BeautifulSoup(content, 'html.parser')
-        
-        if position == "start":
-            soup.insert(0, new_element)
-        elif position == "before" and target_element:
-            target = soup.find(string=re.compile(target_element))
-            if target:
-                target.insert_before(new_element)
-        elif position == "after" and target_element:
-            target = soup.find(string=re.compile(target_element))
-            if target:
-                target.insert_after(new_element)
-        else:  # default to end
-            soup.append(new_element)
-        
-        return _clean_html_result(str(soup))
-    except Exception as e:
-        logger.error(f"내용 삽입 오류: {str(e)}")
-        return document_content
+    logger.info(f"텍스트 내용 삽입: 위치='{position}', 내용='{content[:30]}...'")
+    
+    # BeautifulSoup을 사용하지 않고 직접 문자열을 조작하여 줄바꿈을 보존합니다.
+    if position == "start":
+        return content + document_content
+    elif position == "end":
+        return document_content + content
+    
+    # 'before'와 'after'는 일반 텍스트에서 모호할 수 있으므로 현재는 start/end만 지원합니다.
+    # 추후 기능 확장이 필요할 경우, re.sub 등을 사용하여 구현할 수 있습니다.
+    logger.warning(f"지원되지 않는 삽입 위치 '{position}'입니다. 기본값(end)으로 처리합니다.")
+    return document_content + content
 
 
 # === Helper Functions ===
