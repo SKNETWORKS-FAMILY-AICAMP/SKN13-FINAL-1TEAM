@@ -16,6 +16,7 @@ class WorkflowStep(str, Enum):
     ANALYSIS_COMPLETED = "analysis_completed"
     WORKFLOW_COMPLETED = "workflow_completed"
     ERROR = "error"
+    AWAITING_SELECTION = "awaiting_selection"
 
 # Agent types for better routing
 class AgentType(str, Enum):
@@ -57,6 +58,7 @@ class AgentState(TypedDict):
     response: str
     needs_document_content: bool
     document_content: str
+    search_results: List[Dict[str, Any]]
     search_results: List[Dict[str, Any]]
 
 
