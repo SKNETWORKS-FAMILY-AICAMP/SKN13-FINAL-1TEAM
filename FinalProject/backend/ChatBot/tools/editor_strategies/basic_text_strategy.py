@@ -33,8 +33,17 @@ def replace_text_in_document(document_content: str, old_text: str, new_text: str
     GPT가 단순 문자열 치환을 해야 할 때 사용하는 경량 툴.
     """
     logger.info(f"Replacing '{old_text[:50]}...' with '{new_text[:50]}...'")
+    # Perform the text replacement
     updated_content = document_content.replace(old_text, new_text)
-    return updated_content.replace('\n', '<br />')
+    
+    # Normalize all newline types (\r\n, \r, \n) to <br /> for HTML
+    # First, convert Windows-style \r\n to \n
+    content_with_lf = updated_content.replace('\r\n', '\n')
+    # Then, convert any remaining Mac-style \r to \n
+    content_with_lf = content_with_lf.replace('\r', '\n')
+    # Finally, convert all \n to <br />
+    return content_with_lf.replace('\n', '<br />')
+
 
 
 
