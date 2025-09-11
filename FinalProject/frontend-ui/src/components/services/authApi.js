@@ -26,19 +26,19 @@ export async function updatePassword(email, newPassword) {
     return Promise.resolve();
 }
 
+// src/components/services/authApi.js
 export async function login(userId, password) {
-    const axios = createAxios();
-    const response = await axios.post(
-        "/auth/login",
-        {
-            unique_auth_number: userId,
-            password: password,
-        },
-        {
-            headers: {
-                "Content-Type": "application/json",
-            },
-        }
-    );
-    return response.data;
+  const axios = createAxios();
+  const response = await axios.post(
+    "/auth/login",
+    { unique_auth_number: userId, password },
+    { headers: { "Content-Type": "application/json" } }
+  );
+
+  const data = response.data;
+  const token = data?.access_token || data?.token;
+  if (token) {
+    localStorage.setItem("userToken", token);   // ✅ 토큰 저장
+  }
+  return data;
 }
