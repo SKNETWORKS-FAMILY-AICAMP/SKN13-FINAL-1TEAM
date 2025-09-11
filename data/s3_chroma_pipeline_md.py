@@ -100,7 +100,7 @@ def process_s3_mds_to_chroma(bucket_name: str, collection, s3_prefix: str = "kob
         return
 
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
+        chunk_size=500,
         chunk_overlap=200,
         length_function=len,
         is_separator_regex=False,
@@ -146,11 +146,8 @@ def process_s3_mds_to_chroma(bucket_name: str, collection, s3_prefix: str = "kob
 
                 if chunks:
                     doc_ids = [f"{filename.replace('.', '_')}_chunk_{i}" for i in range(len(chunks))]
-                    collection.add_texts(
-                        texts=chunks,
-                        metadatas=metadatas,
-                        ids=doc_ids
-                    )
+                    embed_and_add_texts(collection, chunks, metadatas, doc_ids, batch_size=50)
+                    
                     logger.info(f"✅ '{filename}'의 {len(chunks)}개 chunk를 ChromaDB에 저장 완료.")
                     logger.info(f"   📋 Sample metadata: {metadatas[0]}")
 
@@ -190,6 +187,26 @@ def verify_stored_data(collection, sample_filename: str = None):
             
     except Exception as e:
         logger.error(f"❌ 데이터 검증 중 오류 발생: {e}")
+
+def embed_and_add_texts(collection, texts, metadatas, ids, batch_size=10):
+    """
+    너무 큰 요청 방지를 위해 batch_size 단위로 안전하게 임베딩 + 저장
+    """
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i+batch_size]
+        batch_metas = metadatas[i:i+batch_size]
+        batch_ids   = ids[i:i+batch_size]
+
+        try:
+            collection.add_texts(
+                texts=batch_texts,
+                metadatas=batch_metas,
+                ids=batch_ids
+            )
+        except Exception as e:
+            logger.error(f"❌ 배치 {i//batch_size} 처리 실패: {e}", exc_info=True)
+
+
 
 # ======================== 메인 실행 ========================
 if __name__ == "__main__":
