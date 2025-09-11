@@ -98,16 +98,16 @@ class HybridDocumentSearcher:
                         # 파일 정보 수집
                         try:
                             stat = os.stat(file_path)
-                        files.append({
-                            'filename': filename,
-                            'path': file_path,
-                            'extension': extension,
-                            'priority': EXTENSION_PRIORITY[extension],
-                            'size': stat.st_size,
-                            'modified_time': stat.st_mtime,
-                            'relative_path': os.path.relpath(file_path, LOCAL_DOCS_PATH),
-                            'source': 'local'  # 출처 표시
-                        })
+                            files.append({
+                                'filename': filename,
+                                'path': file_path,
+                                'extension': extension,
+                                'priority': EXTENSION_PRIORITY[extension],
+                                'size': stat.st_size,
+                                'modified_time': stat.st_mtime,
+                                'relative_path': os.path.relpath(file_path, LOCAL_DOCS_PATH),
+                                'source': 'local'  # 출처 표시
+                            })
                         except OSError:
                             continue  # 파일 접근 불가 시 건너뛰기
             
