@@ -1,5 +1,5 @@
 from typing import TypedDict, List, Optional, Annotated, Dict, Any, Union
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage # Added HumanMessage
 from langgraph.graph.message import add_messages
 from enum import Enum
 from dataclasses import dataclass
