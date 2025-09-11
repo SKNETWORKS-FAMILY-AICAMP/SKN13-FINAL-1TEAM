@@ -34,18 +34,7 @@ class WorkflowResult:
     error: Optional[str] = None
     timestamp: Optional[str] = None
 
-# Enhanced AgentState with clean design
-class WorkflowStep(TypedDict):
-    INITIAL: Literal["initial"]
-    EDIT_REQUESTED: Literal["edit_requested"]
-    EDIT_COMPLETED: Literal["edit_completed"]
-    SEARCH_REQUESTED: Literal["search_requested"]
-    SEARCH_COMPLETED: Literal["search_completed"]
-    ANALYSIS_NEEDED: Literal["analysis_needed"]
-    ANALYSIS_COMPLETED: Literal["analysis_completed"]
-    WORKFLOW_COMPLETED: Literal["workflow_completed"]
-    REQUEST_DOCUMENT: Literal["request_document"]
-    AWAITING_SELECTION: Literal["awaiting_selection"]
+
 
 class AgentState(TypedDict):
     messages: List[BaseMessage]
@@ -58,7 +47,6 @@ class AgentState(TypedDict):
     response: str
     needs_document_content: bool
     document_content: str
-    search_results: List[Dict[str, Any]]
     search_results: List[Dict[str, Any]]
 
 
