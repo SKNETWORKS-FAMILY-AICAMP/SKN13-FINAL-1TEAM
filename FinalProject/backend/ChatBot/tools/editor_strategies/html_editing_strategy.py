@@ -115,15 +115,16 @@ def insert_content_at_position(
     logger.info("--- EXECUTING NEWLINE-SAFE INSERTION LOGIC ---")
     logger.info(f"텍스트 내용 삽입: 위치='{position}', 내용='{content[:30]}...'")
 
-    # BeautifulSoup을 사용하지 않고 직접 문자열을 조작하여 줄바꿈을 보존합니다.
-    result = ""
+    # 새로 추가되는 내용의 줄바꿈만 <br />로 변환합니다.
+    content_with_br = content.replace('\n', '<br />')
+
+    # 기존 문서 내용은 이미 HTML이므로 그대로두고, 변환된 내용을 합칩니다.
     if position == "start":
-        result = content + document_content
+        result = content_with_br + document_content
     else:  # end 또는 미지원 위치
-        result = document_content + content
+        result = document_content + content_with_br
     
-    # 최종 결과를 HTML로 렌더링하기 위해 줄바꿈 문자를 <br /> 태그로 변환합니다.
-    return result.replace('\n', '<br />')
+    return result
 
 
 # === Helper Functions ===
