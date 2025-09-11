@@ -33,7 +33,9 @@ def replace_text_in_document(document_content: str, old_text: str, new_text: str
     GPT가 단순 문자열 치환을 해야 할 때 사용하는 경량 툴.
     """
     logger.info(f"Replacing '{old_text[:50]}...' with '{new_text[:50]}...'")
-    return document_content.replace(old_text, new_text)
+    updated_content = document_content.replace(old_text, new_text)
+    return updated_content.replace('\n', '<br />')
+
 
 
 @tool
