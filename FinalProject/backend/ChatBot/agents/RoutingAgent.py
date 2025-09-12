@@ -70,10 +70,12 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
             next_step = WorkflowStep.ANALYSIS_NEEDED
         else:
             next_step = WorkflowStep.WORKFLOW_COMPLETED
+            workflow_complete = True
             
     elif current_step == WorkflowStep.EDIT_COMPLETED:
         # After editing, usually done unless more work needed
         next_step = WorkflowStep.WORKFLOW_COMPLETED
+        workflow_complete = True
         
     elif current_step == WorkflowStep.ANALYSIS_COMPLETED:
         # After analysis, check if editing is needed
@@ -82,15 +84,22 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
             next_step = WorkflowStep.EDIT_REQUESTED
         else:
             next_step = WorkflowStep.WORKFLOW_COMPLETED
+            workflow_complete = True
     
     # Document content is now always sent from frontend, no need to request it
     
     print(f"--- Next step: {next_step}, Next agents: {next_agents} ---")
     
-    return {
+    result = {
         "workflow_step": next_step,
         "next_agents": next_agents
     }
+    
+    # Add workflow_complete flag if set
+    if 'workflow_complete' in locals():
+        result["workflow_complete"] = workflow_complete
+        
+    return result
 
 def request_document_node(state: AgentState) -> dict:
     """
