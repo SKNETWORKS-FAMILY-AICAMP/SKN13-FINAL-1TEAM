@@ -140,7 +140,8 @@ def rule_based_intent_analysis(user_input: str) -> Dict[str, Any]:
         'search': [
             r'(찾아|검색|보여)줘$',
             r'(어디|어떤).*?(있나|있어)$',
-            r'(다운로드|링크).*?(주세요|줘)$'
+            r'(다운로드|링크).*?(주세요|줘)$',
+            r'(문서편집창|편집창|에디터).*?(띄워|열어|보여)줘$',  # "문서편집창에 띄워줘" = 문서 검색 의도
         ],
         'edit': [
             r'(수정|편집|바꿔|변경|추가|삭제|넣어|제거)해?줘$',
@@ -244,56 +245,47 @@ def llm_based_intent_analysis(user_input: str, state: AgentState) -> Dict[str, A
     
     llm = ChatOpenAI(model_name='gpt-4o-mini', temperature=0)
     
-    prompt = f"""Classify user intent concisely based on the rules.
+    prompt = f"""Classify user intent based on the user input and respond with the classification only.
 
 User input: "{user_input}"
 
-Respond with JSON only.
+**Classification Options:**
+1. SEARCH - If user wants to find, search, or retrieve documents
+2. EDIT - If user wants to modify, edit, add content, or create documents
+3. MULTI_STEP - If user wants to search first then edit/modify the results
+4. REJECT - If user input is not work-related or cannot be processed
 
-**Rules & JSON format:**
-- **For document search:**
-  {{
-      "primary_intent": "search",
-      "agents": ["document_search"],
-      "next_step": "search_requested",
-      "confidence": 0.9
-  }}
-- **For document editing:**
-  {{
-      "primary_intent": "edit",
-      "agents": ["document_edit"],
-      "next_step": "edit_requested",
-      "confidence": 0.9
-  }}
-- **For multi-step tasks (e.g., "find and summarize"):**
-  {{
-      "primary_intent": "multi_step",
-      "agents": ["document_search", "document_edit"],
-      "next_step": "search_requested",
-      "confidence": 0.9
-  }}
-- **For anything else (general chat, non-work topics):**
-  {{
-      "primary_intent": "rejection",
-      "agents": ["business_rejection"],
-      "next_step": "workflow_completed",
-      "confidence": 0.9
-  }}
-"""
+Respond with only ONE WORD: SEARCH, EDIT, MULTI_STEP, or REJECT"""
 
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
-        import json
-        # Find the JSON block in the response
-        json_match = re.search(r'```json\n(.*?)\n```', response.content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            # Fallback for raw JSON
-            json_str = response.content
+        classification = response.content.strip().upper()
         
-        result = json.loads(json_str)
-        return result
+        if "SEARCH" in classification:
+            return {
+                "agents": ["document_search"],
+                "next_step": WorkflowStep.SEARCH_REQUESTED,
+                "confidence": 0.8
+            }
+        elif "EDIT" in classification:
+            return {
+                "agents": ["document_edit"],
+                "next_step": WorkflowStep.EDIT_REQUESTED,
+                "confidence": 0.8
+            }
+        elif "MULTI_STEP" in classification:
+            return {
+                "agents": ["document_search", "document_edit"],
+                "next_step": WorkflowStep.SEARCH_REQUESTED,
+                "confidence": 0.8
+            }
+        else:  # REJECT or any other response
+            return {
+                "agents": ["business_rejection"],
+                "next_step": WorkflowStep.WORKFLOW_COMPLETED,
+                "confidence": 0.8
+            }
+            
     except Exception as e:
         from ..utils.error_handler import log_error_with_context, is_retryable_error
         log_error_with_context(e, {"function": "llm_based_intent_analysis", "input": user_input[:50]})
