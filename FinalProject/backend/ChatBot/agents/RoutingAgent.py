@@ -133,54 +133,75 @@ def analyze_user_intent(state: AgentState) -> Dict[str, Any]:
     return llm_based_intent_analysis(user_input, state)
 
 def rule_based_intent_analysis(user_input: str) -> Dict[str, Any]:
-    """Fast rule-based intent classification."""
+    """Semantic-based intent classification focusing on sentence structure."""
     
-    # Document editing patterns
-    edit_patterns = [
-        r'(수정|편집|바꿔|변경|추가|삭제|넣어|제거).*?줘',
-        r'(작성|써|입력).*?줘',
-        r'(제목|문단|리스트|테이블).*?(만들|추가|생성)',
-        r'(굵게|이탤릭|밑줄|색깔|정렬)'
-    ]
+    # 1. 최종 요청 동작 파악 (가장 높은 우선순위)
+    final_action_patterns = {
+        'search': [
+            r'(찾아|검색|보여)줘$',
+            r'(어디|어떤).*?(있나|있어)$',
+            r'(다운로드|링크).*?(주세요|줘)$'
+        ],
+        'edit': [
+            r'(수정|편집|바꿔|변경|추가|삭제|넣어|제거).*?줘$',
+            r'(작성|써|입력).*?줘$',
+            r'(만들어|생성).*?줘$'
+        ],
+        'multi_step': [
+            r'찾아서.*?(추가|넣어|작성).*?줘$',
+            r'검색해서.*?(편집|수정).*?줘$'
+        ]
+    }
     
-    # Document search patterns  
-    search_patterns = [
-        r'(찾아|검색).*?줘',
-        r'(문서|보고서|자료|파일).*?(어디|있나|보여줘)',
-        r'(다운로드|링크).*?(주세요|줘)'
-    ]
+    # 2. 문장 끝 동작으로 의도 판단
+    for intent, patterns in final_action_patterns.items():
+        for pattern in patterns:
+            if re.search(pattern, user_input):
+                confidence = 0.9
+                if intent == 'search':
+                    return {
+                        "agents": ["document_search"],
+                        "next_step": WorkflowStep.SEARCH_REQUESTED,
+                        "confidence": confidence
+                    }
+                elif intent == 'edit':
+                    return {
+                        "agents": ["document_edit"],
+                        "next_step": WorkflowStep.EDIT_REQUESTED,
+                        "confidence": confidence
+                    }
+                elif intent == 'multi_step':
+                    return {
+                        "agents": ["document_search", "document_edit"],
+                        "next_step": WorkflowStep.SEARCH_REQUESTED,
+                        "confidence": confidence
+                    }
     
-    # Multi-step patterns (search then edit)
-    multi_step_patterns = [
-        r'찾아서.*?(추가|넣어|작성)',
-        r'검색해서.*?(편집|수정)',
-        r'문서.*?찾아.*?(요약|정리)'
-    ]
-    
-    # Check patterns
-    for pattern in multi_step_patterns:
-        if re.search(pattern, user_input):
-            return {
-                "agents": ["document_search", "document_edit"],
-                "next_step": WorkflowStep.SEARCH_REQUESTED,
-                "confidence": 0.9
-            }
-    
-    for pattern in edit_patterns:
-        if re.search(pattern, user_input):
-            return {
-                "agents": ["document_edit"],
-                "next_step": WorkflowStep.EDIT_REQUESTED,
-                "confidence": 0.85
-            }
-    
-    for pattern in search_patterns:
-        if re.search(pattern, user_input):
+    # 3. 문맥 기반 보조 판단 (명사구 vs 동사구)
+    # "작성한 문서" (명사구) vs "작성해줘" (동사구)
+    if re.search(r'(작성한|만든|생성한).*?(문서|보고서|파일)', user_input):
+        # 명사구 형태는 검색 의도일 가능성 높음
+        if any(keyword in user_input for keyword in ['찾', '검색', '보여', '어디']):
             return {
                 "agents": ["document_search"],
                 "next_step": WorkflowStep.SEARCH_REQUESTED,
-                "confidence": 0.85
+                "confidence": 0.8
             }
+    
+    # 4. 기본 키워드 매칭 (낮은 우선순위)
+    if any(keyword in user_input for keyword in ['찾', '검색', '보여']):
+        return {
+            "agents": ["document_search"],
+            "next_step": WorkflowStep.SEARCH_REQUESTED,
+            "confidence": 0.7
+        }
+    
+    if any(keyword in user_input for keyword in ['수정', '편집', '변경', '추가', '삭제']):
+        return {
+            "agents": ["document_edit"],
+            "next_step": WorkflowStep.EDIT_REQUESTED,
+            "confidence": 0.7
+        }
     
     # Default to business rejection
     return {
