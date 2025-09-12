@@ -3,6 +3,8 @@
 import React, { useCallback, useMemo, useRef } from "react";
 import ChatSummaryItem from "./ChatSummaryItem.jsx";
 import IconButton from "../shared/IconButton.jsx";
+// 아이콘
+import { BsBoxArrowRight } from "react-icons/bs";
 
 export default React.memo(function Sidebar({
   onClose,
@@ -73,7 +75,7 @@ export default React.memo(function Sidebar({
         <div className="p-4 pb-0">
           <div className="mb-2">
             <button
-              className="text-sm px-3 py-2 rounded bg-blue-600 text-white w-full"
+              className="text-[14px] font-medium px-3 py-[11px] rounded-md bg-black text-white w-full"
               onClick={handleNewChat}
             >
               ＋ 새 채팅
@@ -82,9 +84,11 @@ export default React.memo(function Sidebar({
           <hr className="my-2" />
         </div>
 
-        <div className="flex-grow overflow-y-auto px-4 no-scrollbar">
+        <div className="flex-grow overflow-y-auto px-4 simple-scroll">
           {safeSessions.length === 0 ? (
-            <div className="text-sm text-gray-400">채팅 기록 없음</div>
+            <div className="h-full flex items-center justify-center">
+              <div className="text-[14px] text-neutral-400">채팅 기록 없음</div>
+            </div>
           ) : (
             safeSessions.map(({ chat, key, sid }) => (
               <ChatSummaryItem key={key} title={chat.title} onClick={makeSelectHandler(sid)} />
@@ -96,9 +100,14 @@ export default React.memo(function Sidebar({
       <div className="p-4 border-t border-gray-200">
         <button
           onClick={handleLogout}
-          className="w-full text-sm py-2 rounded bg-red-500 text-white hover:bg-red-600"
+          className="flex items-center gap-3 w-full px-3 py-2 text-left text-[14px] rounded-xl transition text-red-600 hover:bg-red-50"
+          title="로그아웃"
+          aria-label="로그아웃"
         >
-          로그아웃
+          <span className="inline-flex w-6 h-6 items-center justify-center shrink-0">
+            <BsBoxArrowRight className="text-[18px] leading-none" />
+          </span>
+          <span className="truncate">로그아웃</span>
         </button>
       </div>
     </div>
