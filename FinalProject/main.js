@@ -49,11 +49,11 @@ const pipe = promisify(pipeline);
 
 // 환경변수 또는 기본값
 const AWS_REGION = process.env.AWS_REGION || "ap-northeast-2";
-const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || "your-bucket-name";
-const S3_ROOT = process.env.S3_ROOT || "documents/"; // 공유 루트 prefix
+const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || "clickabbbucket";
+const S3_ROOT = process.env.S3_ROOT || "documents/";
 
 // (신규) 공유 버킷 전용 환경변수
-const S3_SHARED_BUCKET = process.env.S3_SHARED_BUCKET || "skn13-shared-bucket";
+const S3_SHARED_BUCKET = process.env.S3_SHARED_BUCKET || "clickabbbucket";
 const S3_SHARED_ROOT = process.env.S3_SHARED_ROOT || "";
 
 //===================  이 아래 함수를 바꿔주세요 ===============================
@@ -208,7 +208,7 @@ ipcMain.handle("fs:openSmart", async (_evt, { name }) => {
 /* ============================================================================
  *  공유 버킷 전용 IPC — 문서 목록(S3)
  * ========================================================================== */
-ipcMain.handle("s3shared:list", async (_evt, { prefix = "" }) => {
+ipcMain.handle("s3shared:list", async (_evt, { prefix = "", continuationToken = null }) => {
   if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
 
   const Prefix = buildPrefix(S3_SHARED_ROOT, prefix);
@@ -218,6 +218,7 @@ ipcMain.handle("s3shared:list", async (_evt, { prefix = "" }) => {
       Prefix,
       Delimiter: "/",
       MaxKeys: 500,
+      ContinuationToken: continuationToken || undefined,
     })
   );
 
@@ -237,7 +238,13 @@ ipcMain.handle("s3shared:list", async (_evt, { prefix = "" }) => {
       lastModified: obj.LastModified?.toISOString?.() || null,
     }));
 
-  return { prefix: Prefix, folders, files };
+  return {
+    prefix: Prefix,
+    folders,
+    files,
+    isTruncated: !!out.IsTruncated,
+    nextContinuationToken: out.NextContinuationToken || null,
+  };
 });
 
 ipcMain.handle("s3shared:downloadAndOpen", async (_evt, { key, saveAs }) => {
