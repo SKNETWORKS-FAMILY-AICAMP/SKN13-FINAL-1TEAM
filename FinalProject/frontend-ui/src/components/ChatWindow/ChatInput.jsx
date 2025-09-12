@@ -23,7 +23,9 @@
 
 // ✅ src/components/ChatWindow/ChatInput.jsx
 import React, { useEffect, useMemo, useRef } from 'react';
-import { PlusIcon, PaperAirplaneIcon, XMarkIcon, PaperClipIcon, StopIcon } from '@heroicons/react/24/solid';
+import { XMarkIcon, PaperClipIcon, StopIcon } from '@heroicons/react/24/solid';
+import { IoSend } from "react-icons/io5";
+import { FaPlus } from "react-icons/fa6";
 
 export default function ChatInput({
   input, setInput, onSend,
@@ -168,9 +170,9 @@ export default function ChatInput({
         )}
 
         {/* 입력 바 */}
-        <div className="flex items-center border rounded-full px-3 py-2 shadow-md gap-2 bg-white">
-          <label className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 cursor-pointer shrink-0" title="파일 첨부">
-            <PlusIcon className="w-5 h-5 text-gray-600" />
+        <div className="flex items-center border rounded-lg px-3 py-3 border border-neutral-200 gap-2 bg-white">
+          <label className="w-7 h-7 flex items-center justify-center rounded-full bg-white cursor-pointer shrink-0" title="파일 첨부">
+            <FaPlus className="text-[18px] text-black" />
             <input type="file" className="hidden" multiple onChange={addFiles} />
           </label>
 
@@ -196,11 +198,11 @@ export default function ChatInput({
             <button
               onClick={handleSendClick}
               disabled={!canSend}
-              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
               title="전송"
               aria-disabled={!canSend}
             >
-              <PaperAirplaneIcon className="w-5 h-5 text-blue-500" />
+              <IoSend className="text-[18px] text-black" />
             </button>
           )}
         </div>
