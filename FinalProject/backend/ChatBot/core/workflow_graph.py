@@ -184,6 +184,13 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         elif current_step == WorkflowStep.ANALYSIS_NEEDED:
             updates['workflow_step'] = WorkflowStep.ANALYSIS_COMPLETED
         
+        # DocumentSearchAgent의 특별한 데이터 보존 (다운로드 버튼 등)
+        if state.get('action') == 'show_document_buttons':
+            updates['action'] = state.get('action')
+            updates['document_selection'] = state.get('document_selection')
+            updates['final_answer'] = state.get('final_answer')
+            print(f"--- 📋 Workflow tracker: 다운로드 버튼 데이터 보존됨 ---")
+        
         print(f"--- Workflow tracker updates: {updates} ---")
         return updates
     
