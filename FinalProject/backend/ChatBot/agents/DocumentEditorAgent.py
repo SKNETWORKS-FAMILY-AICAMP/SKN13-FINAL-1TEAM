@@ -75,7 +75,7 @@ class DocumentEditorAgent:
                     tool_name = tool_call.get("name")
                     tool_args = tool_call.get("args")
                     
-                    print(f"\n>> [AGENT] Calling Tool: {tool_name}\n   Args: {tool_args}\n")
+                    # print(f"\n>> [AGENT] Calling Tool: {tool_name}\n   Args: {tool_args}\n")
                     
                     if tool_name in self.tool_map:
                         tool_function = self.tool_map[tool_name]
@@ -92,24 +92,24 @@ class DocumentEditorAgent:
                                 edit_results["download_link"] = result
                                 edit_results["download_message"] = "편집된 문서의 다운로드 링크를 준비했습니다."
                             
-                            print(f">> [AGENT] Tool '{tool_name}' executed. Result length: {len(str(result))}\n")
+                            # print(f">> [AGENT] Tool '{tool_name}' executed. Result length: {len(str(result))}\n")
                             
                             # 그래프의 다음 단계를 위해 ToolMessage 추가
                             messages.append(ToolMessage(content=str(result), tool_call_id=tool_call['id']))
 
                         except Exception as e:
                             error_msg = f"Error executing tool '{tool_name}': {e}\n{traceback.format_exc()}"
-                            print(f">> [AGENT] {error_msg}")
+                            # print(f">> [AGENT] {error_msg}")
                             messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call['id']))
                     else:
-                        print(f">> [AGENT] Warning: Tool '{tool_name}' not found.")
+                        # print(f">> [AGENT] Warning: Tool '{tool_name}' not found.")
             else:
                  # 도구 호출이 없는 경우, LLM의 텍스트 응답을 메시지에 추가
                 messages.append(response)
 
             # 4. 도구 호출 후 최종 사용자 응답 생성 (LLM 기반 동적 생성)
             if hasattr(response, 'tool_calls') and response.tool_calls:
-                print(">> [EDIT AGENT] Generating final user response after tool execution")
+                # print(">> [EDIT AGENT] Generating final user response after tool execution")
                 
                 try:
                     # Create a prompt for final response generation
@@ -128,10 +128,10 @@ class DocumentEditorAgent:
                     final_response = final_llm.invoke(messages)
                     messages.append(final_response)
                     
-                    print(f">> [EDIT AGENT] Final response generated: {final_response.content[:100]}...")
+                    # print(f">> [EDIT AGENT] Final response generated: {final_response.content[:100]}...")
                     
                 except Exception as e:
-                    print(f">> [EDIT AGENT] Error generating final response: {e}")
+                    # print(f">> [EDIT AGENT] Error generating final response: {e}")
                     # Fallback: create a simple response
                     from langchain_core.messages import AIMessage
                     fallback_response = AIMessage(content="문서 편집이 완료되었습니다. 편집된 내용을 확인해주세요.")
@@ -251,7 +251,7 @@ class DocumentEditorAgent:
     
     def _handle_error(self, state: AgentState, error_message: str) -> Dict[str, Any]:
         """에러 처리 및 상태 업데이트"""
-        print(f"--- DocumentEditorAgent Error: {error_message} ---") # Added this line for direct visibility
+        # print(f"--- DocumentEditorAgent Error: {error_message} ---") # Added this line for direct visibility
         AgentStateHelper.set_workflow_error(state, error_message)
         
         AgentStateHelper.add_workflow_result(
