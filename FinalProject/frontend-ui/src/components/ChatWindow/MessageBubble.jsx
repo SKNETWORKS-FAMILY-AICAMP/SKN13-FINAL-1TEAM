@@ -219,35 +219,31 @@ export default function MessageBubble({ message, onDocumentSelect, sessionId }) 
 
               if (allBubble) {
                 return hasFenced ? (
-                  <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                    <div className="max-w-full overflow-x-auto">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code({ inline, children }) {
-                            if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
-                            return (
-                              <pre className="px-4 py-3 text-sm leading-6 whitespace-pre max-w-full">
-                                <code className="whitespace-pre">{children}</code>
-                              </pre>
-                            );
-                          },
-                          table({ children }) {
-                            return <div className="block overflow-x-auto max-w-full px-4 py-3">{children}</div>;
-                          }
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
-                    </div>
+                  <div className="text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({ inline, children }) {
+                          if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
+                          return (
+                            <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full">
+                              <code className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{children}</code>
+                            </pre>
+                          );
+                        },
+                        table({ children }) {
+                          return <div className="block overflow-x-auto max-w-full">{children}</div>;
+                        }
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
                   </div>
                 ) : (
-                  <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                    <div className="max-w-full overflow-x-auto">
-                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre">
-                        {message.content}
-                      </pre>
-                    </div>
+                  <div className="text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                    <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                      {message.content}
+                    </pre>
                   </div>
                 );
               }
@@ -259,37 +255,33 @@ export default function MessageBubble({ message, onDocumentSelect, sessionId }) 
                     if (seg.type === 'bubble') {
                       if (seg.mode === 'fenced') {
                         return (
-                          <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                            <div className="max-w-full overflow-x-auto">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm]}
-                                components={{
-                                  code({ inline, children }) {
-                                    if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
-                                    return (
-                                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre max-w-full">
-                                        <code className="whitespace-pre">{children}</code>
-                                      </pre>
-                                    );
-                                  },
-                                  table({ children }) {
-                                    return <div className="block overflow-x-auto max-w-full px-4 py-3">{children}</div>;
-                                  }
-                                }}
-                              >
-                                {seg.content}
-                              </ReactMarkdown>
-                            </div>
+                          <div key={idx} className="text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                code({ inline, children }) {
+                                  if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
+                                  return (
+                                    <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full">
+                                      <code className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{children}</code>
+                                    </pre>
+                                  );
+                                },
+                                table({ children }) {
+                                  return <div className="block overflow-x-auto max-w-full">{children}</div>;
+                                }
+                              }}
+                            >
+                              {seg.content}
+                            </ReactMarkdown>
                           </div>
                         );
                       }
                       return (
-                        <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
-                          <div className="max-w-full overflow-x-auto">
-                            <pre className="px-4 py-3 text-sm leading-6 whitespace-pre min-w-0">
-                              {seg.content}
-                            </pre>
-                          </div>
+                        <div key={idx} className="text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                          <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                            {seg.content}
+                          </pre>
                         </div>
                       );
                     }
