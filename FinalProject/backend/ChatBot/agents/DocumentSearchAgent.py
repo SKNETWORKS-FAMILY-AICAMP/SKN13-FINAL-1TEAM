@@ -76,7 +76,6 @@ class DocumentSearchAgent:
             
             # 4. 도구 호출 처리
             search_results = {}
-            skip_final_response_generation = False  # 플래그 추가
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 messages.append(response)  # Add AI message with tool calls
                 for tool_call in response.tool_calls:
