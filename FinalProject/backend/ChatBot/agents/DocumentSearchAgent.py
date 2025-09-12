@@ -197,10 +197,19 @@ class DocumentSearchAgent:
             
             print(f"--- DocumentSearchAgent: Search completed successfully ---")
             
-            return {
+            # search_results에 action과 document_selection이 있으면 반환에 포함
+            result = {
                 "messages": messages,
                 "workflow_step": WorkflowStep.SEARCH_COMPLETED
             }
+            
+            if search_results.get("action") == "show_document_buttons":
+                result["action"] = search_results["action"]
+                result["document_selection"] = search_results["document_selection"]
+                if search_results.get("final_answer"):
+                    result["final_answer"] = search_results["final_answer"]
+            
+            return result
             
         except Exception as e:
             print(f"--- DocumentSearchAgent error: {str(e)} ---")
