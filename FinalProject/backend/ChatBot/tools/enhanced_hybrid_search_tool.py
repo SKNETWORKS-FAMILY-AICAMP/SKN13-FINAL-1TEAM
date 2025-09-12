@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# 문서편집창에서 지원하는 확장자
+SUPPORTED_EXTENSIONS = {'.docx', '.md', '.txt', '.html'}
+
 class EnhancedHybridSearcher:
     """
     로컬 + S3 하이브리드 문서 검색기
@@ -90,7 +93,7 @@ class EnhancedHybridSearcher:
             print(f"[EnhancedHybridSearcher] 로컬 경로 없음: {local_path}")
             return local_results
         
-        supported_extensions = {'.md', '.txt', '.html', '.docx'}
+        supported_extensions = {'.md', '.txt', '.html', '.docx', '.pdf'}  # 검색은 모든 파일, 처리는 구분
         
         try:
             for file_path in local_path.rglob('*'):
@@ -112,16 +115,21 @@ class EnhancedHybridSearcher:
                     total_score = (filename_score * 0.7) + (content_score * 0.3)
                     
                     if total_score > 0.1:  # 최소 임계값
+                        extension = file_path.suffix.lower()
+                        is_supported = extension in SUPPORTED_EXTENSIONS
+                        
                         local_results.append({
                             'filename': file_path.name,
                             'path': str(file_path),
-                            'extension': file_path.suffix.lower(),
+                            'extension': extension,
                             'source': 'local',
                             'location': f'Local: {file_path.parent}',
                             'filename_score': filename_score,
                             'content_score': content_score,
                             'total_score': total_score,
-                            'file_size': file_path.stat().st_size if file_path.exists() else 0
+                            'file_size': file_path.stat().st_size if file_path.exists() else 0,
+                            'is_supported': is_supported,
+                            'action_type': 'open_editor' if is_supported else 'download'
                         })
             
             print(f"[EnhancedHybridSearcher] 로컬 검색 결과: {len(local_results)}개")
@@ -181,6 +189,8 @@ class EnhancedHybridSearcher:
                     total_score = (filename_score * 0.7) + (content_score * 0.3)
                     
                     if total_score > 0.1:  # 최소 임계값
+                        is_supported = extension in SUPPORTED_EXTENSIONS
+                        
                         s3_results.append({
                             'filename': filename,
                             'path': key,
@@ -191,7 +201,9 @@ class EnhancedHybridSearcher:
                             'content_score': content_score,
                             'total_score': total_score,
                             'file_size': obj.get('Size', 0),
-                            's3_url': f's3://{self.bucket_name}/{key}'
+                            's3_url': f's3://{self.bucket_name}/{key}',
+                            'is_supported': is_supported,
+                            'action_type': 'open_editor' if is_supported else 'download'
                         })
             
             print(f"[EnhancedHybridSearcher] S3 검색 결과: {len(s3_results)}개")

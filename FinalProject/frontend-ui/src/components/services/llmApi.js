@@ -11,6 +11,7 @@ export function streamLLM({
   onDocumentUpdate,
   onNeedsDocument,
   onLocalDocuments,
+  onDocumentButtons,
   onDone,
   onError,
 }) {
@@ -154,6 +155,12 @@ export function streamLLM({
               if (parsed.local_documents) {
                 console.log('🎯 local_documents 감지!', parsed.local_documents);
                 onLocalDocuments?.(parsed.local_documents);
+              }
+
+              // 문서 버튼 처리
+              if (parsed.type === 'document_buttons' && parsed.document_selection) {
+                console.log('📄 document_buttons 감지!', parsed.document_selection);
+                onDocumentButtons?.(parsed.document_selection, parsed.content);
               }
 
             } catch (parseError) {

@@ -1,5 +1,6 @@
 # DocumentSearchAgent.py
 
+import json
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 
@@ -100,14 +101,20 @@ class DocumentSearchAgent:
                             if tool_name == "enhanced_hybrid_search_tool":
                                 documents = result.get('found_documents', [])
                                 if documents:
-                                    # 3개 선택지 제공 응답 생성
-                                    final_answer = self._create_document_selection_response(documents, result.get('search_query', ''))
-                                    search_results["final_answer"] = final_answer
-                                    search_results["document_options"] = documents  # 프론트엔드용 데이터
-                                    search_results["requires_selection"] = True  # 선택이 필요함을 표시
+                                    # 클릭 가능한 문서 선택지 생성
+                                    document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
+                                    
+                                    # 텍스트 응답
+                                    text_response = document_selection_data["text_response"]
+                                    search_results["final_answer"] = text_response
+                                    
+                                    # 구조화된 데이터 (프론트엔드용)
+                                    search_results["document_selection"] = document_selection_data["selection_data"]
+                                    search_results["action"] = "show_document_buttons"  # 프론트엔드 액션 플래그
+                                    
                                     skip_final_response_generation = True
                                     from langchain_core.messages import AIMessage
-                                    messages.append(AIMessage(content=final_answer))
+                                    messages.append(AIMessage(content=text_response))
                                 else:
                                     final_answer = f"'{result.get('search_query', '검색어')}'와 관련된 문서를 찾지 못했습니다. 다른 키워드로 다시 시도해보시거나, 문서가 올바른 위치에 있는지 확인해주세요."
                                     search_results["final_answer"] = final_answer
@@ -230,7 +237,7 @@ class DocumentSearchAgent:
     
     def _create_document_selection_response(self, documents: List[Dict[str, Any]], query: str) -> str:
         """
-        검색된 문서들로부터 3개 선택지 응답 생성
+        검색된 문서들로부터 클릭 가능한 3개 선택지 응답 생성
         """
         if not documents:
             return f"'{query}'와 관련된 문서를 찾지 못했습니다."
@@ -239,8 +246,15 @@ class DocumentSearchAgent:
         top_documents = documents[:3]
         
         response_parts = [
-            f"'{query}'와 관련된 문서를 찾았습니다! 다음 중 원하시는 문서를 선택해주세요:\n"
+            f"'{query}'와 관련된 문서를 찾았습니다! 원하시는 문서를 클릭해주세요:\n"
         ]
+        
+        # JSON 형태로 클릭 가능한 버튼 데이터 생성
+        button_data = {
+            "type": "document_selection",
+            "query": query,
+            "documents": []
+        }
         
         for i, doc in enumerate(top_documents, 1):
             filename = doc.get('filename', '알 수 없는 파일')
@@ -250,21 +264,98 @@ class DocumentSearchAgent:
             
             # 소스 아이콘
             source_icon = "📂" if source == 'local' else "☁️"
-            
-            # 점수를 백분율로 표시 (선택사항)
             score_percentage = int(score * 100) if score else 0
             
+            # 클릭 가능한 버튼용 문서 데이터
+            doc_data = {
+                "id": i,
+                "filename": filename,
+                "path": doc.get('path', ''),
+                "source": source,
+                "location": location,
+                "score": score_percentage,
+                "icon": source_icon,
+                "full_data": doc  # 전체 문서 데이터
+            }
+            
+            button_data["documents"].append(doc_data)
+            
+            # 텍스트 표시용
             response_parts.append(
-                f"{i}. **{filename}** {source_icon}\n"
-                f"   📍 위치: {location}\n"
+                f"🔘 **{filename}** {source_icon}\n"
+                f"   📍 {location}\n"
                 f"   🎯 관련도: {score_percentage}%\n"
             )
         
-        response_parts.append(
-            "\n💡 원하시는 문서의 번호(1, 2, 3)를 말씀해주시면 문서편집창에서 열어드리겠습니다!"
-        )
+        response_parts.append("\n💡 위 문서 중 하나를 클릭하면 문서편집창에서 바로 열립니다!")
         
-        return "\n".join(response_parts)
+        # 응답에 버튼 데이터를 JSON으로 포함
+        text_response = "\n".join(response_parts)
+        
+        return f"{text_response}\n\n```json\n{json.dumps(button_data, ensure_ascii=False, indent=2)}\n```"
+    
+    def _create_document_selection_data(self, documents: List[Dict[str, Any]], query: str) -> Dict[str, Any]:
+        """
+        클릭 가능한 문서 선택지 데이터 생성 (프론트엔드 최적화)
+        """
+        if not documents:
+            return {
+                "text_response": f"'{query}'와 관련된 문서를 찾지 못했습니다.",
+                "selection_data": None
+            }
+        
+        # 최대 3개까지만 표시
+        top_documents = documents[:3]
+        
+        # 텍스트 응답 생성
+        text_response = f"'{query}'와 관련된 문서를 {len(top_documents)}개 찾았습니다! 원하시는 문서를 클릭해주세요:"
+        
+        # 구조화된 선택 데이터
+        selection_data = {
+            "type": "document_selection",
+            "query": query,
+            "total_found": len(top_documents),
+            "documents": []
+        }
+        
+        for i, doc in enumerate(top_documents, 1):
+            filename = doc.get('filename', '알 수 없는 파일')
+            source = doc.get('source', '알 수 없음')
+            location = doc.get('location', '')
+            score = doc.get('total_score', 0)
+            
+            # 소스 아이콘과 설명
+            if source == 'local':
+                source_icon = "📂"
+                source_desc = "로컬 파일"
+            else:
+                source_icon = "☁️"
+                source_desc = "클라우드 파일"
+            
+            score_percentage = int(score * 100) if score else 0
+            
+            # 클릭 가능한 버튼용 문서 데이터
+            doc_data = {
+                "id": f"doc_{i}",
+                "filename": filename,
+                "path": doc.get('path', ''),
+                "source": source,
+                "source_desc": source_desc,
+                "location": location,
+                "score": score_percentage,
+                "icon": source_icon,
+                "display_name": f"{source_icon} {filename}",
+                "subtitle": f"{location} (관련도: {score_percentage}%)",
+                # 문서 로드에 필요한 전체 데이터
+                "document_data": doc
+            }
+            
+            selection_data["documents"].append(doc_data)
+        
+        return {
+            "text_response": text_response,
+            "selection_data": selection_data
+        }
     
     def _handle_error(self, state: AgentState, error_message: str) -> Dict[str, Any]:
         """에러 처리 및 상태 업데이트"""

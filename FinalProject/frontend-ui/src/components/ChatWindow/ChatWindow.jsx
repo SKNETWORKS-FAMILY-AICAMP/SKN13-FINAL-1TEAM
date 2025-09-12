@@ -131,37 +131,15 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     setIsStreaming(false);
   }, [closeEventSource]);
 
-  // 문서 선택 처리
-  const handleDocumentSelect = useCallback(async (document) => {
-    console.log('[ChatWindow] 문서 선택됨:', document);
+  // 문서 선택 처리 (DocumentButtons 컴포넌트에서 전달되는 메시지 처리)
+  const handleDocumentSelect = useCallback((message) => {
+    console.log('[ChatWindow] 문서 선택 결과 메시지:', message);
     
-    try {
-      // Electron IPC를 통해 문서 열기 요청
-      const result = await window.electron?.invoke?.('document:openFromChat', {
-        filePath: document.path,
-        filename: document.filename,
-        source: document.source  // S3 또는 local 구분
-      });
-      
-      if (result?.success) {
-        console.log('[ChatWindow] 문서 열기 성공');
-        // 성공 메시지 추가
-        appendMessage({
-          role: 'assistant',
-          content: `✅ "${document.filename}" 문서를 문서편집창에서 열었습니다.`
-        });
-      } else {
-        console.error('[ChatWindow] 문서 열기 실패:', result?.error);
-        appendMessage({
-          role: 'assistant',
-          content: `❌ 문서를 여는 중 오류가 발생했습니다: ${result?.error || '알 수 없는 오류'}`
-        });
-      }
-    } catch (error) {
-      console.error('[ChatWindow] 문서 선택 처리 중 오류:', error);
+    // DocumentButtons에서 전달하는 메시지를 화면에 표시
+    if (message) {
       appendMessage({
         role: 'assistant',
-        content: `❌ 문서를 여는 중 오류가 발생했습니다: ${error.message}`
+        content: message
       });
     }
   }, [appendMessage]);
@@ -258,6 +236,16 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
           // Not a JSON action, continue with normal delta processing
         }
         updateLastMessage(content);
+      },
+      onDocumentButtons: (documentSelection, content) => {
+        console.log('📄 [ChatWindow] 문서 버튼 데이터 수신:', documentSelection);
+        // 문서 선택 데이터를 포함한 메시지 추가
+        appendMessage({
+          role: 'assistant',
+          content: content || '문서를 찾았습니다!',
+          documents: documentSelection.documents,
+          query: documentSelection.query
+        });
       },
       onToolMessage: (msg) => {
         appendMessage({ role: 'tool', content: msg });
@@ -397,6 +385,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
               key={idx} 
               message={msg} 
               onDocumentSelect={handleDocumentSelect}
+              sessionId={currentSession?.id}
             />
           ))
         )}
