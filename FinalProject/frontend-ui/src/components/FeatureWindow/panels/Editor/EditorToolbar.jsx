@@ -287,7 +287,7 @@ export default function EditorToolbar({ editor }) {
   return (
     <div className="bg-white border-b">
       {/* 적용 대상 */}
-      <div className="flex items-center gap-2 px-2 py-1 bg-gray-50">
+      <div className="flex flex-wrap items-center gap-2 p-2">
         <span className="text-xs text-gray-600 mr-1">적용 대상</span>
         <IconBtn title="드래그한 '선택 영역'에만 적용" active={applyMode === "selection"} onClick={() => setApplyMode("selection")} className="rounded">
           <BoxSelect size={16} />
@@ -301,134 +301,138 @@ export default function EditorToolbar({ editor }) {
       </div>
 
       {/* 툴바 본체 */}
-      <div className="flex flex-wrap items-center gap-2 p-2">
+      <div className="flex items-start p-2">
         {/* 글꼴(입력 + 전체 드롭다운) */}
-        <span className="inline-flex items-center" title="글꼴/크기"><FontIcon size={16} /></span>
-        <div className="relative" ref={fontRef}>
-          <input
-            className="border rounded-l px-2 py-1 w-44"
-            placeholder="글꼴 입력"
-            value={fontInput}
-            onMouseDown={captureSelection}
-            onChange={(e) => setFontInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") setFontFamily(fontInput.trim()); }}
-            onBlur={() => { if (fontInput.trim()) setFontFamily(fontInput.trim()); }}
-            title="글꼴 이름을 입력하세요"
-          />
-          <button
-            className="border rounded-r px-2 py-1 bg-white hover:bg-gray-50"
-            onMouseDown={(e) => { captureSelection(); e.preventDefault(); }}
-            onClick={() => setFontOpen(v => !v)}
-            title="글꼴 목록"
-          >
-            <ChevronDown size={14}/>
-          </button>
-          {fontOpen && (
-            <div className="absolute z-50 mt-1 w-60 max-h-64 overflow-auto rounded-md border bg-white shadow-lg">
-              {FONT_LIST.map((name) => (
-                <button
-                  key={name}
-                  onMouseDown={(e) => { captureSelection(); e.preventDefault(); }}
-                  onClick={() => { setFontInput(name === "기본 글꼴" ? "" : name); setFontFamily(name); setFontOpen(false); }}
-                  className="w-full text-left px-3 py-2 hover:bg-gray-50"
-                  style={{ fontFamily: name === "기본 글꼴" ? undefined : name }}
-                  title={name}
-                >
-                  <div className="text-sm">{name}</div>
-                  {name !== "기본 글꼴" && <div className="text-[11px] text-gray-500">가나다 ABC 123</div>}
-                </button>
-              ))}
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+          <span className="inline-flex items-center" title="글꼴/크기"><FontIcon size={15} /></span>
+          <div className="relative inline-flex" ref={fontRef}>
+            <div className="inline-flex">
+              <input
+                className="border rounded-l px-2 py-1 w-44 h-[26px] text-[14px]"
+                placeholder="글꼴 입력"
+                value={fontInput}
+                onMouseDown={captureSelection}
+                onChange={(e) => setFontInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") setFontFamily(fontInput.trim()); }}
+                onBlur={() => { if (fontInput.trim()) setFontFamily(fontInput.trim()); }}
+                title="글꼴 이름을 입력하세요"
+              />
+              <button
+                className="border rounded-r px-2 py-1 bg-white hover:bg-gray-50 h-[26px]"
+                onMouseDown={(e) => { captureSelection(); e.preventDefault(); }}
+                onClick={() => setFontOpen(v => !v)}
+                title="글꼴 목록"
+              >
+                <ChevronDown size={14}/>
+              </button>
             </div>
-          )}
+            {fontOpen && (
+              <div className="absolute left-0 right-0 z-50 top-full mt-1 min-w-full max-h-64 overflow-auto rounded-md border bg-white shadow-lg simple-scroll">
+                {FONT_LIST.map((name) => (
+                  <button
+                    key={name}
+                    onMouseDown={(e) => { captureSelection(); e.preventDefault(); }}
+                    onClick={() => { setFontInput(name === "기본 글꼴" ? "" : name); setFontFamily(name); setFontOpen(false); }}
+                    className="w-full text-left px-2 py-2 hover:bg-gray-50"
+                    style={{ fontFamily: name === "기본 글꼴" ? undefined : name }}
+                    title={name}
+                  >
+                    <div className="text-[14px]">{name}</div>
+                    {name !== "기본 글꼴" && <div className="text-[11px] text-gray-500">가나다 ABC 123</div>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 글자 크기(입력 + Word 단계 드롭다운) */}
+          <div className="relative inline-flex" ref={sizeRef}>
+            <input
+              className="border rounded-l px-2 py-1 w-18 h-[26px] text-right text-[14px]"
+              placeholder="크기"
+              value={fontSizeValue}
+              onMouseDown={captureSelection}
+              onChange={(e) => setFontSizeValue(e.target.value)}
+              onBlur={(e) => applyFontSizeFromValue(e.target.value)}
+              onKeyDown={onFontSizeKeyDown}
+              title="예: 16 또는 16px"
+            />
+            <button
+              className="border rounded-r px-2 py-1 bg-white hover:bg-gray-50"
+              onMouseDown={(e) => { captureSelection(); e.preventDefault(); }}
+              onClick={() => setSizeOpen(v => !v)}
+              title="글자 크기 목록(Word 단계)"
+            >
+              <ChevronDown size={14}/>
+            </button>
+            {sizeOpen && (
+              <div className="absolute z-50 top-full mt-1 w-full max-h-64 overflow-auto rounded-md border bg-white shadow-lg simple-scroll">
+                {WORD_STEPS.map(n => (
+                  <button
+                    key={n}
+                    onMouseDown={(e) => { captureSelection(); e.preventDefault(); }}
+                    onClick={() => { setFontSizeValue(`${n}px`); applyFontSize(n); setSizeOpen(false); }}
+                    className="w-full text-left px-3 py-1.5 hover:bg-gray-50"
+                  >
+                    {n}px
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 기본 서식 */}
+          <IconBtn title="굵게 (Ctrl+B)" active={isOn("bold")} onClick={() => withApplyMode((c) => c.toggleBold())} className="rounded"><Bold size={16}/></IconBtn>
+          <IconBtn title="기울임 (Ctrl+I)" active={isOn("italic")} onClick={() => withApplyMode((c) => c.toggleItalic())} className="rounded"><Italic size={16}/></IconBtn>
+          <IconBtn title="밑줄 (Ctrl+U)" active={isOn("underline")} onClick={() => withApplyMode((c) => c.toggleUnderline())} className="rounded"><UIcon size={16}/></IconBtn>
+          <IconBtn title="취소선" active={isOn("strike")} onClick={() => withApplyMode((c) => c.toggleStrike())} className="rounded"><Strikethrough size={16}/></IconBtn>
+
+          {/* 글자 색상 / 하이라이트 */}
+          <label className="border rounded px-1 py-[2px] h-[26px] inline-flex items-center gap-1 cursor-pointer" title="글자 색상" onMouseDown={captureSelection}>
+            <Droplet size={16} />
+            <input type="color" className="w-6 h-6 border rounded ml-1"
+              onChange={(e) => withApplyMode((c) => c.setColor(e.target.value))} />
+          </label>
+          <IconBtn title="하이라이트 토글" active={isOn("highlight")} onClick={() => withApplyMode((c) => c.toggleHighlight())} className="rounded">
+            <HighlighterIcon size={16}/>
+          </IconBtn>
+
+          <IconBtn title="모든 서식 지우기" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()} className="rounded"><Eraser size={16}/></IconBtn>
+
+          {/* 문단/헤딩 */}
+          <IconBtn title="본문" active={isOn("paragraph")} onClick={() => editor.chain().focus().setParagraph().run()} className="rounded items-center justify-center leading-none h-[26px]">P</IconBtn>
+          <IconBtn title="제목 1" active={isOn("heading",{level:1})} onClick={() => editor.chain().focus().toggleHeading({level:1}).run()} className="rounded"><Heading1 size={16}/></IconBtn>
+          <IconBtn title="제목 2" active={isOn("heading",{level:2})} onClick={() => editor.chain().focus().toggleHeading({level:2}).run()} className="rounded"><Heading2 size={16}/></IconBtn>
+          <IconBtn title="제목 3" active={isOn("heading",{level:3})} onClick={() => editor.chain().focus().toggleHeading({level:3}).run()} className="rounded"><Heading3 size={16}/></IconBtn>
+
+          {/* 정렬 */}
+          <IconBtn title="왼쪽 정렬"   active={editor.isActive({textAlign:"left"})}   onClick={() => withApplyMode((c)=>c.setTextAlign("left"))}   className="rounded"><AlignLeft size={16}/></IconBtn>
+          <IconBtn title="가운데 정렬" active={editor.isActive({textAlign:"center"})} onClick={() => withApplyMode((c)=>c.setTextAlign("center"))} className="rounded"><AlignCenter size={16}/></IconBtn>
+          <IconBtn title="오른쪽 정렬" active={editor.isActive({textAlign:"right"})}  onClick={() => withApplyMode((c)=>c.setTextAlign("right"))}  className="rounded"><AlignRight size={16}/></IconBtn>
+          <IconBtn title="양쪽 정렬"   active={editor.isActive({textAlign:"justify"})}onClick={() => withApplyMode((c)=>c.setTextAlign("justify"))} className="rounded"><AlignJustify size={16}/></IconBtn>
+
+          {/* 리스트 & 들여쓰기 */}
+          <IconBtn title="글머리 기호"  active={isOn("bulletList")}  onClick={() => editor.chain().focus().toggleBulletList().run()} className="rounded"><List size={16}/></IconBtn>
+          <IconBtn title="번호 매기기"   active={isOn("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} className="rounded"><ListOrdered size={16}/></IconBtn>
+          <IconBtn title="들여쓰기"  onClick={handleIndent}  className="rounded"><IndentIncrease size={16}/></IconBtn>
+          <IconBtn title="내어쓰기"  onClick={handleOutdent} className="rounded"><IndentDecrease size={16}/></IconBtn>
+
+          {/* 표 */}
+          <TableDropdown
+            onInsert={(r,c) => insertTable(r,c)}
+            onAddRow={() => editor.chain().focus().addRowAfter().run()}
+            onAddCol={() => editor.chain().focus().addColumnAfter().run()}
+          />
+          <IconBtn title="표 삭제" onClick={() => editor.chain().focus().deleteTable().run()} className="flex items-center justify-center rounded h-[26px] text-[14px]">표삭제</IconBtn>
+
+          {/* 페이지 번호 (인쇄용) */}
+          <IconBtn title="페이지 번호(인쇄) 토글" active={pageNumOn} onClick={togglePageNumbers} className="flex items-center justify-center rounded h-[26px] text-[14px]">
+            #페이지
+          </IconBtn>
         </div>
 
-        {/* 글자 크기(입력 + Word 단계 드롭다운) */}
-        <div className="relative" ref={sizeRef}>
-          <input
-            className="border rounded-l px-2 py-1 w-24 text-right"
-            placeholder="크기"
-            value={fontSizeValue}
-            onMouseDown={captureSelection}
-            onChange={(e) => setFontSizeValue(e.target.value)}
-            onBlur={(e) => applyFontSizeFromValue(e.target.value)}
-            onKeyDown={onFontSizeKeyDown}
-            title="예: 16 또는 16px"
-          />
-          <button
-            className="border rounded-r px-2 py-1 bg-white hover:bg-gray-50"
-            onMouseDown={(e) => { captureSelection(); e.preventDefault(); }}
-            onClick={() => setSizeOpen(v => !v)}
-            title="글자 크기 목록(Word 단계)"
-          >
-            <ChevronDown size={14}/>
-          </button>
-          {sizeOpen && (
-            <div className="absolute z-50 mt-1 w-28 max-h-64 overflow-auto rounded-md border bg-white shadow-lg">
-              {WORD_STEPS.map(n => (
-                <button
-                  key={n}
-                  onMouseDown={(e) => { captureSelection(); e.preventDefault(); }}
-                  onClick={() => { setFontSizeValue(`${n}px`); applyFontSize(n); setSizeOpen(false); }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-gray-50"
-                >
-                  {n}px
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 기본 서식 */}
-        <IconBtn title="굵게 (Ctrl+B)" active={isOn("bold")} onClick={() => withApplyMode((c) => c.toggleBold())} className="rounded"><Bold size={16}/></IconBtn>
-        <IconBtn title="기울임 (Ctrl+I)" active={isOn("italic")} onClick={() => withApplyMode((c) => c.toggleItalic())} className="rounded"><Italic size={16}/></IconBtn>
-        <IconBtn title="밑줄 (Ctrl+U)" active={isOn("underline")} onClick={() => withApplyMode((c) => c.toggleUnderline())} className="rounded"><UIcon size={16}/></IconBtn>
-        <IconBtn title="취소선" active={isOn("strike")} onClick={() => withApplyMode((c) => c.toggleStrike())} className="rounded"><Strikethrough size={16}/></IconBtn>
-
-        {/* 글자 색상 / 하이라이트 */}
-        <label className="border rounded px-1 py-[2px] inline-flex items-center gap-1 cursor-pointer" title="글자 색상" onMouseDown={captureSelection}>
-          <Droplet size={16} />
-          <input type="color" className="w-6 h-6 border rounded ml-1"
-            onChange={(e) => withApplyMode((c) => c.setColor(e.target.value))} />
-        </label>
-        <IconBtn title="하이라이트 토글" active={isOn("highlight")} onClick={() => withApplyMode((c) => c.toggleHighlight())} className="rounded">
-          <HighlighterIcon size={16}/>
-        </IconBtn>
-
-        <IconBtn title="모든 서식 지우기" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()} className="rounded"><Eraser size={16}/></IconBtn>
-
-        {/* 문단/헤딩 */}
-        <IconBtn title="본문" active={isOn("paragraph")} onClick={() => editor.chain().focus().setParagraph().run()} className="rounded">P</IconBtn>
-        <IconBtn title="제목 1" active={isOn("heading",{level:1})} onClick={() => editor.chain().focus().toggleHeading({level:1}).run()} className="rounded"><Heading1 size={16}/></IconBtn>
-        <IconBtn title="제목 2" active={isOn("heading",{level:2})} onClick={() => editor.chain().focus().toggleHeading({level:2}).run()} className="rounded"><Heading2 size={16}/></IconBtn>
-        <IconBtn title="제목 3" active={isOn("heading",{level:3})} onClick={() => editor.chain().focus().toggleHeading({level:3}).run()} className="rounded"><Heading3 size={16}/></IconBtn>
-
-        {/* 정렬 */}
-        <IconBtn title="왼쪽 정렬"   active={editor.isActive({textAlign:"left"})}   onClick={() => withApplyMode((c)=>c.setTextAlign("left"))}   className="rounded"><AlignLeft size={16}/></IconBtn>
-        <IconBtn title="가운데 정렬" active={editor.isActive({textAlign:"center"})} onClick={() => withApplyMode((c)=>c.setTextAlign("center"))} className="rounded"><AlignCenter size={16}/></IconBtn>
-        <IconBtn title="오른쪽 정렬" active={editor.isActive({textAlign:"right"})}  onClick={() => withApplyMode((c)=>c.setTextAlign("right"))}  className="rounded"><AlignRight size={16}/></IconBtn>
-        <IconBtn title="양쪽 정렬"   active={editor.isActive({textAlign:"justify"})}onClick={() => withApplyMode((c)=>c.setTextAlign("justify"))} className="rounded"><AlignJustify size={16}/></IconBtn>
-
-        {/* 리스트 & 들여쓰기 */}
-        <IconBtn title="글머리 기호"  active={isOn("bulletList")}  onClick={() => editor.chain().focus().toggleBulletList().run()} className="rounded"><List size={16}/></IconBtn>
-        <IconBtn title="번호 매기기"   active={isOn("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} className="rounded"><ListOrdered size={16}/></IconBtn>
-        <IconBtn title="들여쓰기"  onClick={handleIndent}  className="rounded"><IndentIncrease size={16}/></IconBtn>
-        <IconBtn title="내어쓰기"  onClick={handleOutdent} className="rounded"><IndentDecrease size={16}/></IconBtn>
-
-        {/* 표 */}
-        <TableDropdown
-          onInsert={(r,c) => insertTable(r,c)}
-          onAddRow={() => editor.chain().focus().addRowAfter().run()}
-          onAddCol={() => editor.chain().focus().addColumnAfter().run()}
-        />
-        <IconBtn title="표 삭제" onClick={() => editor.chain().focus().deleteTable().run()} className="rounded">표삭제</IconBtn>
-
-        {/* 페이지 번호 (인쇄용) */}
-        <IconBtn title="페이지 번호(인쇄) 토글" active={pageNumOn} onClick={togglePageNumbers} className="rounded">
-          #페이지
-        </IconBtn>
-
-        {/* 되돌리기 / 다시 실행 */}
-        <div className="ml-auto flex items-center">
+            {/* 되돌리기 / 다시 실행 */}
+        <div className="flex items-center mr-4 mt-8 h-[26px]">
           <IconBtn title="실행 취소 (Ctrl+Z)" disabled={!canUndo}
                    onClick={() => editor.chain().focus().undo().run()}
                    className="rounded-l-md -mr-px">
@@ -440,6 +444,7 @@ export default function EditorToolbar({ editor }) {
             <Redo2 size={16}/>
           </IconBtn>
         </div>
+        
       </div>
     </div>
   );
