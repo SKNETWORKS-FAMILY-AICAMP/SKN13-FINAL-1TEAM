@@ -108,10 +108,33 @@ class DocumentSearchAgent:
                                     search_results["action"] = "show_document_buttons"  # 프론트엔드 액션 플래그
                                     search_results["search_summary"] = f"{len(documents)}개의 관련 문서를 찾았습니다."
                             
-                            # 다운로드 링크 도구 특별 처리
+                            # 다운로드 링크 도구 특별 처리 - 다운로드 버튼 생성
                             elif tool_name == "get_presigned_download_url":
-                                search_results["download_link"] = result
-                                search_results["download_message"] = "다운로드 링크를 준비했습니다."
+                                download_url = result.get("downloadUrl")
+                                if download_url:
+                                    # 파일명 추출 (file_key에서)
+                                    file_key = tool_args.get("file_key", "")
+                                    filename = file_key.split("/")[-1] if "/" in file_key else file_key
+                                    
+                                    # 다운로드 버튼 데이터 생성
+                                    download_button = {
+                                        "id": f"download_{filename}",
+                                        "filename": filename,
+                                        "action_type": "download",
+                                        "download_url": download_url,
+                                        "document_data": {
+                                            "filename": filename,
+                                            "source": "s3",
+                                            "path": file_key
+                                        }
+                                    }
+                                    
+                                    search_results["document_selection"] = {
+                                        "documents": [download_button],
+                                        "query": f"{filename} 다운로드"
+                                    }
+                                    search_results["action"] = "show_document_buttons"
+                                    search_results["download_message"] = "다운로드 버튼을 아래에서 확인하세요."
 
                             search_results.update(result if isinstance(result, dict) else {"result": result})
                             
