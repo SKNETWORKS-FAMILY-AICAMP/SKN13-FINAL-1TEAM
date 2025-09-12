@@ -744,7 +744,7 @@ ipcMain.handle("window:close", (event) => {
  *   S3 및 FS Bridge (원본 유지 + 기본 경로만 고정)
  * ==========================================================================*/
 // 렌더러에서 invoke 시 { fileName, token } 형태로 넘겨주세요.
-ipcMain.handle("get-s3-upload-url", async (_evt, { fileName, token, contentType }) => {
+ipcMain.handle("get-s3-upload-url", async (_evt, { fileName, token, contentType, pathHint }) => {
   const fetch = require("node-fetch");
 
   // contentType이 없으면 기본값으로 octet-stream
@@ -761,6 +761,7 @@ ipcMain.handle("get-s3-upload-url", async (_evt, { fileName, token, contentType 
     body: JSON.stringify({
       filename: fileName,
       contentType: ct, // ★ renderer가 넘긴 실제 MIME 타입 사용
+      path_hint: pathHint || "" //  현재 폴더 prefix 전달
     }),
   });
 
