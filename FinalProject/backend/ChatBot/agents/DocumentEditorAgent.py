@@ -95,22 +95,38 @@ class DocumentEditorAgent:
                  # 도구 호출이 없는 경우, LLM의 텍스트 응답을 메시지에 추가
                 messages.append(response)
 
-            # 4. 도구 호출 후 최종 사용자 응답 생성 (직접 생성으로 변경)
-            print(">> [EDIT AGENT] Generating final user response after tool execution")
-            
-            # LLM을 호출하는 대신, 미리 정의된 템플릿 메시지를 사용합니다.
-            final_response_content = "문서 편집이 완료되었습니다."
-            if tool_name == "replace_text_in_document":
-                old_text = tool_args.get('old_text', '')
-                new_text = tool_args.get('new_text', '')
-                final_response_content = f"'{old_text}'을(를) '{new_text}'(으)로 성공적으로 변경했습니다."
-            elif tool_name == "insert_content_at_position":
-                final_response_content = "요청하신 내용을 문서에 추가했습니다."
-            
-            from langchain_core.messages import AIMessage
-            final_response = AIMessage(content=final_response_content)
-            messages.append(final_response)
-            print(f">> [EDIT AGENT] Final response generated: {final_response.content[:100]}...")
+            # 4. 도구 호출 후 최종 사용자 응답 생성 (LLM 기반 동적 생성)
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                print(">> [EDIT AGENT] Generating final user response after tool execution")
+                
+                try:
+                    # Create a prompt for final response generation
+                    final_prompt = HumanMessage(content="""이제 편집 결과를 바탕으로 사용자에게 도움이 되는 답변을 생성해주세요. 
+                    
+다음 사항들을 포함해주세요:
+1. 어떤 편집이 완료되었는지 구체적으로 설명
+2. 편집된 내용의 요약
+3. 사용자가 다음에 할 수 있는 추가 작업 제안 (필요시)
+
+친절하고 전문적인 톤으로 답변해주세요.""")
+                    messages.append(final_prompt)
+                    
+                    # Generate final response - use invoke without tools to get pure text response
+                    final_llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
+                    final_response = final_llm.invoke(messages)
+                    messages.append(final_response)
+                    
+                    print(f">> [EDIT AGENT] Final response generated: {final_response.content[:100]}...")
+                    
+                except Exception as e:
+                    print(f">> [EDIT AGENT] Error generating final response: {e}")
+                    # Fallback: create a simple response
+                    from langchain_core.messages import AIMessage
+                    fallback_response = AIMessage(content="문서 편집이 완료되었습니다. 편집된 내용을 확인해주세요.")
+                    messages.append(fallback_response)
+            else:
+                # No tool calls - add the response message directly
+                messages.append(response)
 
             # 5. 상태 업데이트
             AgentStateHelper.set_workflow_step(state, WorkflowStep.EDIT_COMPLETED)
