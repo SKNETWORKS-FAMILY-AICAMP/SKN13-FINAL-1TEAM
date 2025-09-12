@@ -1,5 +1,5 @@
 from typing import TypedDict, List, Optional, Annotated, Dict, Any, Union
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage # Added HumanMessage
 from langgraph.graph.message import add_messages
 from enum import Enum
 from dataclasses import dataclass
@@ -16,6 +16,7 @@ class WorkflowStep(str, Enum):
     ANALYSIS_COMPLETED = "analysis_completed"
     WORKFLOW_COMPLETED = "workflow_completed"
     ERROR = "error"
+    AWAITING_SELECTION = "awaiting_selection"
 
 # Agent types for better routing
 class AgentType(str, Enum):
@@ -33,52 +34,20 @@ class WorkflowResult:
     error: Optional[str] = None
     timestamp: Optional[str] = None
 
-# Enhanced AgentState with clean design
-class AgentState(TypedDict, total=False):
-    """
-    Comprehensive agent state that supports both simple and multi-step workflows.
-    Designed for easy use by all agent types.
-    """
-    
-    # === Core Communication Fields ===
-    # User's latest input prompt
-    prompt: str
-    
-    # Document content for editing/searching
-    document_content: Optional[str]
-    
-    # Full conversation history (managed by LangGraph)
-    messages: Annotated[List[BaseMessage], add_messages]
-    
-    # Final generated response
-    generation: Optional[str]
-    
-    # === Frontend Communication ===
-    # Request document content from frontend
-    needs_document_content: bool
-    
-    # === Multi-Step Workflow Fields ===
-    # Current workflow step
+
+
+class AgentState(TypedDict):
+    messages: List[BaseMessage]
     workflow_step: WorkflowStep
-    
-    # Whether workflow is complete
+    next_agents: List[str]
     workflow_complete: bool
-    
-    # Structured results from each workflow step
-    workflow_results: Dict[AgentType, WorkflowResult]
-    
-    # Queue of agents to execute next
-    next_agents: List[AgentType]
-    
-    # Shared context between workflow steps
-    workflow_context: Dict[str, Any]
-    
-    # Current workflow error (if any)
-    workflow_error: Optional[str]
-    
-    # === Agent-Specific Data ===
-    # Agent-specific intermediate data
-    agent_data: Dict[AgentType, Dict[str, Any]]
+    tool_name: str
+    tool_args: Dict[str, Any]
+    tool_output: Any
+    response: str
+    needs_document_content: bool
+    document_content: str
+    search_results: List[Dict[str, Any]]
 
 
 # Helper functions for easier AgentState manipulation
@@ -93,9 +62,8 @@ class AgentStateHelper:
     ) -> AgentState:
         """Create a clean initial state."""
         return AgentState(
-            prompt=prompt,
             document_content=document_content,
-            messages=messages or [],
+            messages=(messages or []) + [HumanMessage(content=prompt)], # Add current prompt as HumanMessage
             generation=None,
             needs_document_content=False,
             workflow_step=WorkflowStep.INITIAL,
@@ -104,7 +72,8 @@ class AgentStateHelper:
             next_agents=[],
             workflow_context={},
             workflow_error=None,
-            agent_data={}
+            agent_data={},
+            search_results=[] # Ensure search_results is initialized
         )
     
     @staticmethod
