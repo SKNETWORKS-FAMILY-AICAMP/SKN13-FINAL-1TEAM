@@ -302,6 +302,25 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         elif kind == "on_end": # 스트림 종료 이벤트
             final_state = event.get("data", {}).get("output", {})
             
+            # --- 문서편집창 IPC 전송 로직 ---
+            if final_state and final_state.get("send_to_editor", False):
+                selected_document = final_state.get("selected_document")
+                if selected_document:
+                    # IPC 메시지 데이터 준비
+                    ipc_data = {
+                        "action": "open_document_in_editor",
+                        "document": {
+                            "filename": selected_document.get("filename", "문서"),
+                            "content": selected_document.get("content", ""),
+                            "filePath": selected_document.get("filePath", ""),
+                            "source": selected_document.get("source", "unknown")
+                        }
+                    }
+                    
+                    # IPC 메시지를 스트림으로 전송 (프론트엔드에서 처리)
+                    yield f"data: {json.dumps(ipc_data, ensure_ascii=False)}\n\n"
+                    print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
+            
             # --- NEW LOGIC FOR HANDLING SPECIAL ACTION PAYLOAD ---
             if final_state and "response" in final_state:
                 try:

@@ -14,6 +14,7 @@ from ..core.AgentState import AgentState, WorkflowStep
 from .GeneralChatAgent import GeneralChatAgent  # 주석처리 예정
 from .DocumentSearchAgent import DocumentSearchAgent
 from .DocumentEditorAgent import DocumentEditorAgent
+from .DocumentSelectionAgent import DocumentSelectionAgent
 from .BusinessRejectionAgent import BusinessRejectionAgent
 
 load_dotenv()
@@ -191,8 +192,46 @@ def rule_based_intent_analysis(user_input: str) -> Dict[str, Any]:
 def pattern_based_intent_analysis(user_input: str, state: AgentState) -> Dict[str, Any]:
     """Context-aware pattern analysis."""
     
+    user_input_clean = user_input.lower().strip()
+    
     # Check previous workflow context
     workflow_results = state.get("workflow_results", {})
+    
+    # 문서 선택 패턴 체크 (최우선)
+    # 이전에 문서 검색 결과가 있고 requires_selection이 True인지 확인
+    document_search_results = workflow_results.get("document_search", {})
+    requires_selection = document_search_results.get("data", {}).get("requires_selection", False)
+    
+    if requires_selection:
+        # 숫자 선택 패턴
+        selection_patterns = [
+            r'^(\d+)$',  # "1", "2", "3"
+            r'^(\d+)번$',  # "1번", "2번"
+            r'^(\d+)\s*번째$',  # "1번째", "2번째"
+            r'번호\s*(\d+)',  # "번호 1"
+            r'(\d+)\s*선택',  # "1 선택"
+        ]
+        
+        for pattern in selection_patterns:
+            match = re.search(pattern, user_input_clean)
+            if match:
+                number = int(match.group(1))
+                if 1 <= number <= 3:  # 유효한 선택지
+                    return {
+                        "agents": ["document_selection"],
+                        "next_step": WorkflowStep.SEARCH_REQUESTED,
+                        "confidence": 0.95
+                    }
+        
+        # 한글 숫자 처리
+        korean_numbers = {'하나': 1, '첫': 1, '첫번째': 1, '둘': 2, '두': 2, '둘째': 2, '두번째': 2, '셋': 3, '세': 3, '세번째': 3, '셋째': 3}
+        for korean, number in korean_numbers.items():
+            if korean in user_input_clean:
+                return {
+                    "agents": ["document_selection"],
+                    "next_step": WorkflowStep.SEARCH_REQUESTED,
+                    "confidence": 0.90
+                }
     
     # If we have search results, user might want to do something with them
     if "search" in workflow_results:
@@ -397,7 +436,8 @@ def RoutingAgent(workflow_type: str = "multi_step"):
         # "general_chat": GeneralChatAgent(),  # 업무 전용으로 비활성화
         "business_rejection": BusinessRejectionAgent(),  # 업무 외 요청 거부
         "document_search": DocumentSearchAgent(), 
-        "document_edit": DocumentEditorAgent()
+        "document_edit": DocumentEditorAgent(),
+        "document_selection": DocumentSelectionAgent()  # 문서 선택 처리
     }
     
     # Create appropriate workflow graph

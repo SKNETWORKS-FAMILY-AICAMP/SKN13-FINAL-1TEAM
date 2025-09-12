@@ -10,6 +10,7 @@ from ..core.AgentState import AgentState, AgentStateHelper, AgentType, WorkflowS
 from ..tools.retriever_tool import RAG_search_tool
 from ..tools.local_document_search_tool import local_document_search_tool, HybridDocumentSearcher
 from ..tools.hybrid_document_search_tool import hybrid_document_search_tool
+from ..tools.enhanced_hybrid_search_tool import enhanced_hybrid_search_tool
 from ..tools.agent_logic import AgentTools
 from ..prompts.DocumentSearchSystemPrompt import get_document_search_system_prompt
 
@@ -29,9 +30,10 @@ class DocumentSearchAgent:
         
         # 문서 검색 전용 도구들
         self.tools = [
+            enhanced_hybrid_search_tool,  # 개선된 하이브리드 검색 도구 (우선순위)
             RAG_search_tool,
             local_document_search_tool,  # 기존 로컬 문서 검색 도구
-            hybrid_document_search_tool,  # 하이브리드 검색 도구 추가
+            hybrid_document_search_tool,  # 기존 하이브리드 검색 도구
             self.tool_executor.expand_query_tool,
             self.tool_executor.route_query_tool,
             self.tool_executor.handle_follow_up_tool,
@@ -94,8 +96,27 @@ class DocumentSearchAgent:
                             # 도구 실행 및 결과 저장
                             result = tool_function.invoke(tool_args)
                             
+                            # 개선된 하이브리드 검색 도구 특별 처리
+                            if tool_name == "enhanced_hybrid_search_tool":
+                                documents = result.get('found_documents', [])
+                                if documents:
+                                    # 3개 선택지 제공 응답 생성
+                                    final_answer = self._create_document_selection_response(documents, result.get('search_query', ''))
+                                    search_results["final_answer"] = final_answer
+                                    search_results["document_options"] = documents  # 프론트엔드용 데이터
+                                    search_results["requires_selection"] = True  # 선택이 필요함을 표시
+                                    skip_final_response_generation = True
+                                    from langchain_core.messages import AIMessage
+                                    messages.append(AIMessage(content=final_answer))
+                                else:
+                                    final_answer = f"'{result.get('search_query', '검색어')}'와 관련된 문서를 찾지 못했습니다. 다른 키워드로 다시 시도해보시거나, 문서가 올바른 위치에 있는지 확인해주세요."
+                                    search_results["final_answer"] = final_answer
+                                    skip_final_response_generation = True
+                                    from langchain_core.messages import AIMessage
+                                    messages.append(AIMessage(content=final_answer))
+                            
                             # 다운로드 링크 도구 특별 처리
-                            if tool_name == "get_presigned_download_url":
+                            elif tool_name == "get_presigned_download_url":
                                 final_answer = f"요청하신 문서의 다운로드 링크입니다: [다운로드]({result})"
                                 search_results["final_answer"] = final_answer
                                 skip_final_response_generation = True # 최종 응답 생성 건너뛰기
@@ -206,6 +227,44 @@ class DocumentSearchAgent:
             results["response_content"] = response.content
         
         return results
+    
+    def _create_document_selection_response(self, documents: List[Dict[str, Any]], query: str) -> str:
+        """
+        검색된 문서들로부터 3개 선택지 응답 생성
+        """
+        if not documents:
+            return f"'{query}'와 관련된 문서를 찾지 못했습니다."
+        
+        # 최대 3개까지만 표시
+        top_documents = documents[:3]
+        
+        response_parts = [
+            f"'{query}'와 관련된 문서를 찾았습니다! 다음 중 원하시는 문서를 선택해주세요:\n"
+        ]
+        
+        for i, doc in enumerate(top_documents, 1):
+            filename = doc.get('filename', '알 수 없는 파일')
+            source = doc.get('source', '알 수 없음')
+            location = doc.get('location', '')
+            score = doc.get('total_score', 0)
+            
+            # 소스 아이콘
+            source_icon = "📂" if source == 'local' else "☁️"
+            
+            # 점수를 백분율로 표시 (선택사항)
+            score_percentage = int(score * 100) if score else 0
+            
+            response_parts.append(
+                f"{i}. **{filename}** {source_icon}\n"
+                f"   📍 위치: {location}\n"
+                f"   🎯 관련도: {score_percentage}%\n"
+            )
+        
+        response_parts.append(
+            "\n💡 원하시는 문서의 번호(1, 2, 3)를 말씀해주시면 문서편집창에서 열어드리겠습니다!"
+        )
+        
+        return "\n".join(response_parts)
     
     def _handle_error(self, state: AgentState, error_message: str) -> Dict[str, Any]:
         """에러 처리 및 상태 업데이트"""

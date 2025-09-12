@@ -68,6 +68,7 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         # Add specialized agent nodes (using new class-based agents)
         workflow.add_node("document_search", self._document_search_node)
         workflow.add_node("document_edit", self._document_edit_node) 
+        workflow.add_node("document_selection", self._document_selection_node)  # 문서 선택 에이전트
         # workflow.add_node("general_chat", self._general_chat_node)  # 업무 전용으로 비활성화
         workflow.add_node("business_rejection", self._business_rejection_node)
         
@@ -88,6 +89,7 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
                 # Agent routing
                 "document_search": "document_search", 
                 "document_edit": "document_edit",
+                "document_selection": "document_selection",  # 문서 선택 라우팅
                 "general_chat": "business_rejection",
                 "business_rejection": "business_rejection",
                 
@@ -140,6 +142,13 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         if edit_agent:
             return edit_agent.process(state)
         return {"workflow_error": "DocumentEditorAgent not found"}
+    
+    def _document_selection_node(self, state: AgentState) -> Dict[str, Any]:
+        """Document selection processing node."""
+        selection_agent = self.agents_registry.get("document_selection")
+        if selection_agent:
+            return selection_agent.process(state)
+        return {"workflow_error": "DocumentSelectionAgent not found"}
     
     # def _general_chat_node(self, state: AgentState) -> Dict[str, Any]:
     #     """General chat processing node."""
