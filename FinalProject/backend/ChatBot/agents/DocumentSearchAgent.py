@@ -208,6 +208,7 @@ class DocumentSearchAgent:
                 result["document_selection"] = search_results["document_selection"]
                 if search_results.get("final_answer"):
                     result["final_answer"] = search_results["final_answer"]
+                print(f"📋 [DocumentSearchAgent] 다운로드 버튼 데이터 생성됨: {search_results['document_selection']}")
             
             return result
             
