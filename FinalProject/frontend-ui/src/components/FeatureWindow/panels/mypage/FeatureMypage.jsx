@@ -4,55 +4,110 @@ import userApi from "../../../services/userApi.js";
 import useToast from "../../../shared/toast/useToast.js";
 
 /** 공용 Row */
-function Row({
-    label,
-    value,
-    actionLabel,
-    onAction,
-    actionDisabled = false,
-    secondaryActionLabel,
-    onSecondaryAction,
-    secondaryDisabled = false,
-}) {
-    const hasAnyAction = Boolean(actionLabel || secondaryActionLabel);
-    return (
-        <div className="flex items-center justify-between py-6 border-b bg-transparent border-zinc-300">
-            <div className="flex flex-col w-full mr-6">
-                <span className="text-base font-medium text-zinc-400">
-                    {label}
-                </span>
-                <div className="text-base text-black">{value}</div>
-            </div>
+// function Row({
+//     label,
+//     value,
+//     actionLabel,
+//     onAction,
+//     actionDisabled = false,
+//     secondaryActionLabel,
+//     onSecondaryAction,
+//     secondaryDisabled = false,
+// }) {
+//     const hasAnyAction = Boolean(actionLabel || secondaryActionLabel);
+//     return (
+//         <div className="flex items-center justify-between pt-4 pb-6 border-b bg-transparent border-neutral-200">
+//             <div className="flex flex-col w-full mr-6">
+//                 <span className="mb-[14px] text-[14px] font-medium text-neutral-300">
+//                     {label}
+//                 </span>
+//                 <div className="text-[14px] text-black">{value}</div>
+//             </div>
 
-            {hasAnyAction ? (
-                <div className="flex items-center justify-end gap-2 w-[296px]">
-                    {secondaryActionLabel && (
-                        <button
-                            type="button"
-                            onClick={onSecondaryAction}
-                            disabled={secondaryDisabled}
-                            className="h-12 min-w-[120px] rounded-lg border-2 border-neutral-200 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {secondaryActionLabel}
-                        </button>
-                    )}
-                    {actionLabel && (
-                        <button
-                            type="button"
-                            onClick={onAction}
-                            disabled={actionDisabled}
-                            className="h-12 min-w-[120px] rounded-lg border-2 border-neutral-200 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {actionLabel}
-                        </button>
-                    )}
-                </div>
-            ) : (
-                <div className="h-12 w-[296px]" />
-            )}
+//             {hasAnyAction ? (
+//                 <div className="flex items-center justify-end gap-2 w-[296px]">
+//                     {secondaryActionLabel && (
+//                         <button
+//                             type="button"
+//                             onClick={onSecondaryAction}
+//                             disabled={secondaryDisabled}
+//                             className="h-12 min-w-[120px] rounded-lg border-2 border-neutral-200 text-[14px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+//                         >
+//                             {secondaryActionLabel}
+//                         </button>
+//                     )}
+//                     {actionLabel && (
+//                         <button
+//                             type="button"
+//                             onClick={onAction}
+//                             disabled={actionDisabled}
+//                             className="h-12 min-w-[120px] rounded-lg bg-black text-white text-[14px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+//                         >
+//                             {actionLabel}
+//                         </button>
+//                     )}
+//                 </div>
+//             ) : (
+//                 <div className="h-12 w-[296px]" />
+//             )}
+//         </div>
+//     );
+// }
+function Row({
+  label,
+  value,
+  actionLabel,
+  onAction,
+  actionDisabled = false,
+  secondaryActionLabel,
+  onSecondaryAction,
+  secondaryDisabled = false,
+}) {
+  const hasAnyAction = Boolean(actionLabel || secondaryActionLabel);
+  return (
+    <div className="pt-4 pb-6 border-b bg-transparent border-neutral-200">
+      {/* 라벨(윗줄) */}
+      <div className="mb-[10px] text-[14px] font-medium text-neutral-300">
+        {label}
+      </div>
+
+      {/* 값 & 버튼(같은 줄) */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="text-[14px] text-black flex-1 min-w-0 mr-6">
+          {value}
         </div>
-    );
+
+        {hasAnyAction ? (
+          <div className="flex items-center justify-end gap-2 w-[296px] shrink-0">
+            {secondaryActionLabel && (
+              <button
+                type="button"
+                onClick={onSecondaryAction}
+                disabled={secondaryDisabled}
+                className="h-10 min-w-[108px] px-3 rounded-lg text-[14px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {secondaryActionLabel}
+              </button>
+            )}
+            {actionLabel && (
+              <button
+                type="button"
+                onClick={onAction}
+                disabled={actionDisabled}
+                className="h-10 min-w-[108px] px-3 rounded-lg bg-black text-white text-[14px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLabel}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="h-10 w-[296px]" />
+        )}
+      </div>
+    </div>
+  );
 }
+
 
 /** 메인 프로필 화면 */
 function FeatureMypage({ onChangePage }) {
@@ -166,20 +221,20 @@ function FeatureMypage({ onChangePage }) {
 
     return (
         <section>
-            <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
+            <div className="mx-auto w-full max-w-[1200px] px-6">
                 <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">마이페이지</h1>
+                    <h1 className="text-[22px] font-bold">마이페이지</h1>
                 </div>
 
-                <div className="mt-6 max-w-[937px]">
-                    <h2 className="text-lg font-semibold text-black mb-4">
+                <div className="mt-12 max-w-[937px]">
+                    <h2 className="text-[18px] font-semibold text-black mb-4">
                         사원 정보
                     </h2>
                     <Row label="이름" value={emp.username} />
                     <Row label="부서" value={emp.dept} />
                     <Row label="직급" value={emp.position} />
 
-                    <h2 className="text-lg font-semibold text-black mt-10 mb-4">
+                    <h2 className="text-lg font-semibold text-black mt-12 mb-4">
                         계정
                     </h2>
                     <Row label="아이디" value={emp.unique_auth_number} />
@@ -217,19 +272,21 @@ export default function MypageContainer() {
     if (page === "changepassword") {
         // ✅ 패널(임베드) 모드로 비번 변경 폼 표시
         return (
-            <div className="mx-auto w-full max-w-[937px] px-6 py-6">
-                <h1 className="text-2xl font-bold mb-6">비밀번호 변경</h1>
+            <section>
+                <div className="mx-auto w-full max-w-[1200px] px-6">
+                    <h1 className="text-[22px] font-bold mb-12">비밀번호 변경</h1>
 
-                <ChangePasswordView
-                    beforeStep="mypage"
-                    role="employee"
-                    isForceChange={false}
-                    asPanel // ← 패널(임베드) 모드로 렌더
-                    routeTo={() => setPage("mypage")} // 성공 후 마이페이지 복귀
-                    goLogin={() => setPage("mypage")} // (로그인 모달 안 씀)
-                    goMyPage={() => setPage("mypage")}
-                />
-            </div>
+                    <ChangePasswordView
+                        beforeStep="mypage"
+                        role="employee"
+                        isForceChange={false}
+                        asPanel // ← 패널(임베드) 모드로 렌더
+                        routeTo={() => setPage("mypage")} // 성공 후 마이페이지 복귀
+                        goLogin={() => setPage("mypage")} // (로그인 모달 안 씀)
+                        goMyPage={() => setPage("mypage")}
+                    />
+                </div>
+            </section>
         );
     }
 

@@ -1,21 +1,19 @@
-// ✅ src/pages/AdminPage.jsx
 import React, { useMemo, useState, useEffect } from "react";
-// import Logo from "../assets/sample_logo.svg";
 import EmployeeCreateModal from "../../../Modal/EmployeeCreateModal";
 import EmployeeEditModal from "../../../Modal/EmployeeEditModal";
 import ConfirmModal from "../../../Modal/ConfirmModal.jsx";
 import useToast from "../../../shared/toast/useToast.js";
 
-import employeeApi from "../../../services/employeeApi.js"; // 경로 확인
-
+import employeeApi from "../../../services/employeeApi.js";
+// 아이콘
 import { FaSearch } from "react-icons/fa"; // 검색 아이콘
 
-// 부서 list(임시)
+// 부서 list
 const DEPT_OPTIONS = ["인사부", "총무부", "개발부"];
-// 직급 list(임시)
+// 직급 list
 const RANK_OPTIONS = ["사원", "대리", "팀장"];
 
-/** API → UI 매핑 */
+// api 연동 시 사원 정보
 function apiToUi(u) {
     return {
         id: u.id,
@@ -29,7 +27,7 @@ function apiToUi(u) {
     };
 }
 
-/** UI 생성 → API */
+// 사원 생성 시 api 전송 body
 function uiCreateToApi(payload) {
     return {
         username: payload.name,
@@ -41,7 +39,7 @@ function uiCreateToApi(payload) {
     };
 }
 
-/** UI 수정 → API */
+// 사원 수정 시 api 전송 body
 function uiEditToApi(patch) {
     const body = {};
     if (patch.name !== undefined) body.username = patch.name;
@@ -57,11 +55,11 @@ function uiEditToApi(patch) {
 export default function FeatureEmployees() {
     const toast = useToast();
 
-    const [employees, setEmployees] = useState([]); // 더미 제거
+    const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState("");
 
-    // 필터
+    // 사원 검색 필터
     const [dept, setDept] = useState("");
     const [rank, setRank] = useState("");
     const [q, setQ] = useState("");
@@ -93,7 +91,7 @@ export default function FeatureEmployees() {
     const [resetTarget, setResetTarget] = useState(null);
     const [isResetting, setIsResetting] = useState(false);
 
-    // 목록 조회 (배열/객체 모두 수용) ★ 변경
+    // 목록 조회
     const fetchEmployees = async () => {
         setLoading(true);
         setLoadError("");
@@ -125,7 +123,7 @@ export default function FeatureEmployees() {
         };
     }, []);
 
-    // 생성 ★ 변경: password 제거
+    // 사원 등록
     const handleCreateSubmit = async (payloadFromModal) => {
         const clean = {
             name: (payloadFromModal.name || "").trim(),
@@ -154,7 +152,7 @@ export default function FeatureEmployees() {
         setOpenEditModal(true);
     };
 
-    // ★ 변경: 삭제 클릭 시 → 확인 모달만 오픈 (API 호출 X)
+    // 삭제하기 클릭 시 확인 모달 열기
     const handleRowActionDelete = (u) => {
         setOpenMenuId(null);
         setConfirmTarget(u); // 어떤 사원인지 저장
@@ -168,7 +166,7 @@ export default function FeatureEmployees() {
         setResetOpen(true);
     };
 
-    // ★ 추가: 확인 모달에서 "삭제하기" 클릭 → 실제 삭제 API
+    // 확인 모달 -> 최종 삭제
     const handleConfirmDelete = async () => {
         if (!confirmTarget || isDeleting) return;
         setIsDeleting(true);
@@ -204,7 +202,7 @@ export default function FeatureEmployees() {
     };
 
 
-    // 수정 저장 ★ 변경: password 제거
+    // 수정 저장
     const handleEditSubmit = async (payloadFromModal) => {
         const patch = {
             id: payloadFromModal.id,
@@ -218,25 +216,25 @@ export default function FeatureEmployees() {
         try {
             const body = uiEditToApi(patch);
             await employeeApi.updateEmployee(patch.id, body);
-            alert("수정 사항이 저장되었습니다.");
+            toast.success("사원 정보가 수정되었습니다.")
             await fetchEmployees();
             setOpenEditModal(false);
             setSelectedEmployee(null);
         } catch (err) {
             console.error("[사원 수정] error:", err);
-            alert(err?.message || "수정 중 오류가 발생했습니다.");
+            toast.error("사원 정보 수정에 실패했습니다. 다시 시도해주세요.");
         }
     };
 
     return (
         <section>
-            <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
+            <div className="mx-auto w-full max-w-[1200px] px-6 py-16">
                 {/* 제목 */}
                 <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">사원 목록</h1>
+                    <h1 className="text-[22px] font-bold">사원 목록</h1>
                     <button
                         onClick={() => setOpenAddModal(true)}
-                        className="text-sm px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
+                        className="text-[14px] px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
                     >
                         사원 계정 추가
                     </button>
@@ -391,7 +389,7 @@ export default function FeatureEmployees() {
                                                             handleRowActionDelete(
                                                                 u
                                                             )
-                                                        } // ★ 변경: 여기서는 모달만 띄움
+                                                        }
                                                     >
                                                         삭제하기
                                                     </button>
@@ -437,7 +435,7 @@ export default function FeatureEmployees() {
                     rankOptions={RANK_OPTIONS}
                 />
 
-                {/* ★ 추가: 삭제 확인 모달 (Tailwind로 요청 이미지처럼 구성) */}
+                {/* 삭제 확인 모달 */}
                 <ConfirmModal
                     open={confirmOpen}
                     onClose={() => {
@@ -446,7 +444,7 @@ export default function FeatureEmployees() {
                             setConfirmTarget(null);
                         }
                     }}
-                    title="이 사원 계정을 삭제하시겠습니까?" // 18px bold는 컴포넌트 내부 스타일로 처리됨
+                    title="이 사원 계정을 삭제하시겠습니까?"
                     content="삭제한 계정은 복구할 수 없습니다. 정말로 삭제하시겠습니까?"
                     cancelText="취소"
                     confirmText={isDeleting ? "삭제 중..." : "삭제하기"}
@@ -457,12 +455,13 @@ export default function FeatureEmployees() {
                         }
                     }}
                     onConfirm={handleConfirmDelete}
-                    confirmVariant="danger" // 빨간 버튼
-                    align="center" // 버튼 가운데 정렬 (이미지와 동일)
+                    confirmVariant="danger"
+                    align="center"
                     closeOnEsc={!isDeleting}
                     disableBackdropClick={true}
                 />
 
+                {/* 비밀번호 초기화 확인 모달 */}
                 <ConfirmModal
                     open={resetOpen}
                     onClose={() => {

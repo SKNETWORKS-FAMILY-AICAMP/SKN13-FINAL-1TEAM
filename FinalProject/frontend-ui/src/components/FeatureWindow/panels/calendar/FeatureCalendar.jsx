@@ -1,5 +1,4 @@
 // src/components/FeatureWindow/panels/calendar/FeatureCalendar.jsx
-// ⬇️ 기존 파일 전체 교체: 생성 모달에 '오늘 날짜 + 현재 시간'을 넘기도록 defaultDate를 new Date()로 전달
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import CalendarView from "./CalendarView";
 import AgendaPanel from "./AgendaPanel";
@@ -52,10 +51,10 @@ function MonthSwitcher({ currentDate, onChange }) {
   const mm = currentDate.getMonth();
   const label = `${mm + 1}월`;
   return (
-    <div className="flex items-center gap-2 mt-3">
-      <button className="rounded-lg border border-neutral-300 p-2 hover:bg-neutral-50" onClick={() => onChange?.(new Date(yyyy, mm - 1, 1))}><LuChevronLeft className="h-5 w-5" /></button>
+    <div className="flex items-center gap-2">
+      <button className="rounded-lg p-2 hover:bg-neutral-50" onClick={() => onChange?.(new Date(yyyy, mm - 1, 1))}><LuChevronLeft className="h-5 w-5" /></button>
       <div className="text-lg font-semibold min-w-[56px] text-center">{label}</div>
-      <button className="rounded-lg border border-neutral-300 p-2 hover:bg-neutral-50" onClick={() => onChange?.(new Date(yyyy, mm + 1, 1))}><LuChevronRight className="h-5 w-5" /></button>
+      <button className="rounded-lg p-2 hover:bg-neutral-50" onClick={() => onChange?.(new Date(yyyy, mm + 1, 1))}><LuChevronRight className="h-5 w-5" /></button>
     </div>
   );
 }
@@ -74,6 +73,7 @@ export default function FeatureCalendar() {
   const [openEdit, setOpenEdit] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [openCreate, setOpenCreate] = useState(false);
+  const [createDefaultDate, setCreateDefaultDate] = useState(new Date());
 
   const fetchEvents = useCallback(async (start, end) => {
     try {
@@ -101,6 +101,13 @@ export default function FeatureCalendar() {
     setCurrentDate(nextDate);
     if (view === "calendar") setRange(getMonthRange(nextDate));
   }, [view]);
+
+  const handleJumpToDate = useCallback((date) => {
+    const next = date instanceof Date ? date : new Date(date);
+    setCurrentDate(next);
+    // 달력 보든 간트 보든, 바로 해당 달 범위로 갱신해서 이벤트 재조회 트리거
+    setRange(getMonthRange(next));
+  }, []);
 
   const handleEventClick = useCallback((ev) => {
     setSelected(ev);
@@ -159,6 +166,14 @@ export default function FeatureCalendar() {
     }
   }, []);
 
+  // 날짜(칸) 클릭 → 해당 칸의 날짜로 모달 오픈 (시간 00:00으로 정규화)
+  const handleSelectSlot = useCallback((slotInfo) => {
+    const base = slotInfo?.start ? new Date(slotInfo.start) : new Date();
+    base.setHours(0, 0, 0, 0);
+    setCreateDefaultDate(base);
+    setOpenCreate(true);
+  }, []);
+
   const leftPane = useMemo(() => {
     if (view === "gantt") {
       return <GanttView currentDate={currentDate} events={events} onEventClick={handleEventClick} height={560} />;
@@ -168,6 +183,7 @@ export default function FeatureCalendar() {
         currentDate={currentDate}
         events={events}
         onEventClick={handleEventClick}
+        onSelectSlot={handleSelectSlot}
         onRangeChange={handleRangeChange}
         height={560}
       />
@@ -176,29 +192,35 @@ export default function FeatureCalendar() {
 
   return (
     <section>
-      <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
+      <div className="mx-auto w-full max-w-[1200px] px-6">
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-12 lg:col-span-8">
             <div className="flex items-center justify-between">
-              <h1 className="text-xl font-bold">일정 관리</h1>
-              <div className="flex items-center gap-3">
-                <AddScheduleButton onClick={() => setOpenCreate(true)} />
-                <ViewToggle view={view} onChange={setView} />
+              <h1 className="text-[22px] font-extrabold">일정 관리</h1>
+              <div className="flex items-center gap-2">
+                <AddScheduleButton onClick={() => {
+                  setCreateDefaultDate(new Date());
+                  setOpenCreate(true)
+                  }} />
               </div>
             </div>
-            <MonthSwitcher currentDate={currentDate} onChange={handleMonthSwitch} />
+            <div className="flex items-center justify-between mt-10">
+              <MonthSwitcher currentDate={currentDate} onChange={handleMonthSwitch} />
+              <ViewToggle view={view} onChange={setView} />
+            </div>
             <div className="mt-4">{leftPane}</div>
           </div>
           <div className="col-span-12 lg:col-span-4">
-            <AgendaPanel events={events} onSelectEvent={handleEventClick} onJumpToDate={setCurrentDate} />
+            <AgendaPanel events={events} onSelectEvent={handleEventClick} onJumpToDate={handleJumpToDate} />
           </div>
         </div>
       </div>
 
       {/* 등록: 오늘 날짜 + 현재 시간 전달 */}
       <CreateorEditEventModal
+        key={openCreate ? createDefaultDate.toISOString() : "closed"}
         open={openCreate}
-        defaultDate={new Date()}
+        defaultDate={createDefaultDate}
         onClose={() => setOpenCreate(false)}
         onSubmit={handleCreateSubmit}
       />
@@ -237,7 +259,7 @@ export default function FeatureCalendar() {
         onCancel={() => setConfirmOpen(false)}
         confirmVariant="danger"
         align="center"
-        contentClassName="rounded-2xl"
+        contentClassName="rounded-xl"
       />
     </section>
   );

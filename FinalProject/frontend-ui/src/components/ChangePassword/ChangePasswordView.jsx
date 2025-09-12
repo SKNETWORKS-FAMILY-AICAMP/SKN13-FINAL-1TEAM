@@ -46,7 +46,7 @@ export default function ChangePasswordView({
     const embed = asPanel || beforeStep === "mypage";
 
     const Content = (
-        <form onSubmit={h.onSubmit} className="space-y-5">
+        <form onSubmit={h.onSubmit} className="space-y-6">
             <PasswordTextField
                 id="current-password"
                 label="현재 비밀번호"

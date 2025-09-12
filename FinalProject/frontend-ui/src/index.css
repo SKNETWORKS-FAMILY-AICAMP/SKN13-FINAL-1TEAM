@@ -10,21 +10,20 @@
     -webkit-app-region: no-drag;
 }
 
-/* 레이아웃 흔들림 방지: 최상위 래퍼들 고정 */
+/* 레이아웃 흔들림 방지: 최상위 래퍼들 고정 (파일코드 유지) */
 html, body, #root {
   height: 100%;
   width: 100%;
-  overflow: hidden;   /* 가로/세로 스크롤을 상위에서 막고, 내부 스크롤러만 쓰게 */
+  overflow: hidden;
 }
 
-/* 우측 패널(채팅을 감싸는 부모)에 붙일 클래스용 */
+/* 채팅 우측 패널 레이아웃(파일코드 유지) */
 .chat-pane {
   min-width: 0;       /* flex 자식 가로 확장 금지 */
   overflow: hidden;   /* 가로 확장/가로 스크롤 차단 */
 }
 
-
-/* 스크롤바 숨기기 유틸리티 */
+/* 스크롤바 숨기기 유틸리티 (텍스트 코드로 통일) */
 .no-scrollbar::-webkit-scrollbar {
     display: none;
 }
@@ -33,7 +32,7 @@ html, body, #root {
     scrollbar-width: none; /* Firefox */
 }
 
-/* index.css — 스크롤바(얇고 라운드) */
+/* index.css — 스크롤바(얇고 라운드) (텍스트 코드로 통일) */
 
 /* Firefox */
 .simple-scroll,
@@ -73,9 +72,12 @@ html, body, #root {
     background: transparent;
 }
 
-/* JSON 코드 블록 줄바꿈 개선 */
+/* JSON 코드 블록 줄바꿈 개선 (텍스트 코드로 통일) */
 .word-wrap-break-word {
     word-wrap: break-word;
     overflow-wrap: anywhere;
     word-break: break-word;
 }
+
+/* 사이드바 width 유틸 (텍스트에만 있던 항목 추가) */
+.w-18 { width: 4.5rem; }

@@ -94,7 +94,7 @@ export default function PasswordTextField({
     return (
         <div className="w-full">
             {label && (
-                <label htmlFor={id} className="mb-2 block text-sm font-medium">
+                <label htmlFor={id} className="mb-4 block text-[14px] font-medium">
                     {label}
                 </label>
             )}
@@ -113,7 +113,7 @@ export default function PasswordTextField({
                     placeholder={placeholder}
                     autoComplete={autoComplete}
                     maxLength={maxLength} /* 키보드 입력 상한 */
-                    className="w-full bg-transparent outline-none text-base placeholder:text-gray-400"
+                    className="w-full bg-transparent outline-none text-[14px] placeholder:text-gray-400"
                     style={{ color: textColor }}
                 />
                 <button

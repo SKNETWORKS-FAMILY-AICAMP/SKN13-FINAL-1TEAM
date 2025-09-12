@@ -43,6 +43,19 @@
   font-weight: 700;
 }
 
+.rbc-chip-inner .rbc-chip-text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  padding: 1px;
+  text-align: center;
+  overflow: hidden; 
+  white-space: nowrap; 
+  text-overflow: ellipsis; 
+  word-break: break-all;
+}
+
 /* ================================
    Gantt(Fallback) 기존 스타일
 ================================ */
