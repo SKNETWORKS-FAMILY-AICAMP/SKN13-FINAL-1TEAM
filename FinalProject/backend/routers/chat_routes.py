@@ -307,6 +307,10 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         
         elif kind == "on_end": # 스트림 종료 이벤트
             final_state = event.get("data", {}).get("output", {})
+            print(f"🐛 [DEBUG] on_end event: final_state keys = {list(final_state.keys()) if final_state else 'None'}")
+            if final_state and final_state.get("action"):
+                print(f"🐛 [DEBUG] action found: {final_state.get('action')}")
+                print(f"🐛 [DEBUG] document_selection: {final_state.get('document_selection', 'None')}")
             
             # --- 문서편집창 IPC 전송 로직 ---
             if final_state and final_state.get("send_to_editor", False):
@@ -346,6 +350,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
             # 문서 선택 버튼 데이터 전송 로직
             if final_state and final_state.get("action") == "show_document_buttons":
                 document_selection = final_state.get("document_selection")
+                print(f"🐛 [DEBUG] show_document_buttons 조건 만족, document_selection = {document_selection}")
                 if document_selection:
                     # 문서 선택 버튼을 위한 특별한 메시지 전송
                     button_message = {
@@ -353,8 +358,13 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                         "content": final_state.get("final_answer", "문서를 찾았습니다!"),
                         "document_selection": document_selection
                     }
+                    print(f"🐛 [DEBUG] button_message 생성됨: {button_message}")
                     yield f"data: {json.dumps(button_message, ensure_ascii=False)}\n\n"
                     print(f"📋 [chat_routes] 문서 선택 버튼 전송: {len(document_selection.get('documents', []))}개")
+                else:
+                    print(f"🐛 [DEBUG] document_selection이 None입니다!")
+            else:
+                print(f"🐛 [DEBUG] show_document_buttons 조건 불만족: action = {final_state.get('action') if final_state else 'final_state is None'}")
 
             # Extract and stream final messages from agents (existing logic)
             if final_state and "messages" in final_state:
