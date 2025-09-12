@@ -13,10 +13,13 @@ export default function DocumentButtons({ documentSelection, sessionId, onDocume
     try {
       console.log('📄 문서 버튼 클릭:', document.filename);
       
-      // 지원되는 확장자인지 확인
-      const isSupported = document.action_type === 'open_editor';
+      // 액션 타입에 따른 처리
+      const actionType = document.action_type || 'open_editor';
       
-      if (isSupported) {
+      if (actionType === 'download') {
+        // 직접 다운로드 처리
+        await handleDirectDownload(document);
+      } else if (actionType === 'open_editor') {
         // 지원하는 파일: 문서편집창에서 열기
         const response = await fetch('/api/v1/chat/document/open', {
           method: 'POST',
@@ -60,6 +63,43 @@ export default function DocumentButtons({ documentSelection, sessionId, onDocume
       console.error('❌ 문서 버튼 클릭 오류:', error);
       if (onDocumentClick) {
         onDocumentClick(`오류: ${error.message}`);
+      }
+    }
+  };
+
+  const handleDirectDownload = async (document) => {
+    try {
+      console.log('⬇️ 직접 다운로드 시작:', document.filename);
+      
+      const downloadUrl = document.download_url;
+      if (!downloadUrl) {
+        console.error('❌ 다운로드 URL이 없습니다');
+        if (onDocumentClick) {
+          onDocumentClick('다운로드 URL을 찾을 수 없습니다.');
+        }
+        return;
+      }
+
+      // 링크 생성 및 클릭으로 다운로드 트리거
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = document.filename || 'download';
+      link.target = '_blank';
+      
+      // 일시적으로 DOM에 추가
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      console.log('✅ 다운로드 완료:', document.filename);
+      if (onDocumentClick) {
+        onDocumentClick(`"${document.filename}" 다운로드가 시작되었습니다.`);
+      }
+      
+    } catch (error) {
+      console.error('❌ 직접 다운로드 오류:', error);
+      if (onDocumentClick) {
+        onDocumentClick(`다운로드 오류: ${error.message}`);
       }
     }
   };
