@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 
 from ..core.AgentState import AgentState, AgentStateHelper, AgentType, WorkflowStep
 from ..tools.editor_tool_new import ALL_EDITOR_TOOLS
+from ..tools.agent_logic import AgentTools
 
 load_dotenv()
 
@@ -25,9 +26,12 @@ class DocumentEditorAgent:
     def __init__(self):
         """문서 편집 전용 도구들과 LLM 초기화"""
         self.llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
+        self.tool_executor = AgentTools(llm=self.llm)
         
-        # 문서 편집 전용 도구들 (1061줄의 괴물 editor_tool.py에서 가져옴)
-        self.tools = ALL_EDITOR_TOOLS
+        # 문서 편집 전용 도구들 + 다운로드 URL 생성 도구
+        self.tools = ALL_EDITOR_TOOLS + [
+            self.tool_executor.get_presigned_download_url
+        ]
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
@@ -78,7 +82,15 @@ class DocumentEditorAgent:
                         try:
                             # 도구 실행 및 결과 저장
                             result = tool_function.invoke(tool_args)
-                            updated_content = result # 도구 결과로 문서 내용 업데이트
+                            
+                            # 편집 도구의 경우 결과로 문서 내용 업데이트
+                            if tool_name in ["run_document_edit", "edit_html_document", "replace_text_in_document", "insert_content_at_position"]:
+                                updated_content = result
+                            
+                            # 다운로드 링크 도구 특별 처리
+                            elif tool_name == "get_presigned_download_url":
+                                edit_results["download_link"] = result
+                                edit_results["download_message"] = "편집된 문서의 다운로드 링크를 준비했습니다."
                             
                             print(f">> [AGENT] Tool '{tool_name}' executed. Result length: {len(str(result))}\n")
                             
@@ -171,6 +183,10 @@ class DocumentEditorAgent:
 - 사용자의 요청이 불분명하거나 도구로 처리할 수 없는 경우에도, 직접 답변하지 말고 `clarify_request` 또는 `cannot_process`와 같은 (가상의) 도구를 호출하는 것처럼 응답해야 합니다. (이 부분은 LLM이 규칙을 따르도록 하는 트릭입니다)
 - 사용자의 모든 입력은 편집 요청으로 간주하고, 그에 맞는 도구를 반드시 찾아내어 호출해야 합니다.
 
+**사용 가능한 도구**:
+1. 문서 편집 도구들 (run_document_edit, replace_text_in_document, insert_content_at_position 등)
+2. **get_presigned_download_url**: 편집 완료 후 사용자가 다운로드를 요청하거나 필요할 때 사용
+
 **대화 맥락**:
 {conversation_context}
 
@@ -184,6 +200,7 @@ class DocumentEditorAgent:
 2. TipTap 에디터 호환 HTML 생성  
 3. 사용자 요청에 정확히 맞는 편집 실행
 4. Placeholder가 아닌 실제 유용한 내용 작성
+5. 편집 후 사용자가 다운로드를 원한다면 get_presigned_download_url 도구 활용
 
 위의 CRITICAL RULE에 따라, 사용자 요청을 분석하고 가장 적절한 편집 도구를 **반드시** 선택하여 실행하세요.
 """
