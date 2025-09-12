@@ -341,67 +341,82 @@ def needs_editing_after_analysis(state: AgentState) -> bool:
 
 def route_question(state: AgentState) -> Literal["document_search", "business_rejection", "document_edit", "request_document"]:
     """
-    업무 전용 챗봇 라우팅 - 문서 편집/검색만 허용, 나머지는 거부
+    업무 전용 챗봇 라우팅 - 구조적 의미 분석 기반 라우팅
     """
     print("---ROUTING QUESTION (업무 전용)---")
     
-    # Pass the entire message history to the LLM for better context
+    # Get user input from messages
+    messages = state.get("messages", [])
+    if not messages:
+        return "business_rejection"
+    
+    last_message = messages[-1]
+    user_input = getattr(last_message, 'content', str(last_message)).lower()
+    
+    print(f"--- 분석할 입력: {user_input[:100]}... ---")
+    
+    # Apply our improved semantic analysis
+    intent_result = rule_based_intent_analysis(user_input)
+    confidence = intent_result.get("confidence", 0.0)
+    agents = intent_result.get("agents", [])
+    
+    print(f"--- 의미 분석 결과: {agents}, 신뢰도: {confidence} ---")
+    
+    # Map to legacy return format
+    if "document_search" in agents:
+        # If agent requires a document but it's not in the state, request it.
+        if not state.get("document_content"):
+            print("--- Document search requested but no document content. Routing to request_document. ---")
+            return "request_document"
+        return "document_search"
+    elif "document_edit" in agents:
+        # If agent requires a document but it's not in the state, request it.
+        if not state.get("document_content"):
+            print("--- Document edit requested but no document content. Routing to request_document. ---")
+            return "request_document"
+        return "document_edit"
+    elif "business_rejection" in agents:
+        return "business_rejection"
+    
+    # Fallback to LLM if confidence is too low
+    if confidence < 0.7:
+        print("--- 신뢰도 낮음, LLM fallback 사용 ---")
+        return _llm_fallback_route(state, user_input)
+    
+    # Default fallback
+    return "business_rejection"
+
+def _llm_fallback_route(state: AgentState, user_input: str) -> Literal["document_search", "business_rejection", "document_edit", "request_document"]:
+    """LLM 기반 fallback 라우팅."""
     messages = state["messages"]
+    llm = ChatOpenAI(model_name='gpt-4o-mini', temperature=0)  # 더 빠른 모델 사용
     
-    llm = ChatOpenAI(model_name='gpt-4o', temperature=0)
-    
-    # 업무 전용 라우팅 프롬프트
-    system_prompt = f"""당신은 업무 전용 AI 어시스턴트의 라우팅 전문가입니다. 사용자의 요청이 업무 관련인지 판단하고 적절한 처리 방향을 결정합니다.
+    system_prompt = """업무 전용 AI 어시스턴트 라우팅. 간결하게 판단하세요.
 
-**허용되는 업무 영역:**
+**분류:**
+- 문서 검색 요청 → "DocumentSearchAgent"
+- 문서 편집 요청 → "DocumentEditorAgent"  
+- 업무 외 요청 → "BusinessRejection"
 
-1. **DocumentSearchAgent** (문서 검색):
-   - 내부 문서 검색 요청
-   - 문서 찾기, 다운로드 링크 요청
-   - 문서 관련 정보 검색
+**예시:**
+- "엄준식이 작성한 문서 검색해줘" → DocumentSearchAgent
+- "문서에 내용 추가해줘" → DocumentEditorAgent
+- "안녕하세요" → BusinessRejection
 
-2. **DocumentEditorAgent** (문서 편집):
-   - 문서 내용 수정, 변경, 추가, 삭제
-   - 문서 편집 지시사항
-   - 문서 구조 변경 요청
+한 단어로만 응답하세요: DocumentSearchAgent, DocumentEditorAgent, BusinessRejection 중 하나"""
 
-3. **업무 관련 질문** (DocumentSearchAgent로 처리):
-   - 문서 내용에 대한 설명이나 요약 요청
-   - "이 문서는 언제 작성된 건가요?" 같은 문서 관련 질문
-   - 업무 프로세스나 규정에 대한 질문
-
-**거부 대상 (BusinessRejection):**
-- 일반적인 대화 (안녕하세요, 날씨, 개인적인 질문 등)
-- 업무와 무관한 정보 요청
-- 오락, 게임, 개인적 상담
-- 회사 업무와 직접 관련 없는 모든 요청
-- 모호하여 업무 관련인지 불분명한 요청
-
-**판단 기준:**
-1. 문서 편집/검색과 직접 관련이 있는가?
-2. 회사 업무 수행에 필요한 정보인가?
-3. 문서나 업무 프로세스와 연관이 있는가?
-
-**결과:** 다음 중 하나로만 응답하세요:
-- "DocumentSearchAgent" (문서 검색/업무 질문)
-- "DocumentEditorAgent" (문서 편집)
-- "BusinessRejection" (업무 외 요청 거부)
-"""
-
-    # Invoke LLM with the system prompt and the entire message history
     response = llm.invoke([SystemMessage(content=system_prompt)] + messages)
     decision = response.content.strip()
-
-    # If agent requires a document but it's not in the state, request it.
-    if ("DocumentEditorAgent" in decision or "DocumentSearchAgent" in decision) and not state.get("document_content"):
-        print(f"--- Decision: {decision}, but document not found. Routing to request_document. ---")
-        return "request_document"
     
-    print(f"업무 전용 라우팅 결과: {decision}")
-
+    print(f"--- LLM Fallback 결과: {decision} ---")
+    
     if "DocumentSearchAgent" in decision:
+        if not state.get("document_content"):
+            return "request_document"
         return "document_search"
     elif "DocumentEditorAgent" in decision:
+        if not state.get("document_content"):
+            return "request_document"
         return "document_edit"
     else:
         return "business_rejection"
