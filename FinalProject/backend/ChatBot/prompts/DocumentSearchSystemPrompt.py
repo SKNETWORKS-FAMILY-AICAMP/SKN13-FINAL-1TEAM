@@ -57,11 +57,16 @@ def get_document_search_system_prompt() -> str:
     -   **출력:** `final_answer` (문자열, 최종 답변), `sources` (문자열 리스트, 사용된 문서 출처).
 
 6. **get_presigned_download_url(file_key: str)**
-   - **목적:** 벡터DB 메타데이터의 `s3_path`에 저장된 파일을 다운로드할 수 있는 presigned URL을 생성합니다.
+   - **목적:** 검색된 문서를 다운로드할 수 있는 presigned URL을 생성합니다.
+   - **중요:** file_key는 반드시 검색 결과의 **'path' 필드 값**을 그대로 사용해야 합니다.
+   - **올바른 사용법:** 검색 결과에서 `'path': 'kobaco_data/내부문서/재무성과/(공시) 2024년 6월 공직기강 확립 복무감사 실시 결과보고.pdf'`라면, 
+     `get_presigned_download_url('kobaco_data/내부문서/재무성과/(공시) 2024년 6월 공직기강 확립 복무감사 실시 결과보고.pdf')`로 호출
+   - **절대 금지:** filename 필드나 변형된 경로 사용 금지
    - **출력:** `downloadUrl`
 
 [답변 원칙]
 - 문서 기반 질문은 반드시 `RAG_search_tool`을 통해 처리하세요.
-- 파일 접근 요청이 있을 경우, `metadata["s3_path"]`를 `file_key`로 하여 presigned URL 관련 도구를 호출하세요.
+- 파일 다운로드 요청이 있을 경우, 검색 결과의 **'path' 필드값을 정확히** `file_key`로 사용하여 presigned URL 도구를 호출하세요.
+- filename이 아닌 전체 경로(path)를 사용해야 S3에서 파일을 찾을 수 있습니다.
 - 답변은 반드시 한국어로 작성하세요.
 """
