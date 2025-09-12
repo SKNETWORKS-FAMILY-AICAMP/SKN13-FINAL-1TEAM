@@ -31,8 +31,8 @@ class DocumentSearchAgent:
         
         # 문서 검색 전용 도구들
         self.tools = [
-            enhanced_hybrid_search_tool,  # 개선된 하이브리드 검색 도구 (우선순위)
-            RAG_search_tool,
+            RAG_search_tool,  # 벡터 DB 검색 (s3_path 메타데이터 포함, 우선순위)
+            enhanced_hybrid_search_tool,  # 개선된 하이브리드 검색 도구  
             local_document_search_tool,  # 기존 로컬 문서 검색 도구
             hybrid_document_search_tool,  # 기존 하이브리드 검색 도구
             self.tool_executor.expand_query_tool,
