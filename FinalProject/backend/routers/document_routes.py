@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Body, Query
 from fastapi.responses import JSONResponse, FileResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel
@@ -9,9 +9,28 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import fitz  # PyMuPDF
 from docx import Document as DocxDocument  # python-docx
+# --- 맨 위 import 근처 ---
 
-from ..database import get_db, Document
+import boto3
+from botocore.config import Config
+
+from ..database import get_db, Document, User
 from ..ChatBot.tools.html_to_docx import convert_html_to_docx
+from .auth_routes import get_current_user
+
+SHARED_BUCKET = os.getenv("S3_SHARED_BUCKET", "skn13-shared-bucket")
+SHARED_ROOT   = os.getenv("S3_SHARED_ROOT", "")  # 예: "" 또는 "shared/"
+
+# Presigned URL 도구 import
+try:
+    from ..presigned import (
+        get_upload_url, get_download_url, get_public_url,
+        upload_file_directly, OneTimePresignedURLManager
+    )
+    PRESIGNED_AVAILABLE = True
+except ImportError as e:
+    print(f"Failed to import presigned module: {e}")
+    PRESIGNED_AVAILABLE = False
 
 # APIRouter 인스턴스 생성
 router = APIRouter()
@@ -36,6 +55,15 @@ class DocumentOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+class PresignedURLRequest(BaseModel):
+    filename: str
+    contentType: Optional[str] = "application/octet-stream"
+    pathHint: Optional[str] = ""
+
+class ExportDocxRequest(BaseModel):
+    html: str
+    filename: str = "document.docx"
 
 # --- 변환 헬퍼 ---
 def _convert_to_markdown(file_path: Path, file_type: str) -> str:
@@ -63,9 +91,13 @@ def _convert_to_markdown(file_path: Path, file_type: str) -> str:
 
 # --- 문서 관리 API ---
 
-@router.get("/documents", response_model=List[DocumentOut])
-async def list_documents(db: Session = Depends(get_db)):
-    documents = db.query(Document).all()
+@router.get("/", response_model=List[DocumentOut])
+async def list_documents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 자신의 문서만 조회 가능
+    documents = db.query(Document).filter(Document.owner_id == current_user.id).all()
     return [
         DocumentOut(
             id=doc.id,
@@ -77,8 +109,12 @@ async def list_documents(db: Session = Depends(get_db)):
         for doc in documents
     ]
 
-@router.post("/documents")
-async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@router.post("/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -107,6 +143,7 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
 
     db_document = Document(
         id=doc_id,
+        owner_id=current_user.id,  # 소유자 설정
         original_filename=safe_filename,
         file_type=file_extension,
         original_file_path=str(original_file_path),
@@ -122,8 +159,20 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
         "message": "Document uploaded and converted successfully"
     })
 
-@router.post("/documents/{doc_id}/export")
-async def export_document_as_docx(doc_id: str, req: ExportDocxRequest):
+@router.post("/{doc_id}/export")
+async def export_document_as_docx(
+    doc_id: str, 
+    req: ExportDocxRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 소유자만 내보내기 가능
+    db_document = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.owner_id == current_user.id
+    ).first()
+    if not db_document:
+        raise HTTPException(status_code=404, detail="Document not found or access denied")
     safe_filename = req.filename.strip()
     if not safe_filename.endswith(".docx"):
         safe_filename += ".docx"
@@ -144,11 +193,19 @@ async def export_document_as_docx(doc_id: str, req: ExportDocxRequest):
         background=BackgroundTask(os.unlink, temp_filepath)
     )
 
-@router.get("/documents/{doc_id}/content")
-async def get_document_content(doc_id: str, db: Session = Depends(get_db)):
-    db_document = db.query(Document).filter(Document.id == doc_id).first()
+@router.get("/{doc_id}/content")
+async def get_document_content(
+    doc_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 소유자만 접근 가능
+    db_document = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.owner_id == current_user.id
+    ).first()
     if not db_document:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Document not found or access denied")
 
     markdown_file_path = Path(db_document.markdown_file_path)
     if not markdown_file_path.exists():
@@ -157,11 +214,20 @@ async def get_document_content(doc_id: str, db: Session = Depends(get_db)):
     content = markdown_file_path.read_text(encoding="utf-8")
     return JSONResponse(content={"doc_id": doc_id, "markdown_content": content})
 
-@router.put("/documents/{doc_id}/content")
-async def save_document_content(doc_id: str, content: str, db: Session = Depends(get_db)):
-    db_document = db.query(Document).filter(Document.id == doc_id).first()
+@router.put("/{doc_id}/content")
+async def save_document_content(
+    doc_id: str, 
+    content: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 소유자만 수정 가능
+    db_document = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.owner_id == current_user.id
+    ).first()
     if not db_document:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Document not found or access denied")
 
     markdown_file_path = Path(db_document.markdown_file_path)
 
@@ -175,11 +241,19 @@ async def save_document_content(doc_id: str, content: str, db: Session = Depends
 
     return JSONResponse(content={"doc_id": doc_id, "message": "Markdown content saved successfully"})
 
-@router.delete("/documents/{doc_id}")
-async def delete_document(doc_id: str, db: Session = Depends(get_db)):
-    db_document = db.query(Document).filter(Document.id == doc_id).first()
+@router.delete("/{doc_id}")
+async def delete_document(
+    doc_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 소유자만 삭제 가능
+    db_document = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.owner_id == current_user.id
+    ).first()
     if not db_document:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Document not found or access denied")
 
     original_file_path = Path(db_document.original_file_path)
     markdown_file_path = Path(db_document.markdown_file_path)
@@ -196,3 +270,114 @@ async def delete_document(doc_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return JSONResponse(content={"message": "Document and associated files deleted successfully"})
+
+# --- Presigned URL 엔드포인트 (main2.py에서 이식) ---
+
+@router.post("/presigned")
+async def create_presigned_url(
+    request: PresignedURLRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    S3 업로드를 위한 presigned URL 발급
+    프론트엔드가 직접 S3에 파일을 업로드할 수 있도록 함
+    """
+    if not PRESIGNED_AVAILABLE:
+        raise HTTPException(
+            status_code=503, 
+            detail="Presigned URL service not available. Check S3 configuration."
+        )
+    
+    try:
+        # pathHint를 포함해서 presigned URL 생성 (contentType이 None이면 자동 추론됨)
+        result = get_upload_url(request.filename, request.contentType, path_hint=request.pathHint)
+        return {
+            "uploadUrl": result.get("uploadUrl"),
+            "fileKey": result.get("fileKey"), 
+            "displayName": request.filename,
+            "contentType": result.get("contentType")  # ★ 백엔드에서 결정된 최종 Content-Type 사용!
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to generate presigned URL: {str(e)}"
+        )
+
+@router.post("/export/docx")
+async def export_document_as_docx(req: ExportDocxRequest, current_user: User = Depends(get_current_user)):
+    print(f"--- HTML content length: {len(req.html)} ---")
+    print(f"--- Filename: {req.filename} ---")
+
+    safe_filename = req.filename.strip()
+    if not safe_filename.endswith(".docx"):
+        safe_filename += ".docx"
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+        temp_filepath = temp_file.name
+
+    doc_title = os.path.splitext(safe_filename)[0]
+    success = convert_html_to_docx(req.html, temp_filepath, title=doc_title)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to convert HTML to DOCX.")
+    
+    return FileResponse(
+        path=temp_filepath,
+        filename=safe_filename,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        background=BackgroundTask(os.unlink, temp_filepath)
+    )
+
+_s3 = boto3.client(
+    "s3",
+    region_name=os.getenv("AWS_REGION", "ap-northeast-2"),
+    config=Config(signature_version="s3v4"),
+)
+
+def _build_prefix(root: str, user_prefix: str | None) -> str:
+    p = (user_prefix or "").lstrip("/")
+    out = f"{root}{p}".replace("//", "/")
+    return out if not out or out.endswith("/") else out + "/"
+
+@router.get("/shared/list")
+async def list_shared(prefix: str = "", current_user: User = Depends(get_current_user)):
+    Prefix = _build_prefix(SHARED_ROOT, prefix)
+    resp = _s3.list_objects_v2(
+        Bucket=SHARED_BUCKET, Prefix=Prefix, Delimiter="/", MaxKeys=500
+    )
+    folders = [
+        {
+            "id": cp["Prefix"],
+            "name": (cp["Prefix"][len(Prefix):]).rstrip("/"),
+            "prefix": cp["Prefix"],
+        }
+        for cp in resp.get("CommonPrefixes", [])
+    ]
+    files = []
+    for obj in resp.get("Contents", []):
+        if obj["Key"] == Prefix or obj["Key"].endswith("/"):
+            continue
+        files.append({
+            "id": obj["Key"],
+            "key": obj["Key"],
+            "name": obj["Key"][len(Prefix):],
+            "size": obj.get("Size"),
+            "lastModified": obj.get("LastModified").isoformat() if obj.get("LastModified") else None,
+        })
+    return {"prefix": Prefix, "folders": folders, "files": files}
+
+@router.get("/shared/download")
+async def download_shared(key: str = Query(..., description="S3 key"),
+                          current_user: User = Depends(get_current_user)):
+    # presigned GET으로 돌려주면 대용량도 안전
+    url = _s3.generate_presigned_url(
+        ClientMethod="get_object",
+        Params={"Bucket": SHARED_BUCKET, "Key": key},
+        ExpiresIn=60 * 5,
+    )
+    return {"url": url}
+
+@router.delete("/shared/object")
+async def delete_shared(key: str, current_user: User = Depends(get_current_user)):
+    _s3.delete_object(Bucket=SHARED_BUCKET, Key=key)
+    return {"ok": True}

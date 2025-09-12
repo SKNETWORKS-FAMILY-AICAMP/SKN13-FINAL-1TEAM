@@ -1,91 +1,119 @@
 // ✅ 파일: src/components/FeatureWindow/FeatureShell.jsx
 
-/**
- * FeatureShell
- * ----------------------------------------------------------------------
- * 목적:
- *  - 공용 레이아웃 컨테이너.
- *  - 좌측: MainSidebar(역할별 섹션 주입)
- *  - 우측: RoleRouter(역할 + activeKey에 따른 실제 화면 스위치)
- */
-
 import React, { useMemo, useState, useEffect } from "react";
 import HeaderBar from "../shared/HeaderBar.jsx";
 import MainSidebar from "../Sidebar/MainSidebar.jsx";
-import Logo from "../../assets/sample_logo.svg";  // 회사 로고(임시)
+import Logo from "../../assets/sample_logo.svg";
 
-import { adminSections, employeeSections, featureFooter } from "../Sidebar/featureNavConfig.jsx";
+import {
+    adminSections,
+    employeeSections,
+    featureFooter,
+} from "../Sidebar/featureNavConfig.jsx";
 import RoleRouter from "./RoleRouter.jsx";
+import ConfirmModal from "../Modal/ConfirmModal.jsx"; // 🆕 추가: 확인 모달 임포트
 
 export default function FeatureShell({ userType = "user" }) {
-  // 역할별 섹션
-  const sections = useMemo(
-    () => (userType === "admin" ? adminSections : employeeSections),
-    [userType]
-  );
+    // 🚩 1) 역할 정규화
+    const role = userType === "admin" ? "admin" : "employee";
 
-  // 초기 활성 탭
-  const [activeKey, setActiveKey] = useState(userType === "admin" ? "employees" : "docs");
+    // 역할별 섹션
+    const sections = useMemo(
+        () => (role === "admin" ? adminSections : employeeSections),
+        [role]
+    );
 
-  // 사이드바 메뉴 선택
-  const handleSelect = (key) => {
-    if (key === "logout") {
-      // 보조 트리거: 혹시 사이드바 버튼이 직접 전역 요청을 안 쏘는 경우 대비
-      window.auth?.requestLogout?.("all");
-      return;
-    }
-    setActiveKey(key);
-  };
+    // 🚩 2) 초기 활성 탭
+    const [activeKey, setActiveKey] = useState(() =>
+        role === "admin" ? "employees" : "docs"
+    );
 
-  // 사이드바 접힘/펼침
-  const [collapsed, setCollapsed] = useState(true);
+    // 🚩 3) role 바뀌면 기본 탭 리셋
+    useEffect(() => {
+        setActiveKey(role === "admin" ? "employees" : "docs");
+    }, [role]);
 
-  /** ✅ 전역 로그아웃 수신
-   * - main.js가 모든 창에 'logout' 브로드캐스트
-   * - 관리자라면 메인 로그인 창을 다시 띄우고, 이 창은 닫는다.
-   */
-  useEffect(() => {
-    const off = window.auth?.onLogout?.(() => {
-      try {
-        localStorage.removeItem("user");
-        localStorage.removeItem("userToken");
-      } catch {}
+    // 사이드바 메뉴 선택
+    const handleSelect = (key) => {
+        if (key === "logout") {
+            // (보조 트리거로 남겨두되 실제로는 onLogoutClick에서 모달 띄움)
+            window.auth?.requestLogout?.("all");
+            return;
+        }
+        setActiveKey(key);
+    };
 
-      if (userType === "admin") {
-        // 관리자 로그아웃 시: 기본(챗봇) 로그인 창 노출
-        window.electron?.showMain?.();
-      }
-      // 기능부/관리자 창 닫기
-      window.electron?.window?.close?.();
-    });
-    return () => off?.();
-  }, [userType]);
+    // 사이드바 접힘/펼침
+    const [collapsed, setCollapsed] = useState(true);
 
-  return (
-    <div className="w-screen h-screen bg-white">
-      {/* 상단 바 */}
-      <HeaderBar showSidebarToggle={false} />
+    /** ✅ 전역 로그아웃 수신 */
+    useEffect(() => {
+        const off = window.auth?.onLogout?.(() => {
+            try {
+                localStorage.removeItem("user");
+                localStorage.removeItem("userToken");
+            } catch {}
 
-      {/* 좌/우 분할 */}
-      <div className="flex h-[calc(100vh-40px)]">
-        {/* 사이드바 */}
-        <MainSidebar
-          collapsed={collapsed}
-          onCollapse={() => setCollapsed(!collapsed)}
-          logoSrc={Logo}
-          sections={sections}
-          footer={featureFooter}
-          activeKey={activeKey}
-          onSelect={handleSelect}
-        />
+            if (role === "admin") {
+                window.electron?.showMain?.();
+            }
+            window.electron?.window?.close?.();
+        });
+        return () => off?.();
+    }, [role]);
 
-        {/* 컨텐츠 영역 */}
-        <main className="flex-1 overflow-auto p-6">
-          <div className="max-w-[1200px] mx-auto">
-            <RoleRouter userType={userType} activeKey={activeKey} />
-          </div>
-        </main>
-      </div>
-    </div>
-  );
+    /** 🆕 추가: 로그아웃 확인 모달 상태 */
+    const [showLogoutModal, setShowLogoutModal] = useState(false); // 🆕
+
+    /** 🆕 추가: 실제 로그아웃 실행 함수(모달 '확인'에서 호출) */
+    const executeLogout = () => {
+        // 🆕
+        window.auth?.requestLogout?.("all");
+        setShowLogoutModal(false);
+    };
+
+    return (
+        <div className="w-screen h-screen bg-white">
+            {/* 상단 바 */}
+            <HeaderBar showSidebarToggle={false} />
+
+            {/* 좌/우 분할 */}
+            <div className="flex h-[calc(100vh-40px)]">
+                {/* 사이드바 */}
+                <MainSidebar
+                    collapsed={collapsed}
+                    onCollapse={() => setCollapsed(!collapsed)}
+                    logoSrc={Logo}
+                    sections={sections}
+                    footer={featureFooter}
+                    activeKey={activeKey}
+                    onSelect={handleSelect}
+                    /** 🆕 추가: 사이드바 '로그아웃' 클릭 시 모달 띄우기 */
+                    onLogoutClick={() => setShowLogoutModal(true)} // 🆕
+                />
+
+                {/* 컨텐츠 영역 */}
+                <main className="flex-1 overflow-auto pl-6 pt-4">
+                    <div className="max-w-[1200px] mx-auto">
+                        <RoleRouter userType={userType} activeKey={activeKey} />
+                    </div>
+                </main>
+            </div>
+
+            {/* 🆕 추가: 로그아웃 확인 모달 */}
+            <ConfirmModal
+                open={showLogoutModal}
+                onClose={() => setShowLogoutModal(false)}
+                title="로그아웃 하시겠습니까?" // 18px bold는 컴포넌트 내부 스타일로 충족
+                content=""
+                cancelText="취소"
+                confirmText="로그아웃"
+                confirmVariant="danger"
+                onCancel={() => setShowLogoutModal(false)}
+                onConfirm={executeLogout} // 실제 로그아웃 트리거
+                align="right"
+                size="sm"
+            />
+        </div>
+    );
 }

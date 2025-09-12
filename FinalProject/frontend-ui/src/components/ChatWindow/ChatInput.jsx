@@ -118,8 +118,9 @@ export default function ChatInput({
     .map((f, idx) => ({ f, idx }))
     .filter(({ f }) => !f?.type?.startsWith('image/'));
 
+  // 🔒 방어 로직 반영: 바깥 래퍼 shrink-0 (하단바 고정)
   return (
-    <div className="w-full flex justify-center px-4 py-3 border-t bg-white/70 backdrop-blur">
+    <div className="w-full flex justify-center px-4 py-3 bg-white shrink-0">
       <div className={`flex-1 min-w-0 ${isMaximized ? 'max-w-[60%]' : 'max-w-4xl'}`}>
         {(filesArr.length > 0) && (
           <div className="mb-2 inline-flex items-start gap-3">

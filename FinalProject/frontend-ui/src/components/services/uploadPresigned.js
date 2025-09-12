@@ -21,6 +21,7 @@ LINKS:
 */
 
 import { SPACES } from "./s3Spaces.js";
+import { BASE_URL } from "./env.js";
 
 /* ============================================================================
    🔒 내부 상태: 단일비행(inflight) & 완료(done) 캐시 (sha256 → Promise/Result)
@@ -56,23 +57,80 @@ async function getPresignedUrlViaBridge(params) {
   } = typeof params === "string" ? { filename: params } : (params || {});
   if (!filename) throw new Error("filename is required");
 
-  if (!window?.electron?.getS3UploadUrl) {
-    throw new Error("Electron bridge가 없습니다: window.electron.getS3UploadUrl 미정의");
+  try {
+    // ✅ 직접 백엔드 API 호출 (Bearer 토큰 부착)
+    const token = localStorage.getItem("userToken");
+    if (!token) {
+      throw new Error("JWT 토큰이 없습니다. 로그인이 필요합니다.");
+    }
+
+    console.log("[upload] presign request →", { filename, contentType, dir, space });
+    const response = await fetch(`${BASE_URL}/files/presigned`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        filename,
+        contentType,
+        pathHint: dir || "",
+        path_hint: dir || "",
+        path: dir || "",
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      console.error("[upload] presign FAILED:", response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+    }
+
+    const result = await response.json();
+    const finalUrl = result.uploadUrl || result.url || result.presigned_url;
+    const finalKey = result.fileKey || result.key || result.object_key;
+
+    console.log("[upload] presign OK:", { status: response.status, url: finalUrl, key: finalKey });
+    return {
+      url: finalUrl,
+      uploadUrl: finalUrl,
+      fileKey: finalKey,
+      displayName: result.displayName || result.filename || result.name,
+    };
+  } catch (apiError) {
+    console.warn("Direct API call failed, trying Electron bridge:", apiError?.message);
+
+    // getPresignedUrlViaBridge 내부 (폴백 경로)
+    // API 실패 시 Electron bridge 폴백
+    if (!window?.electron?.getS3UploadUrl) {
+      throw new Error("Electron bridge도 없습니다: window.electron.getS3UploadUrl 미정의");
+    }
+
+    // ✅ 토큰을 함께 전달하고, 키 이름을 메인과 일치(`fileName`)시킴
+    const token = localStorage.getItem("userToken") || "";
+    let resp = await window.electron
+      .getS3UploadUrl({ fileName: filename, token, contentType }) // space/dir은 서버쪽 pathHint로 처리
+      .catch(() => null);
+
+    // 구버전(문자열만 받는)까지 폴백
+    if (!resp || (!resp.url && !resp.uploadUrl)) {
+      resp = await window.electron.getS3UploadUrl(filename);
+    }
+
+    const url = resp?.uploadUrl || resp?.url;
+    if (!url) throw new Error(`Presigned URL 요청 실패: ${resp?.error || "url 없음"}`);
+
+    // 파일키/표시명 등 백엔드가 준 부가 정보도 보존
+    console.log("[upload] presign via bridge OK:", resp);
+    return { ...resp, url };
   }
+}
 
-  // 우선 신규 시그니처(object)로 시도
-  let resp = await window.electron.getS3UploadUrl({ filename, space, dir, contentType }).catch(() => null);
-
-  // 구버전 브릿지(문자열만 받는) 폴백
-  if (!resp || (!resp.url && !resp.uploadUrl)) {
-    resp = await window.electron.getS3UploadUrl(filename);
-  }
-
-  const url = resp?.uploadUrl || resp?.url;
-  if (!url) throw new Error(`Presigned URL 요청 실패: ${resp?.error || "url 없음"}`);
-
-  // 파일키/표시명 등 백엔드가 준 부가 정보도 보존
-  return { ...resp, url };
+// ✅ 콘텐츠 타입 선택(서명/PUT 완전 일치 보장용)
+function pickContentType(filename, fallbackType) {
+  // .exe는 환경에 따라 x-msdownload가 문제를 일으킬 수 있어 octet-stream으로 강제
+  if (/\.exe$/i.test(filename)) return "application/octet-stream";
+  return fallbackType || "application/octet-stream";
 }
 
 /* ============================================================================
@@ -90,11 +148,12 @@ async function getPresignedUrlViaBridge(params) {
 export async function uploadFileWithDedup(file, meta = {}) {
   if (!file) throw new Error("file is required");
   const filename = file.name || "unnamed";
-  const contentType = file.type || "application/octet-stream";
+  // ✅ 콘텐츠 타입 선택(서명↔PUT 일치 보장)
+  const contentType = pickContentType(filename, file.type);
   const size = file.size ?? 0;
 
   const space = meta.space || "shared";
-  const dir = meta.dir || "";
+  const dir = meta.dir || meta.pathHint || "";
 
   // 1) sha256 계산
   const sha256 = await sha256Hex(file);
@@ -121,16 +180,52 @@ export async function uploadFileWithDedup(file, meta = {}) {
     const presigned = await getPresignedUrlViaBridge({ filename, space, dir, contentType });
     const uploadUrl = presigned.url;
 
-    // 4-2) S3로 PUT 업로드 (AbortSignal 연동)
-    const putRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: file,
-      signal: meta.signal,
-    });
-    if (!putRes.ok) {
+    // 어떤 경로로 PUT하는지 찍기
+    const usingMain = !!window?.electron?.uploadFileToS3;
+    console.log("[upload] route:", usingMain ? "main(ipc)" : "browser(fetch)");
+
+    // 4-2) Electron main process를 통해 S3 업로드 (CORS 우회)
+    if (usingMain) {
+       const fileBuffer = await file.arrayBuffer();
+       let uploadResult;
+       try {
+         uploadResult = await window.electron.uploadFileToS3({
+           uploadUrl,
+           file: { buffer: fileBuffer, type: contentType },
+           fileName: filename,
+           contentType, // ✅ presign과 동일
+         });
+         console.log("[upload] main PUT result:", uploadResult);
+       } catch (e) {
+         console.error("[upload] main PUT threw:", e?.message || e, e);
+         throw e;
+       }
+
+      // success=true 이거나, status 2xx 이면 성공으로 인정
+      const ok =
+        uploadResult &&
+        (uploadResult.success === true ||
+          uploadResult.ok === true ||
+          (typeof uploadResult.status === "number" &&
+            uploadResult.status >= 200 &&
+            uploadResult.status < 300));
+      if (!ok) {
+        const detail = uploadResult?.error || JSON.stringify(uploadResult);
+        throw new Error(`S3 업로드 실패: ${detail}`);
+      }
+    } else {
+      // 브라우저 환경 폴백 (CORS 문제 발생 가능)
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType }, // ✅ presign과 동일
+        body: file,
+        signal: meta.signal,
+      });
       const text = await putRes.text().catch(() => "");
-      throw new Error(`S3 업로드 실패: ${putRes.status} ${text}`);
+      console.log("[upload] browser PUT result:", putRes.status, text?.slice?.(0, 400) || "");
+      if (!putRes.ok) {
+        throw new Error(`S3 업로드 실패: ${putRes.status} ${text}`);
+      }
     }
 
     // 4-3) 결과 구성 + 완료 캐시 저장

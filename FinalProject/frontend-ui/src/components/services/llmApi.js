@@ -1,117 +1,182 @@
-/* 
-  파일: src/components/services/llmApi.js
-  역할: LLM의 SSE 스트리밍을 단순화한 유틸. onDelta/온툴메시지/문서업데이트/완료/에러 콜백을 받아 관리.
+import { CHAT_URL, BASE_URL } from './env';
 
-  LINKS:
-    - 이 파일을 사용하는 곳:
-      * ChatWindow.jsx (현재는 직접 EventSource를 사용하지만, 본 유틸로 대체 가능)
-    - 이 파일이 사용하는 것:
-      * env.js → LLM_API_BASE
-      * window.EventSource
-
-  사용 예:
-    const stop = streamLLM({
-      sessionId, prompt, documentContent,
-      onDelta: (chunk, full) => ...,
-      onToolMessage: (msg) => ...,
-      onDocumentUpdate: (html) => ...,
-      onDone: (full) => ...,
-      onError: (err) => ...
-    });
-    // 중단: stop();
-*/
-
-import { LLM_API_BASE } from './env';
-
-/* 
-  streamLLM({ sessionId, prompt, documentContent, onDelta, onToolMessage, onDocumentUpdate, onDone, onError })
-  목적: SSE로 토큰 스트리밍을 수신하고 적절한 콜백을 호출한다.
-
-  인자:
-    - sessionId: 세션 ID
-    - prompt: 사용자 입력
-    - documentContent (옵션): 편집 중 문서 HTML
-    - onDelta(token, full): 토큰 단위 콜백
-    - onToolMessage(msg): 도구 메시지 콜백
-    - onDocumentUpdate(html): 문서 업데이트 수신 시 콜백
-    - onDone(full): 종료 시 전체 텍스트
-    - onError(err): 에러 콜백
-
-  반환:
-    - stop(): 현재 SSE 연결 종료
-*/
+// Fetch를 사용한 SSE 스트리밍 - createAxios 토큰 로직 활용
 export function streamLLM({
   sessionId,
   prompt,
   documentContent,
   onDelta,
   onToolMessage,
+  onThinking,
   onDocumentUpdate,
+  onNeedsDocument,
+  onLocalDocuments,
   onDone,
   onError,
 }) {
-  const base = `${LLM_API_BASE}/llm/stream`;
-  const qs = [
-    `session_id=${encodeURIComponent(sessionId)}`,
-    `prompt=${encodeURIComponent(prompt)}`,
-  ];
+  console.log('🚀 streamLLM 함수 호출됨 - Fetch 버전!', { sessionId, prompt });
+  
+  const params = new URLSearchParams({
+    session_id: sessionId,
+    prompt: prompt,
+  });
+
   if (documentContent) {
-    qs.push(`document_content=${encodeURIComponent(documentContent)}`);
+    params.append('document_content', documentContent);
   }
-  const url = `${base}?${qs.join('&')}`;
 
-  const es = new EventSource(url);
+  const url = `${CHAT_URL}/stream?${params.toString()}`;
+  console.log('🔗 요청 URL:', url);
+
   let full = '';
+  let controller = new AbortController();
+  let closed = false;
 
-  es.onmessage = (e) => {
+  function safeClose() {
+    if (!closed) {
+      closed = true;
+      controller.abort();
+    }
+  }
+
+  // 토큰 갱신 함수 (createAxios 로직 참고)
+  const refreshToken = async () => {
     try {
-      // 문자열 종료 신호
-      if (e.data === '[DONE]') {
-        es.close();
-        onDone?.(full);
-        return;
-      }
+      const refreshResponse = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
 
-      const data = JSON.parse(e.data);
-
-      // 객체 종료 신호
-      if (data.done) {
-        es.close();
-        onDone?.(full);
-        return;
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        localStorage.setItem("userToken", data.access_token);
+        return data.access_token;
       }
-
-      // 문서 업데이트
-      if (data.document_update) {
-        onDocumentUpdate?.(data.document_update);
-        return;
+      throw new Error('토큰 갱신 실패');
+    } catch (error) {
+      localStorage.removeItem("userToken");
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
       }
-
-      // 툴 메시지
-      if (data.tool_message) {
-        onToolMessage?.(data.tool_message);
-        return;
-      }
-
-      // 일반 토큰
-      if (data.content) {
-        full += data.content;
-        onDelta?.(data.content, full);
-      }
-    } catch (err) {
-      console.error('SSE parse error', err, 'raw:', e?.data);
-      // 파싱 실패는 일부 토큰 조각일 수 있으니 무시
+      throw error;
     }
   };
 
-  es.onerror = (err) => {
-    console.error('SSE error', err);
-    try { es.close(); } catch {}
-    onError?.(err);
+  // 스트리밍 요청 함수
+  const makeRequest = async (useRefreshToken = false) => {
+    let token = localStorage.getItem("userToken");
+    
+    if (useRefreshToken) {
+      token = await refreshToken();
+    }
+    
+    if (!token) {
+      console.warn('⚠️ 토큰이 없습니다. 로그인이 필요할 수 있습니다.');
+      onError?.(new Error('인증 토큰이 없습니다'));
+      return;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'text/event-stream',
+        },
+        credentials: 'include',
+        signal: controller.signal,
+      });
+
+      // 401 에러 시 토큰 갱신 후 재시도
+      if (response.status === 401 && !useRefreshToken) {
+        console.log('🔄 401 에러 - 토큰 갱신 후 재시도');
+        return makeRequest(true);
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          onDone?.(full);
+          break;
+        }
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+
+            // [DONE] 종료 신호
+            if (data === '[DONE]') {
+              safeClose();
+              onDone?.(full);
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              
+              // 디버깅을 위한 로그 추가
+              console.log('🔍 SSE 데이터 파싱:', Object.keys(parsed));
+
+              // --- 백엔드에서 오는 SSE payload 처리 ---
+              if (parsed.content) {
+                full += parsed.content;
+                onDelta?.(parsed.content, full);
+              }
+
+              if (parsed.tool_message) {
+                onToolMessage?.(parsed.tool_message);
+              }
+
+              if (parsed.thinking_message) {
+                onThinking?.(parsed.thinking_message);
+              }
+
+              if (parsed.document_update) {
+                console.log('🎯 document_update 감지!', parsed.document_update);
+                onDocumentUpdate?.(parsed.document_update);
+              }
+
+              if (parsed.needs_document_content) {
+                onNeedsDocument?.(parsed.agent_context);
+              }
+
+              if (parsed.local_documents) {
+                console.log('🎯 local_documents 감지!', parsed.local_documents);
+                onLocalDocuments?.(parsed.local_documents);
+              }
+
+            } catch (parseError) {
+              if (data.trim()) { // 빈 문자열이 아닌 경우만 로그
+                console.error('SSE parse error:', parseError, 'Raw data:', data);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('🛑 요청이 중단되었습니다');
+      } else {
+        console.error('❌ Fetch 스트리밍 에러:', error);
+        onError?.(error);
+      }
+    }
   };
 
-  // 호출한 쪽에서 중단할 수 있게 반환
-  return () => {
-    try { es.close(); } catch {}
-  };
+  // 요청 시작
+  makeRequest();
+
+  // cleanup 함수 반환
+  return () => safeClose();
 }

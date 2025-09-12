@@ -1,61 +1,128 @@
-// ✅ 파일: main.js
-/* 
-  목적(Purpose)
-  - Electron 메인 프로세스: 창 생성/제어(로그인/기능/관리자), IPC 라우팅, 파일/대화상자/간이 HTTP 서버 등 총괄.
-  - '명시적' 로그아웃 요청(app:logout-request) 수신 시에만 각 창으로 'logout' 브로드캐스트를 보낸다.
-  - 기능 창(FeatureWindow)와 관리자 창(AdminWindow)을 독립적으로 생성/표시한다.
+/**
+ * main.js
+ * ------------------------------------------------------------------
+ * 목적:
+ *  - Electron 메인 프로세스: 창 생성/제어, IPC 라우팅, FS/S3 유틸 등
+ *  - 트레이 아이콘(열기/종료), 창 닫을 때 숨김, 종료 시 자동 로그아웃
+ *  - '사원'의 경우 "열기" 시 챗봇 + 기능부 두 창 모두 복귀
+ *  - PROD/DEV 모두 해시 라우트(#/feature, #/chat)로 통일
+ *  - 챗봇 창은 최소 크기 그대로 시작(초기 width/height = minWidth/minHeight)
+ */
 
-  사용처(Where Used)
-  - 앱 부팅(app.whenReady) 후 createMainWindow()로 로그인 창을 올린다.
-  - 로그인 성공(auth:success) → role에 따라 기능/관리자 창 생성/표시.
+/**
+ * main.js
+ * ------------------------------------------------------------------
+ * 목적:
+ *  - Electron 메인 프로세스: 창 생성/제어, IPC 라우팅, FS/S3 유틸 등
+ *  - 트레이 아이콘(열기/종료), 창 닫을 때 숨김, 종료 시 자동 로그아웃
+ *  - '사원'의 경우 "열기" 시 챗봇 + 기능부 두 창 모두 복귀
+ *  - PROD/DEV 모두 해시 라우트(#/feature, #/chat)로 통일
+ *  - 챗봇 창은 최소 크기 그대로 시작(초기 width/height = minWidth/minHeight)
+ */
 
-  브리지/IPC(Bridges & IPC)
-  - check-maximized / window:* : 프레임리스 창 제어
-  - fs:* : 리스트/읽기/저장/삭제/열기 + 대화상자(showOpen/SaveDialog)
-  - app:logout-request : 로그아웃 브로드캐스트 트리거
-  - editor:get-content / editor:update-content / editor:apply-update : 기능 창의 에디터 내용 연동
-  - open-feature-window : 임의로 기능/관리자 창 열기
-
-  파일/경로(Notes)
-  - resolveBaseDir(): DOCS_BASE 또는 C:\ClickA Document 경로 확보
-  - safeJoin(): 베이스 경로 바깥 탈출(Path Traversal) 방지
-  - OPENED_INDEX_PATH: 최근 열람 파일 인덱스(JSON) 관리
-
-  추가(Added)
-  - 간이 express 서버(8080): /get-document-content → 기능 창 렌더러에서 TipTap 내용 요청
-  - dialog 핸들러: fs:showSaveDialog / fs:showOpenDialog
-*/
-
-//=================================문서 목록 S3연결=========================================
-require("dotenv").config();
+ //=================================문서 목록 S3연결=========================================
 const fs = require("node:fs");
 const path = require("node:path");
-const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
+
+// Electron 환경에서 한글 출력을 위한 설정
+if (process.platform === 'win32') {
+  // Windows에서 콘솔 출력 인코딩 설정
+  try {
+    const { spawn } = require('child_process');
+    // chcp 65001 (UTF-8) 설정 시도
+    spawn('chcp', ['65001'], { shell: true, stdio: 'ignore' });
+  } catch (error) {
+    // 설정 실패해도 앱은 계속 실행
+  }
+}
+
+const {
+  S3Client,
+  ListObjectsV2Command,
+  GetObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} = require("@aws-sdk/client-s3");
 const { pipeline } = require("node:stream");
 const { promisify } = require("node:util");
 const pipe = promisify(pipeline);
 
 // 환경변수 또는 기본값
 const AWS_REGION = process.env.AWS_REGION || "ap-northeast-2";
-const S3_BUCKET  = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || "your-bucket-name";
-const S3_ROOT    = process.env.S3_ROOT    || "documents/";   // 공유 루트 prefix
+const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || "your-bucket-name";
+const S3_ROOT = process.env.S3_ROOT || "documents/"; // 공유 루트 prefix
 
-// ─────────────────────────────────────────────────────────────
 // (신규) 공유 버킷 전용 환경변수
-//   - 기존 AWS_S3_BUCKET(=S3_BUCKET)은 건드리지 않음(레거시/다른 기능용)
-//   - 문서목록의 공유폴더(S3)만 S3_SHARED_BUCKET/S3_SHARED_ROOT 사용
-// ─────────────────────────────────────────────────────────────
-const S3_SHARED_BUCKET = process.env.S3_SHARED_BUCKET || "";
-const S3_SHARED_ROOT = (process.env.S3_SHARED_ROOT || "")
-  .replace(/^\/+/, "")
-  .replace(/\/\/+/g, "/");   // "documents/" 등 허용(빈 값이면 루트)
+const S3_SHARED_BUCKET = process.env.S3_SHARED_BUCKET || "skn13-shared-bucket";
+const S3_SHARED_ROOT = process.env.S3_SHARED_ROOT || "";
 
+//===================  이 아래 함수를 바꿔주세요 ===============================
 const s3 = new S3Client({ region: AWS_REGION });
+//=====================이 위에 함수를 바꿔주세요 ===============================
+const {
+  app,
+  ipcMain,
+  shell,
+  BrowserWindow,
+  Menu,
+  Tray,
+  nativeImage,
+  dialog,
+  globalShortcut,
+} = require("electron");
 
-// 로컬 하드코딩 다운로드 경로 (열기 시 여기에 저장 후 OS로 열기)
-const { app, ipcMain, shell, BrowserWindow, Menu, dialog } = require("electron");
-const LOCAL_DOWNLOAD_DIR = path.join(app.getPath("documents"), "S3-Shared-Downloads");
-async function ensureDir(p) { await fs.promises.mkdir(p, { recursive: true }).catch(() => {}); }
+// 윈도우 작업표시줄/트레이 아이콘 정상 표시용
+app.setAppUserModelId("com.yourteam.clicka");
+
+
+// 📂 고정 기본 문서 디렉토리: C:\ClickA Documents
+const FIXED_DOCS_PATH = "C:\\ClickA Documents";
+
+async function ensureDir(p) {
+  await fs.promises.mkdir(p, { recursive: true }).catch(() => {});
+}
+
+function ensureDocumentsFolder() {
+  if (!fs.existsSync(FIXED_DOCS_PATH)) {
+    fs.mkdirSync(FIXED_DOCS_PATH, { recursive: true });
+    console.log("[MAIN] Created folder:", FIXED_DOCS_PATH);
+  } else {
+    console.log("[MAIN] Folder exists:", FIXED_DOCS_PATH);
+  }
+}
+
+// KST 시각을 ISO로 반환 + ms 타임스탬프도 함께 계산
+function nowKST() {
+  const now = new Date();
+  const localOffsetMin = now.getTimezoneOffset(); // 분 단위 (UTC - Local)
+  const kstOffsetMin = -9 * 60; // (UTC - KST) = -540
+  const diffMs = (kstOffsetMin - localOffsetMin) * 60 * 1000;
+  const kstDate = new Date(now.getTime() + diffMs);
+  return { iso: kstDate.toISOString(), ms: kstDate.getTime() };
+}
+
+// [ADD] 창 정리 유틸
+function destroyFeatureWindows() {
+  try { featureWindow?.destroy?.(); } catch {}
+  try { chatWindow?.destroy?.(); } catch {}
+  try { adminWindow?.destroy?.(); } catch {}
+  featureWindow = null;
+  chatWindow = null;
+  adminWindow = null;
+}
+
+
+function isTempOrSystemFile(name) {
+  const lower = String(name || "").toLowerCase().trim();
+  if (lower.startsWith("~$")) return true;                 // Office 잠금 파일(~$...)
+  if (lower.startsWith("._")) return true;                 // macOS resource fork
+  if (lower === "thumbs.db" || lower === "desktop.ini") return true;
+  if (lower === ".ds_store" || lower === ".dsstore") return true;
+  if (lower.endsWith(".tmp") || lower.endsWith(".temp")) return true;
+  if (lower.endsWith(".crdownload") || lower.endsWith(".part")) return true;
+  return false;
+}
+
 function normPrefix(p) {
   if (!p) return S3_ROOT;
   if (!p.startsWith(S3_ROOT)) return (S3_ROOT + p).replaceAll("//", "/");
@@ -70,25 +137,29 @@ function buildPrefix(root, userPrefix) {
   return out;
 }
 
-// [ADD-2] IPC 핸들러 추가 (기존 fs:* 핸들러는 수정 없이 그대로)
+/* ============================================================================
+ *   (기존) S3/공유버킷 IPC — 원본 유지
+ * ==========================================================================*/
 ipcMain.handle("s3:list", async (_evt, { prefix }) => {
   const Prefix = normPrefix(prefix);
-  const out = await s3.send(new ListObjectsV2Command({
-    Bucket: S3_BUCKET,
-    Prefix,
-    Delimiter: "/",         // 손자 이하 차단(직계만 노출)
-    MaxKeys: 500,           // 과도 로드 방지
-  }));
+  const out = await s3.send(
+    new ListObjectsV2Command({
+      Bucket: S3_BUCKET,
+      Prefix,
+      Delimiter: "/",
+      MaxKeys: 500,
+    })
+  );
 
-  const folders = (out.CommonPrefixes || []).map(cp => {
-    const pfx = cp.Prefix; // 예: documents/a/b/
+  const folders = (out.CommonPrefixes || []).map((cp) => {
+    const pfx = cp.Prefix;
     const name = pfx.slice(Prefix.length).replace(/\/$/, "");
     return { id: pfx, name, prefix: pfx };
   });
 
   const files = (out.Contents || [])
-    .filter(obj => obj.Key !== Prefix && !obj.Key.endsWith("/"))
-    .map(obj => ({
+    .filter((obj) => obj.Key !== Prefix && !obj.Key.endsWith("/"))
+    .map((obj) => ({
       id: obj.Key,
       key: obj.Key,
       name: obj.Key.slice(Prefix.length),
@@ -99,75 +170,69 @@ ipcMain.handle("s3:list", async (_evt, { prefix }) => {
   return { prefix: Prefix, folders, files };
 });
 
-ipcMain.handle("s3:downloadAndOpen", async (_evt, { key, saveAs }) => {
-  await ensureDir(LOCAL_DOWNLOAD_DIR);
-  const filename = saveAs || path.basename(key);
-  const target = path.join(LOCAL_DOWNLOAD_DIR, filename);
-
-  const res = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-  await pipe(res.Body, fs.createWriteStream(target));
-
-  await shell.openPath(target);   // 로컬 파일로 열기
-  return { localPath: target };
-});
-
-/* [ADD] S3에 로컬 경로의 파일을 업로드하는 IPC
-  - localPath: 로컬 파일 절대경로
-  - destPrefix: 업로드할 S3 prefix (예: "documents/" 또는 "")
-  - Key = buildPrefix(S3_SHARED_ROOT, destPrefix) + path.basename(localPath)
-*/
+/* [ADD] S3에 로컬 경로의 파일을 업로드하는 IPC */
 ipcMain.handle("s3shared:uploadFromPath", async (_evt, { localPath, destPrefix = "" }) => {
   if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
   if (!localPath) throw new Error("localPath required");
 
-  // Key 계산: 루트/사용자 prefix + 파일명
-  const keyPrefix = buildPrefix(S3_SHARED_ROOT, destPrefix); // "" 또는 "documents/" 등
+  const keyPrefix = buildPrefix(S3_SHARED_ROOT, destPrefix);
   const key = keyPrefix + path.basename(localPath);
 
-  // 스트림으로 업로드
   const Body = fs.createReadStream(localPath);
-  await s3.send(new PutObjectCommand({
-    Bucket: S3_SHARED_BUCKET,
-    Key: key,
-    Body,
-  }));
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: S3_SHARED_BUCKET,
+      Key: key,
+      Body,
+    })
+  );
 
   return { ok: true, key };
 });
 
+ipcMain.handle("fs:openSmart", async (_evt, { name }) => {
+  try {
+    const base = resolveBaseDir();
+    const full = safeJoin(base, name);
+    if (!fs.existsSync(full)) return null; // 프런트에서 외부열기 폴백
+
+    await upsertOpened({ path: full, name });
+    const r = await shell.openPath(full); // OS 기본 앱으로 열기
+    return { mode: "external", ok: !r, reason: r || undefined };
+  } catch (e) {
+    return null; // 프런트 폴백 경로로
+  }
+});
+
 
 /* ============================================================================
- *  🔹 공유 버킷 전용 IPC — 문서 목록(S3)에서만 사용
- *     • s3shared:list               : 현재 prefix의 '직계 자식'만 조회(손자 차단)
- *     • s3shared:downloadAndOpen    : 다운로드 후 OS 기본앱으로 열기
- * ============================================================================ */
-
-// 목록: 루트("")이면 CommonPrefixes로 "documents/ logs/ temp/" 같은 폴더들이 온다
+ *  공유 버킷 전용 IPC — 문서 목록(S3)
+ * ========================================================================== */
 ipcMain.handle("s3shared:list", async (_evt, { prefix = "" }) => {
   if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
 
-  const Prefix = buildPrefix(S3_SHARED_ROOT, prefix);  // "" 가능(루트)
-  const out = await s3.send(new ListObjectsV2Command({
-    Bucket: S3_SHARED_BUCKET,
-    Prefix,
-    Delimiter: "/",             // 직계(child)만, 손자 이상 차단
-    MaxKeys: 500,               // 과도 로드 방지
-  }));
+  const Prefix = buildPrefix(S3_SHARED_ROOT, prefix);
+  const out = await s3.send(
+    new ListObjectsV2Command({
+      Bucket: S3_SHARED_BUCKET,
+      Prefix,
+      Delimiter: "/",
+      MaxKeys: 500,
+    })
+  );
 
-  // 폴더
-  const folders = (out.CommonPrefixes || []).map(cp => {
-    const pfx = cp.Prefix;                                  // 예: "documents/"
-    const name = Prefix ? pfx.slice(Prefix.length) : pfx;   // 예: "documents/"
+  const folders = (out.CommonPrefixes || []).map((cp) => {
+    const pfx = cp.Prefix;
+    const name = Prefix ? pfx.slice(Prefix.length) : pfx;
     return { id: pfx, name: name.replace(/\/$/, ""), prefix: pfx };
   });
 
-  // 파일
   const files = (out.Contents || [])
-    .filter(obj => obj.Key !== Prefix && !obj.Key.endsWith("/"))
-    .map(obj => ({
+    .filter((obj) => obj.Key !== Prefix && !obj.Key.endsWith("/"))
+    .map((obj) => ({
       id: obj.Key,
       key: obj.Key,
-      name: Prefix ? obj.Key.slice(Prefix.length) : obj.Key,  // 상대 경로명
+      name: obj.Key.slice(Prefix.length),
       size: obj.Size,
       lastModified: obj.LastModified?.toISOString?.() || null,
     }));
@@ -175,27 +240,38 @@ ipcMain.handle("s3shared:list", async (_evt, { prefix = "" }) => {
   return { prefix: Prefix, folders, files };
 });
 
-// 다운로드 후 OS로 열기
 ipcMain.handle("s3shared:downloadAndOpen", async (_evt, { key, saveAs }) => {
   if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
-  if (!key) throw new Error("key required");
 
-  await ensureDir(LOCAL_DOWNLOAD_DIR);
+  const base = resolveBaseDir();       // => C:\ClickA Documents
+  await ensureDir(base);
   const filename = saveAs || path.basename(key);
-  const target = path.join(LOCAL_DOWNLOAD_DIR, filename);
+  const target = path.join(base, filename);
 
   const res = await s3.send(new GetObjectCommand({ Bucket: S3_SHARED_BUCKET, Key: key }));
   await pipe(res.Body, fs.createWriteStream(target));
 
-  await shell.openPath(target);   // 로컬 파일로 열기
+  await shell.openPath(target);
   return { localPath: target };
 });
 
+ipcMain.handle("s3shared:upload", async (_evt, { filePath, key }) => {
+  if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
+  if (!filePath) throw new Error("filePath required");
+  const Body = fs.createReadStream(filePath);
+  await s3.send(new PutObjectCommand({ Bucket: S3_SHARED_BUCKET, Key: key, Body }));
+  return { ok: true, key };
+});
 
-// =================================================================================
+ipcMain.handle("s3shared:delete", async (_evt, { key }) => {
+  if (!S3_SHARED_BUCKET) throw new Error("S3_SHARED_BUCKET not set");
+  await s3.send(new DeleteObjectCommand({ Bucket: S3_SHARED_BUCKET, Key: key }));
+  return { ok: true };
+});
 
-const express = require("express"); // 간이 HTTP 서버
-
+/* ============================================================================
+ *   예외/경고 로그
+ * ==========================================================================*/
 process.on("uncaughtException", (err) => {
   console.error("[MAIN] uncaughtException:", err?.name, err?.message, err?.stack);
 });
@@ -203,44 +279,64 @@ process.on("unhandledRejection", (reason) => {
   console.error("[MAIN] unhandledRejection:", reason);
 });
 
-let mainWindow = null;
-let featureWindow = null;
-let adminWindow = null;
+/* ============================================================================
+ *   전역 창/상태
+ * ==========================================================================*/
+let mainWindow = null;     // 로그인
+let featureWindow = null;  // 기능부(사원)
+let adminWindow = null;    // 관리자
+let chatWindow = null;     // ✅ 챗봇(사원)
+
+let tray = null;
+let currentRole = null;    // "employee" | "admin" | null
+let isLoggingOut = false;  // 중복 로그아웃 방지
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL || !app.isPackaged;
 const DEV_URL = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
 const PROD_INDEX = path.join(__dirname, "frontend-ui", "dist", "index.html");
+const INDEX_URL = isDev ? DEV_URL : `file://${PROD_INDEX.replace(/\\/g, "/")}`;
 
-// 문서 베이스 경로 확보
+/* ============================================================================
+ *   공용 유틸
+ * ==========================================================================*/
 function resolveBaseDir() {
-  const fixed = process.env.DOCS_BASE || "C:\\ClickA Document";
   try {
-    if (!fs.existsSync(fixed)) fs.mkdirSync(fixed, { recursive: true });
+    ensureDocumentsFolder(); // 실행 시 보장
   } catch (e) {
     console.error("[FS] mkdir base failed:", e);
   }
-  return fixed;
+  return FIXED_DOCS_PATH;
 }
-// 경로 탈출 방지 조인
 function safeJoin(base, target) {
   const out = path.join(base, target);
   if (!out.startsWith(base)) throw new Error("Path traversal");
   return out;
 }
 
-// 창 디버그 이벤트 배선
 function wireWindowDebugEvents(win, label) {
   win.on("focus", () => console.log(`[WIN:${label}] focus (id=${win.id})`));
   win.on("blur", () => console.log(`[WIN:${label}] blur (id=${win.id})`));
   win.webContents.on("did-start-loading", () => console.log(`[WIN:${label}] did-start-loading`));
-  win.webContents.on("did-finish-load", () => console.log(`[WIN:${label}] did-finish-load URL=${win.webContents.getURL?.()}`));
+  win.webContents.on("did-finish-load", () =>
+    console.log(`[WIN:${label}] did-finish-load URL=${win.webContents.getURL?.()}`)
+  );
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[WIN:${label}] did-fail-load`, { code, desc, url });
   });
   win.on("closed", () => console.log(`[WIN:${label}] closed (id=${win.id})`));
 }
 
-// 메인(로그인) 창 생성
+// DevTools 토글 헬퍼
+function toggleDevtools(win) {
+  if (!win) return;
+  const wc = win.webContents;
+  if (wc.isDevToolsOpened()) wc.closeDevTools();
+  else wc.openDevTools({ mode: "detach" }); // 붙여 열고 싶으면 'right' / 'bottom'
+}
+
+/* ============================================================================
+ *   창 생성기
+ * ==========================================================================*/
 function createMainWindow() {
   if (mainWindow) return mainWindow;
 
@@ -260,22 +356,14 @@ function createMainWindow() {
   });
   wireWindowDebugEvents(mainWindow, "main");
 
-  if (isDev) mainWindow.loadURL(DEV_URL);
-  else mainWindow.loadFile(PROD_INDEX);
-
+  mainWindow.loadURL(INDEX_URL); // 로그인 진입(DEV/PROD 공통)
   if (isDev) mainWindow.webContents.openDevTools({ mode: "detach" });
 
   Menu.setApplicationMenu(null);
 
-  // 창 리사이즈 브로드캐스트
   mainWindow.on("resize", () => {
     mainWindow?.webContents?.send("window-resized");
   });
-
-  // 자동 로그아웃 브로드캐스트는 사용하지 않음(명시 요청 방식 정책 유지)
-  // mainWindow.on("close", () => {
-  //   mainWindow?.webContents?.send("logout");
-  // });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -284,12 +372,13 @@ function createMainWindow() {
   return mainWindow;
 }
 
-// 기능부(사원) 창 생성
+/** 기능부(사원) 창 */
 function createFeatureWindow(role = "employee") {
   if (featureWindow) {
     if (featureWindow.isMinimized()) featureWindow.restore();
     featureWindow.show();
     featureWindow.focus();
+    featureWindow.setSkipTaskbar?.(false);
     return featureWindow;
   }
 
@@ -309,23 +398,36 @@ function createFeatureWindow(role = "employee") {
   });
   wireWindowDebugEvents(featureWindow, "feature");
 
-  if (isDev) featureWindow.loadURL(`${DEV_URL}?feature=1&role=${encodeURIComponent(role)}`);
-  else featureWindow.loadFile(PROD_INDEX, { query: { feature: "1", role } });
+  // 해시 라우트로 고정
+  featureWindow.loadURL(`${INDEX_URL}?feature=1&role=${encodeURIComponent(role)}#/feature`);
   if (isDev) featureWindow.webContents.openDevTools({ mode: "detach" });
 
   Menu.setApplicationMenu(null);
 
-  featureWindow.on("closed", () => { featureWindow = null; });
+  // 닫기 → 숨김(트레이 상주)
+  featureWindow.on("close", (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault();
+      featureWindow.hide();
+      featureWindow.setSkipTaskbar?.(true);
+    }
+  });
 
+  featureWindow.on("closed", () => {
+    featureWindow = null;
+  });
+
+  featureWindow.setSkipTaskbar?.(false);
   return featureWindow;
 }
 
-// 관리자 창 생성
+/** 관리자 창 */
 function createAdminWindow() {
   if (adminWindow) {
     if (adminWindow.isMinimized()) adminWindow.restore();
     adminWindow.show();
     adminWindow.focus();
+    adminWindow.setSkipTaskbar?.(false);
     return adminWindow;
   }
 
@@ -345,501 +447,693 @@ function createAdminWindow() {
   });
   wireWindowDebugEvents(adminWindow, "admin");
 
-  if (isDev) adminWindow.loadURL(`${DEV_URL}?feature=1&role=admin`);
-  else adminWindow.loadFile(PROD_INDEX, { query: { feature: "1", role: "admin" } });
+  // 해시 라우트 + 관리자 role
+  adminWindow.loadURL(`${INDEX_URL}?feature=1&role=admin#/feature`);
+  if (isDev) adminWindow.webContents.openDevTools({ mode: "detach" });
 
   Menu.setApplicationMenu(null);
 
-  adminWindow.on("closed", () => { adminWindow = null; });
+  // 닫기 → 숨김(트레이 상주)
+  adminWindow.on("close", (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault();
+      adminWindow.hide();
+      adminWindow.setSkipTaskbar?.(true);
+    }
+  });
 
+  adminWindow.on("closed", () => {
+    adminWindow = null;
+  });
+  
+  adminWindow.setSkipTaskbar?.(false);
   return adminWindow;
 }
 
-/* ────────────────────────────────────────────────────────────
- * 간이 HTTP 서버 (백엔드에서 프런트 content 요청)
- * ──────────────────────────────────────────────────────────── */
-const expressApp = express();
-const PORT = 8080;
-
-// TipTap 에디터 콘텐츠 요청 엔드포인트
-expressApp.get("/get-document-content", async (_req, res) => {
-  try {
-    if (featureWindow && !featureWindow.webContents.isLoading()) {
-      // 렌더러로 에디터 콘텐츠 요청 (아래 IPC 핸들러와 연동)
-      const content = await featureWindow.webContents.executeJavaScript(`
-        window.getTiptapEditorContent ? window.getTiptapEditorContent() : ''
-      `);
-      res.json({ content });
-    } else {
-      res.status(404).json({ error: "Feature window not active or ready." });
-    }
-  } catch (error) {
-    console.error("Error getting document content from renderer:", error);
-    res.status(500).json({ error: "Failed to get document content." });
+/** ✅ 챗봇 창(사원) — 최소 크기 그대로 시작 */
+function createChatWindow() {
+  if (chatWindow) {
+    if (chatWindow.isMinimized()) chatWindow.restore();
+    chatWindow.show();
+    chatWindow.focus();
+    chatWindow.setSkipTaskbar?.(false);
+    return chatWindow;
   }
-});
 
-// 서버 시작 로그
-expressApp.listen(PORT, () => {
-  console.log(`Electron HTTP server listening on port ${PORT}`);
-});
+  // 줄일 수 있는 최소 크기 & 시작 크기 통일
+  const MIN_W = 400;
+  const MIN_H = 580;
 
-// 앱 준비 시 메인 창 띄우기
+  chatWindow = new BrowserWindow({
+    width: MIN_W,       // 최소 크기로 시작
+    height: MIN_H,      // 최소 크기로 시작
+    minWidth: MIN_W,    // 줄일 수 있는 최소 폭
+    minHeight: MIN_H,   // 줄일 수 있는 최소 높이
+    frame: false,
+    backgroundColor: "#ffffff",
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  wireWindowDebugEvents(chatWindow, "chat");
+
+  // 해시 라우트로 고정
+  chatWindow.loadURL(`${INDEX_URL}?chat=1&role=employee#/chat`);
+  if (isDev) chatWindow.webContents.openDevTools({ mode: "detach" });
+
+  Menu.setApplicationMenu(null);
+
+  // 닫기 → 숨김(트레이 상주)
+  chatWindow.on("close", (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault();
+      chatWindow.hide();
+      chatWindow.setSkipTaskbar?.(true);
+    }
+  });
+
+  chatWindow.on("closed", () => {
+    chatWindow = null;
+  });
+  
+  chatWindow.setSkipTaskbar?.(false);
+  return chatWindow;
+}
+
+/* ============================================================================
+ *   트레이 (아이콘 확실히 보이게 처리)
+ * ==========================================================================*/
+function getTrayIconPath() {
+  if (app.isPackaged) {
+    // 설치 버전: resources/icons/*
+    const ico = path.join(process.resourcesPath, "icons", "icon.ico");
+    const png = path.join(process.resourcesPath, "icons", "icon.png");
+    if (fs.existsSync(ico)) return ico;
+    if (fs.existsSync(png)) return png;
+  } else {
+    // 개발 버전: src/assets/*
+    const ico = path.join(__dirname, "frontend-ui", "src", "assets", "icon.ico");
+    const png = path.join(__dirname, "frontend-ui", "src", "assets", "icon.png");
+    if (fs.existsSync(ico)) return ico;
+    if (fs.existsSync(png)) return png;
+  }
+  return null;
+}
+
+
+function createTray() {
+  if (tray) return tray;
+
+  const iconPath = getTrayIconPath();
+  if (!iconPath) {
+    console.error("[TRAY] icon file not found. Check assets/** packaging.");
+  }
+  let image = iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+
+  // Windows에서 숨김 아이콘 영역 표시 안정화를 위해 16px로 보정
+  if (process.platform === "win32" && !image.isEmpty()) {
+    image = image.resize({ width: 16, height: 16 });
+  }
+
+  tray = new Tray(image);
+  tray.setToolTip("ClickA");
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: "열기", click: () => showByRole() },
+    { label: "종료", click: () => logoutAndQuit() }, // 항상 로그아웃 후 종료
+  ]);
+  tray.setContextMenu(contextMenu);
+
+  // 좌클릭으로도 열기
+  tray.on("click", () => showByRole());
+
+  return tray;
+}
+
+function showByRole() {
+  if (currentRole === "admin") {
+    const aw = createAdminWindow();                 // ★ 추가: 반환값 변수에 담기
+    try { aw.setSkipTaskbar?.(false); } catch {}    // ★ 추가: 작업표시줄에 아이콘 보이기
+  } else if (currentRole === "employee") {
+    // 사원은 두 창 모두 복귀
+    const fw = createFeatureWindow("employee");     // ★ 추가
+    const cw = createChatWindow();                  // ★ 추가
+    try { fw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
+    try { cw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
+  } else {
+    // 로그인 상태 모름 → 로그인 창
+    const mw = createMainWindow();
+    mw.show();
+    mw.focus();
+    try { mw.setSkipTaskbar?.(false); } catch {}    // ★ 추가
+  }
+}
+
+
+/* ============================================================================
+ *   로그아웃 & 종료 처리
+ * ==========================================================================*/
+function broadcastLogout() {
+  // 모든 창에 logout 브로드캐스트 (preload.js에서 auth.onLogout으로 수신)
+  BrowserWindow.getAllWindows().forEach((w) => w?.webContents?.send("logout"));
+}
+
+function logoutAndQuit() {
+  if (isLoggingOut) return;
+  isLoggingOut = true;
+  app.isQuitting = true;
+
+  try {
+    broadcastLogout();
+  } catch (_) {}
+
+  // 렌더러 토큰/상태 정리 시간을 약간 보장
+  setTimeout(() => {
+    app.quit();
+  }, 250);
+}
+
+/* ============================================================================
+ *   앱 라이프사이클
+ * ==========================================================================*/
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    // 기존 인스턴스를 앞으로
+    try { showByRole(); } catch {}
+  });
+}
+
 app.whenReady().then(() => {
-  // ✅ 시작 직후 베이스 폴더 보장 (없으면 생성)
-  resolveBaseDir();
-
-  // 그 다음 로그인 창 생성
+  // 전역 F12 보강
+  globalShortcut.register("F12", () => {
+    const w = BrowserWindow.getFocusedWindow();
+    if (w) toggleDevtools(w);
+  });
+  ensureDocumentsFolder();     // ✅ 실행 시 문서 폴더 보장
   createMainWindow();
+  createTray();
 
   app.on("activate", () => {
-    // (선택) 맥 재활성화 시에도 한 번 더 보장 — 중복 호출 무해
-    resolveBaseDir();
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 });
-// 모든 창 닫힘 시 종료 (mac 제외)
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+
+// 종료 시 단축키 해제
+app.on("will-quit", () => {
+  globalShortcut.unregister("F12");
+  globalShortcut.unregisterAll();
 });
 
-// 윈도우 상태 IPC
+// 모든 창이 닫혀도 종료하지 않음(트레이 상주)
+app.on("window-all-closed", () => {
+  // no-op
+});
+
+// OS 세션 종료(로그오프/샷다운) 시 자동 로그아웃
+app.on("session-end", () => {
+  logoutAndQuit();
+});
+
+// 사용자가 앱을 종료하려 할 때(메뉴/Alt+F4 등) — 자동 로그아웃
+app.on("before-quit", () => {
+  if (!isLoggingOut) {
+    logoutAndQuit();
+  }
+});
+
+/* ============================================================================
+ *   프레임리스/윈도우/크기 이벤트 (원본 유지)
+ * ==========================================================================*/
 ipcMain.handle("check-maximized", () => {
   const win = BrowserWindow.getFocusedWindow();
   return !!win?.isMaximized?.();
 });
-// 리사이즈 브로드캐스트
 function broadcastResize() {
   BrowserWindow.getAllWindows().forEach((w) => w.webContents?.send?.("window-resized"));
 }
-// 새 창 생성 시 상태 이벤트 와이어링
 app.on("browser-window-created", (_e, win) => {
   win.on("resize", broadcastResize);
   win.on("maximize", broadcastResize);
   win.on("unmaximize", broadcastResize);
-});
 
-// 프레임리스 윈도우 제어 IPC
+  // ⬇ F12 / Ctrl+Shift+I (macOS는 Cmd+Alt+I) 로 DevTools 토글
+  win.webContents.on("before-input-event", (event, input) => {
+    // F12
+    if (input.type === "keyDown" && input.key === "F12") {
+      event.preventDefault();
+      toggleDevtools(win);
+    }
+    // Ctrl+Shift+I / Cmd+Alt+I
+    if (
+      input.type === "keyDown" &&
+      input.code === "KeyI" &&
+      (input.control || input.meta) &&
+      input.shift
+    ) {
+      event.preventDefault();
+      toggleDevtools(win);
+    }
+  });
+});
 const getSenderWindow = (event) => BrowserWindow.fromWebContents(event.sender);
-ipcMain.handle("window:minimize", (event) => { getSenderWindow(event)?.minimize(); return true; });
-ipcMain.handle("window:maximize", (event) => { const w = getSenderWindow(event); if (!w) return false; w.maximize(); w.webContents?.send?.("window-resized"); return true; });
-ipcMain.handle("window:unmaximize", (event) => { const w = getSenderWindow(event); if (!w) return false; w.unmaximize(); w.webContents?.send?.("window-resized"); return true; });
-ipcMain.handle("window:maximize-toggle", (event) => { const w = getSenderWindow(event); if (!w) return false; w.isMaximized() ? w.unmaximize() : w.maximize(); w.webContents?.send?.("window-resized"); return true; });
-ipcMain.handle("window:close", (event) => { getSenderWindow(event)?.close(); return true; });
-
-/* 에디터 content IPC */
-// 기능 창 → TipTap 내용 조회
-ipcMain.handle("editor:get-content", async () => {
-  try {
-    if (featureWindow && !featureWindow.webContents.isLoading()) {
-      const content = await featureWindow.webContents.executeJavaScript(`
-        window.getTiptapEditorContent ? window.getTiptapEditorContent() : ''
-      `);
-      return content;
-    }
-    return "";
-  } catch (error) {
-    console.error("Error in editor:get-content IPC handler:", error);
-    return "";
-  }
+ipcMain.handle("window:minimize", (event) => {
+  getSenderWindow(event)?.minimize();
+  return true;
+});
+ipcMain.handle("window:maximize", (event) => {
+  const w = getSenderWindow(event);
+  if (!w) return false;
+  w.maximize();
+  w.webContents?.send?.("window-resized");
+  return true;
+});
+ipcMain.handle("window:unmaximize", (event) => {
+  const w = getSenderWindow(event);
+  if (!w) return false;
+  w.unmaximize();
+  w.webContents?.send?.("window-resized");
+  return true;
+});
+ipcMain.handle("window:maximize-toggle", (event) => {
+  const w = getSenderWindow(event);
+  if (!w) return false;
+  w.isMaximized() ? w.unmaximize() : w.maximize();
+  w.webContents?.send?.("window-resized");
+  return true;
+});
+ipcMain.handle("window:close", (event) => {
+  getSenderWindow(event)?.close();
+  return true;
 });
 
-// 챗창 → 기능창 편집기 업데이트 적용
-ipcMain.on("editor:update-content", (_event, content) => {
-  if (featureWindow) {
-    featureWindow.webContents.send("editor:apply-update", content);
+/* ============================================================================
+ *   S3 및 FS Bridge (원본 유지 + 기본 경로만 고정)
+ * ==========================================================================*/
+// 렌더러에서 invoke 시 { fileName, token } 형태로 넘겨주세요.
+ipcMain.handle("get-s3-upload-url", async (_evt, { fileName, token, contentType }) => {
+  const fetch = require("node-fetch");
+
+  // contentType이 없으면 기본값으로 octet-stream
+  const ct = (typeof contentType === "string" && contentType.trim())
+    ? contentType.trim()
+    : "application/octet-stream";
+
+  const res = await fetch("http://13.125.105.129:8000/api/v1/files/presigned", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      filename: fileName,
+      contentType: ct, // ★ renderer가 넘긴 실제 MIME 타입 사용
+    }),
+  });
+
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`presign failed: ${res.status} ${res.statusText} ${txt}`);
   }
+
+  const result = await res.json();
+  if (!result.uploadUrl) {
+    throw new Error("presign payload missing uploadUrl");
+  }
+
+  // ★ 업로드 때 그대로 쓰도록 contentType도 함께 반환
+  return {
+    uploadUrl: result.uploadUrl,
+    fileKey: result.fileKey || null,
+    fileName,
+    contentType: "application/octet-stream",
+  };
 });
 
-/* S3 및 FS Bridge (원본 유지) */
-// 프리사인드 업로드 URL 발급 (문자열/객체 모두 호환)
-ipcMain.handle("get-s3-upload-url", async (_evt, payload) => {
+// 렌더러에서 invoke 시 presign 응답의 contentType을 함께 넘겨주세요.
+// ipcRenderer.invoke("upload-file-to-s3", { uploadUrl, file, fileName, contentType })
+ipcMain.handle("upload-file-to-s3", async (evt, { uploadUrl, file, fileName, contentType }) => {
   try {
-    const isString = typeof payload === "string";
-    const {
-      filename = isString ? payload : "",
-      space = "shared",
-      dir = "",
-      contentType = "application/octet-stream",
-    } = isString ? {} : (payload || {});
+    const fetch = require("node-fetch");
 
-    if (!filename) {
-      return { error: "filename is required" };
+    // ★ presign과 동일한 Content-Type을 강제 (특히 .exe 등)
+    let ct = (typeof contentType === "string" && contentType.trim())
+      ? contentType.trim()
+      : "application/octet-stream";
+
+    // presign 실패로 더미 URL이 들어오는 상황 방지
+    if (!uploadUrl || uploadUrl.includes("example-presigned-url")) {
+      throw new Error("invalid presigned URL");
     }
 
-    // 백엔드 presigned API 주소 (환경변수로 주입 권장)
-    // 예: PRESIGNED_UPLOAD_URL=http://localhost:8000/presigned/upload-url
-    const ENDPOINT =
-      process.env.PRESIGNED_UPLOAD_URL ||
-      "http://localhost:8000/presigned/upload-url"; // 필요에 맞게
+    evt.sender.send("upload-progress", { fileName, progress: 0 });
 
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        space,
-        file_name: filename,
-        content_type: contentType,
-        dir, // ← 현재 폴더 prefix를 프론트에서 넘길 수 있음
-      }),
+    const response = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": ct }, // ★ 서명과 완전히 동일해야 함
+      body: Buffer.from(file.buffer),
     });
 
-    if (!res.ok) {
-      throw new Error(`presigned api error: HTTP ${res.status}`);
+    if (!response.ok) {
+      const responseText = await response.text().catch(() => "");
+      evt.sender.send("upload-progress", { fileName, progress: 0, error: true });
+      throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${responseText}`);
     }
 
-    const json = await res.json();
-
-    // 프론트 호환을 위해 url/uploadUrl 둘 다 채워줌
-    const uploadUrl = json.uploadUrl || json.url;
-    return {
-      uploadUrl,
-      url: uploadUrl, // 기존 코드 호환
-      fileKey: json.fileKey,
-      displayName: json.displayName || json.resolvedName || filename,
-    };
-  } catch (e) {
-    console.error("get-s3-upload-url error:", e);
-    return { error: String(e?.message || e) };
+    evt.sender.send("upload-progress", { fileName, progress: 100, completed: true });
+    return { success: true, fileName };
+  } catch (error) {
+    console.error("Upload error:", error);
+    evt.sender.send("upload-progress", { fileName, progress: 0, error: true });
+    return { success: false, error: error.message };
   }
 });
 
-// 확장자 → MIME 매핑
+
 function extToMime(ext) {
-  const map = { txt:"text/plain", md:"text/markdown", json:"application/json", pdf:"application/pdf",
-    doc:"application/msword", docx:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    xls:"application/vnd.ms-excel", xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ppt:"application/vnd.ms-powerpoint", pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", gif:"image/gif", webp:"image/webp", svg:"image/svg+xml",
-    csv:"text/csv", ts:"video/mp2t", mp4:"video/mp4", mp3:"audio/mpeg", wav:"audio/wav", ogg:"audio/ogg",
-    zip:"application/zip", rar:"application/vnd.rar", "7z":"application/x-7z-compressed", tar:"application/x-tar",
-    gz:"application/gzip", xml:"application/xml", html:"text/html", css:"text/css", js:"application/javascript",
-    mjs:"application/javascript", odt:"application/vnd.oasis.opendocument.text", ods:"application/vnd.oasis.opendocument.spreadsheet",
-    odp:"application/vnd.oasis.opendocument.presentation" };
+  const map = {
+    txt: "text/plain",
+    md: "text/markdown",
+    json: "application/json",
+    pdf: "application/pdf",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    csv: "text/csv",
+    ts: "video/mp2t",
+    mp4: "video/mp4",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    ogg: "audio/ogg",
+    zip: "application/zip",
+    rar: "application/vnd.rar",
+    "7z": "application/x-7z-compressed",
+    tar: "application/x-tar",
+    gz: "application/gzip",
+    xml: "application/xml",
+    html: "text/html",
+    css: "text/css",
+    js: "application/javascript",
+    mjs: "application/javascript",
+    odt: "application/vnd.oasis.opendocument.text",
+    ods: "application/vnd.oasis.opendocument.spreadsheet",
+    odp: "application/vnd.oasis.opendocument.presentation",
+  };
   return map[ext] || "application/octet-stream";
 }
-// 최근 열람 인덱스 경로
+
+// 📄 열람 목록 저장 파일
 const OPENED_INDEX_PATH = path.join(app.getPath("userData"), "opened-index.json");
-// 인덱스 읽기
-async function readOpenedIndex() { try { const raw = await fs.promises.readFile(OPENED_INDEX_PATH,"utf-8"); return JSON.parse(raw||"[]"); } catch { return []; } }
-// 인덱스 upsert
-async function upsertOpened(doc) {
-  const base = resolveBaseDir(); // 하드코딩 베이스 경로 (예: C:\ClickA Document)
-  const norm = (p) => path.normalize(p).toLowerCase();
 
-  // 베이스 내부 파일만 허용 + 실재하는 파일만 true
-  const inBaseAndExists = async (p) => {
-    try {
-      const ap = norm(p);
-      if (!ap.startsWith(norm(base))) return false;     // 베이스 폴더 밖이면 제외
-      const st = await fs.promises.stat(p);
-      return st.isFile();                               // 파일만 허용(폴더/링크 제외)
-    } catch { return false; }
-  };
-
-  const cur = await readOpenedIndex();                 // [{path,name,opened_at}, ...]
-  const now = new Date().toISOString();
-  const incoming = {
-    path: doc.path,
-    name: doc.name,
-    opened_at: doc.opened_at || now,                   // 열람 시각 기본값
-  };
-
-  // 실존하지 않으면 추가하지 않음
-  const canAdd = incoming.path && await inBaseAndExists(incoming.path);
-
-  // 동일 파일의 이전 기록 제거 + 소멸 파일 정리
-  const cleaned = [];
-  for (const d of cur) {
-    if (!d || !d.path) continue;
-    if (norm(d.path) === norm(incoming.path)) continue; // 같은 파일의 예전 기록 제거
-    if (await inBaseAndExists(d.path)) cleaned.push(d); // 삭제/이동된 파일 기록 제거
+async function readOpenedIndex() {
+  try {
+    const raw = await fs.promises.readFile(OPENED_INDEX_PATH, "utf-8");
+    const arr = JSON.parse(raw || "[]");
+    // 정렬 보정: ms가 있으면 그걸로, 없으면 최신 우선
+    return Array.isArray(arr)
+      ? arr.sort((a, b) => (b.msKST || 0) - (a.msKST || 0))
+      : [];
+  } catch {
+    return [];
   }
-
-  // 최신 1행만 유지(파일당)
-  const next = canAdd ? [incoming, ...cleaned] : cleaned;
-
-  await fs.promises.writeFile(
-    OPENED_INDEX_PATH,
-    JSON.stringify(next, null, 2),
-    "utf-8"
-  );
 }
 
-// ✅✅ (중요) fs:pickFiles / fs:readFile 은 “최상위에서 한 번만” 등록
-ipcMain.removeHandler("fs:pickFiles");
-ipcMain.handle("fs:pickFiles", async (event, { defaultSubdir } = {}) => {
-  const base = resolveBaseDir();
-  await fs.promises.mkdir(base, { recursive: true }).catch(() => {});
-  const defaultPath = defaultSubdir ? path.join(base, defaultSubdir) : base;
+async function upsertOpened(doc) {
+  const cur = await readOpenedIndex();
+  const { iso, ms } = nowKST();
+  const nextDoc = { ...doc, lastOpenedKST: iso, msKST: ms };
+  const next = [nextDoc, ...cur.filter((d) => d.path !== doc.path)].slice(0, 50);
+  await fs.promises.writeFile(OPENED_INDEX_PATH, JSON.stringify(next, null, 2), "utf-8");
+}
 
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const result = await dialog.showOpenDialog(win, {
-    title: "파일 선택",
-    defaultPath,                                                 // ← 시작 폴더 강제
-    properties: ["openFile", "multiSelections"]
-    // filters: [{ name: "문서", extensions: ["pdf","docx","pptx","txt"] }]
-  });
-  return result; // { canceled, filePaths: [...] }
-});
-
-ipcMain.removeHandler("fs:readFile");
-ipcMain.handle("fs:readFile", async (_evt, filePath) => {
-  const buf = await fs.promises.readFile(filePath);
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-});
-
-// 파일 리스트
+// ===== FS Bridge: 기본 경로를 C:\ClickA Documents 로 고정 =====
 ipcMain.handle("fs:listDocs", async () => {
   const base = resolveBaseDir();
-  const names = await fs.promises.readdir(base);
+  const all = await fs.promises.readdir(base, { withFileTypes: true });
 
-  const norm = (p) => path.normalize(p).toLowerCase();
-  const opened = await readOpenedIndex();
-  const openedMap = new Map(opened.map(d => [norm(d.path), d.opened_at]));
+  // 파일만 + 임시/시스템 파일 제외
+  const files = all
+    .filter((ent) => ent.isFile() && !isTempOrSystemFile(ent.name))
+    .map((ent) => ent.name);
 
-  // 임시/숨김/시스템 파일 필터
-  const skip = (name) => {
-    const lower = name.toLowerCase();
-    return (
-      lower.startsWith('~$') ||        // Office lock (~$문서명.pptx / .docx)
-      lower.endsWith('.tmp') ||        // 임시 확장자
-      lower === 'thumbs.db' ||         // 윈도우 썸네일 DB
-      lower.startsWith('.')            // 유닉스형 숨김파일(.git 등)
-    );
-  };
-
-  const out = [];
-  for (const name of names) {
-    if (skip(name)) continue;          // 필터 적용
-
-    const full = safeJoin(base, name);
-    const st = await fs.promises.stat(full).catch(() => null);
-    if (!st || !st.isFile()) continue;
-
-    const updatedAt = st.mtime.toISOString();
-    const openedAt  = openedMap.get(norm(full)) || null;
-    const last_seen = [openedAt, updatedAt].filter(Boolean)
-      .sort((a,b)=>new Date(b)-new Date(a))[0] || null;
-
-    out.push({ name, path: full, updated_at: updatedAt, opened_at: openedAt, last_seen });
-  }
-
-  out.sort((a,b)=>new Date(b.last_seen)-new Date(a.last_seen));
-  return out;
-});
-
-// 파일 읽기 ({ name } 또는 { filePath })
-ipcMain.handle("fs:readDoc", async (_evt, payload = {}) => {
-  try {
-    const { name, filePath } = payload;
-    let full = "";
-    let fileName = "";
-
-    if (filePath && typeof filePath === "string") {
-      // 절대경로(filePath) 직접 사용
-      full = filePath;
-      fileName = path.basename(full);
-    } else if (name && typeof name === "string") {
-      // 기존 방식: 베이스 디렉터리 + 파일명
-      const base = resolveBaseDir();
-      full = safeJoin(base, name);
-      fileName = name;
-    } else {
-      throw new Error("filePath or name is required");
-    }
-
-    if (!fs.existsSync(full)) {
-      return { ok: false, reason: "not_found" };
-    }
-
-    const content = await fs.promises.readFile(full, "utf-8");
-
-    await upsertOpened({
-      path: full,
-      name: fileName,
-      opened_at: new Date().toISOString(),
-    });
-
-    const ext = path.extname(full).slice(1).toLowerCase();
-    return { ok: true, name: fileName, content, mime: extToMime(ext) };
-  } catch (err) {
-    console.error("fs:readDoc error:", err);
-    return { ok: false, error: err.message };
-  }
-});
-
-// 파일 저장 ({ name, content } 또는 { filePath, content })
-ipcMain.handle("fs:saveDoc", async (_evt, payload) => {
-  try {
-    const { name, filePath, content } = payload || {};
-    let full = "";
-
-    if (filePath) {
-      // 새 구조: 절대경로 직접 저장
-      full = filePath;
-    } else if (name) {
-      // 기존 구조: 베이스 디렉터리 + 파일명
-      const base = resolveBaseDir();
-      full = safeJoin(base, name);
-    } else {
-      throw new Error("filename or filePath required");
-    }
-
-    await fs.promises.writeFile(full, content ?? "", "utf-8");
-
-    await upsertOpened({
-      path: full,
-      name: path.basename(full),
-      opened_at: new Date().toISOString(),
-    });
-
-    return { ok: true };
-  } catch (err) {
-    console.error("fs:saveDoc error:", err);
-    return { ok: false, error: err.message };
-  }
-});
-
-// 바이너리 바이트를 C:\ClickA Document에 저장 (파일명 충돌 시 자동 번호 증가)
-ipcMain.handle("fs:saveBytes", async (_evt, { filename, bytes }) => {
-  const base = resolveBaseDir();
-  const safeName = (filename || "download.bin").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").trim();
-
-  // 이름 충돌 회피
-  const ext = path.extname(safeName);
-  const stem = path.basename(safeName, ext);
-  let candidate = safeName, i = 1;
-  while (fs.existsSync(path.join(base, candidate))) {
-    candidate = `${stem}_(${i})${ext}`;
-    i++;
-  }
-
-  const full = path.join(base, candidate);
-  await fs.promises.writeFile(full, Buffer.from(bytes));
-  await upsertOpened({ path: full, name: candidate, opened_at: new Date().toISOString() });
-  return { ok: true, path: full, name: candidate };
-});
-
-// 파일 삭제(휴지통 이동)
-ipcMain.handle("fs:deleteDoc", async (_evt, { name }) => {
-  const base = resolveBaseDir();
-  const full = safeJoin(base, name);
-
-  try {
-    await shell.trashItem(full);   // OS 휴지통으로 이동
-    return { ok: true };
-  } catch (err) {
-    console.error("trashItem failed:", err);
-    return { ok: false, error: err.message };
-  }
-});
-
-// OS 기본 프로그램으로 열기
-ipcMain.handle("fs:open", async (_evt, { name }) => {
-  const base = resolveBaseDir();
-  const full = safeJoin(base, name);
-
-  await upsertOpened({
-    path: full,
+  return files.map((name) => ({
     name,
-    opened_at: new Date().toISOString(),   // 지금 열람한 시간 기록
-  });
+    path: safeJoin(base, name), // 열기용 절대경로
+    // 날짜는 보내지 않음(전체 문서엔 날짜가 나오면 안 됨)
+  }));
+});
+ipcMain.handle("fs:listViewed", async () => {
+  const items = await readOpenedIndex(); // [{ path, name, lastOpenedKST, msKST }, ...]
 
-  await shell.openPath(full);              // OS 기본 프로그램으로 열기
+  // 존재하는 파일만 + 임시/시스템 파일 제거
+  const existing = await Promise.all(
+    items.map(async (it) => {
+      try {
+        if (isTempOrSystemFile(it.name || path.basename(it.path))) return null;
+        await fs.promises.access(it.path, fs.constants.F_OK);
+        return it;
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return existing
+    .filter(Boolean)
+    .sort((a, b) => (b.msKST || 0) - (a.msKST || 0));
+});
+
+
+
+ipcMain.handle("fs:readDoc", async (_evt, { name }) => {
+  if (!name) throw new Error("filename required");
+  const base = resolveBaseDir();
+  const full = resolveNameOrPathToFull(base, name);
+  if (!fs.existsSync(full)) return { ok: false, reason: "not_found" };
+  const content = await fs.promises.readFile(full, "utf-8");
+  await upsertOpened({ path: full, name });
+  return { ok: true, content, mime: extToMime(path.extname(name).slice(1)) };
+});
+
+ipcMain.handle("fs:saveDoc", async (_evt, { name, content }) => {
+  if (!name) throw new Error("filename required");
+  const base = resolveBaseDir();
+  const full = resolveNameOrPathToFull(base, name);
+  await fs.promises.writeFile(full, content ?? "", "utf-8");
+  await upsertOpened({ path: full, name });
   return { ok: true };
 });
 
-// 파일 대화상자 (저장)
-ipcMain.handle("fs:showSaveDialog", async (event, options) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  try {
-    const result = await dialog.showSaveDialog(win, options);
-    return result;
-  } catch (err) {
-    console.error("Error occurred in handler for 'fs:showSaveDialog':", err);
-    return { canceled: true, error: err.message };
-  }
+function resolveNameOrPathToFull(base, nameOrPath) {
+  // 절대경로면 그대로 검증 후 사용
+  if (path.isAbsolute(nameOrPath)) return nameOrPath;
+  // 파일명만 왔다면 base와 조합
+  return safeJoin(base, nameOrPath);
+}
+
+ipcMain.handle("fs:deleteDoc", async (_evt, { name }) => {
+  if (!name) throw new Error("filename required");
+  const base = resolveBaseDir();
+  const full = resolveNameOrPathToFull(base, name);
+  if (fs.existsSync(full)) await fs.promises.unlink(full);
+  return { ok: true };
 });
-// 파일 대화상자 (열기)
-ipcMain.handle("fs:showOpenDialog", async (event, options) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
+
+ipcMain.handle("fs:open", async (_evt, { name }) => {
+  if (!name) throw new Error("filename required");
+  const base = resolveBaseDir();
+  const full = resolveNameOrPathToFull(base, name);
+  if (!fs.existsSync(full)) return { ok: false, reason: "not_found" };
+  await upsertOpened({ path: full, name: path.basename(full) });
+  const r = await shell.openPath(full);
+  return { ok: !r, reason: r || undefined };
+});
+
+// ✅ [추가] 파일 저장 대화상자 핸들러
+ipcMain.handle("fs:showSaveDialog", async (evt, options) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  return dialog.showSaveDialog(win, options);
+});
+
+// ✅ [추가] 절대 경로 파일 저장 핸들러
+ipcMain.handle("fs:saveFile", async (_evt, { filePath, content, encoding = "utf-8" }) => {
+  if (!filePath) throw new Error("filePath is required");
   try {
-    const result = await dialog.showOpenDialog(win, options);
-    return result;
-  } catch (err) {
-    console.error("Error occurred in handler for 'fs:showOpenDialog':", err);
-    return { canceled: true, error: err.message };
+    // writeFile은 base64 인코딩을 네이티브로 지원합니다.
+    await fs.promises.writeFile(filePath, content || "", encoding);
+    return { ok: true };
+  } catch (e) {
+    console.error(`Failed to save file ${filePath}:`, e);
+    return { ok: false, error: e.message };
   }
 });
 
-// 역할별 창 오픈 (로그인 성공 후)
+// ✅ [추가] 파일 열기 대화상자 핸들러
+ipcMain.handle("fs:showOpenDialog", async (evt, options) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  return dialog.showOpenDialog(win, options);
+});
+
+// ✅ [추가] 절대 경로 파일 읽기 핸들러
+ipcMain.handle("fs:readFileByPath", async (_evt, { filePath }) => {
+  if (!filePath) throw new Error("filePath is required for fs:readFileByPath");
+  if (!fs.existsSync(filePath)) return { ok: false, reason: "not_found" };
+  const content = await fs.promises.readFile(filePath, "utf-8");
+  await upsertOpened({ path: filePath, name: path.basename(filePath) });
+  return { ok: true, content, mime: extToMime(path.extname(filePath).slice(1)) };
+});
+
+/* ============================================================================
+ *   문서 내용 공유 IPC (원본 유지)
+ * ==========================================================================*/
+let currentDocumentContent = "<p>문서 작성을 시작하세요...</p>";
+
+ipcMain.handle("document:getCurrentContent", () => {
+  console.log(
+    "[MAIN] 문서 내용 요청됨:",
+    currentDocumentContent ? currentDocumentContent.substring(0, 100) + "..." : "null"
+  );
+  return currentDocumentContent;
+});
+
+ipcMain.handle("document:setCurrentContent", (_evt, content) => {
+  console.log(
+    "[MAIN] 문서 내용 업데이트됨:",
+    content ? content.substring(0, 100) + "..." : "null"
+  );
+  currentDocumentContent = content;
+  return true;
+});
+
+ipcMain.on("document:sendUpdate", (_evt, content) => {
+  console.log("[MAIN] 문서 업데이트 신호 받음, 기능창으로 전달");
+  console.log("[MAIN] featureWindow 상태:", {
+    exists: !!featureWindow,
+    destroyed: featureWindow?.isDestroyed?.(),
+    id: featureWindow?.id,
+  });
+
+  if (featureWindow && !featureWindow.isDestroyed()) {
+    console.log("[MAIN] 기능창으로 document:updated 이벤트 전송 중...");
+    featureWindow.webContents.send("document:updated", content);
+    console.log("[MAIN] 이벤트 전송 완료");
+  } else {
+    console.warn("[MAIN] 기능창이 없거나 파괴됨, 이벤트 전송 실패");
+  }
+});
+
+/* ============================================================================
+ *   역할/로그인 관련 IPC
+ * ==========================================================================*/
 ipcMain.on("auth:success", (_evt, payload) => {
-  const role = payload?.role;
-  if (!role) return;
-  if (role === "admin") { createAdminWindow(); featureWindow?.hide?.(); mainWindow?.hide?.(); return; }
-  const mw = createMainWindow(); mw.show(); mw.focus(); createFeatureWindow("employee");
+  const role = payload?.role || null;
+  currentRole = role;
+
+  // 로그인창은 '항상위'가 남아있을 수 있으니 확실히 해제 + 숨김
+  if (mainWindow) {
+    try {
+      mainWindow.setAlwaysOnTop?.(false);
+      mainWindow.setSkipTaskbar?.(true);
+      mainWindow.hide();
+      mainWindow.blur();
+    } catch {}
+  }
+
+  if (currentRole === "admin") {
+    // 관리자는 관리자 창만
+    destroyFeatureWindows(); // 혹시 남아있던 기능/챗봇 제거
+    const aw = createAdminWindow();                 // ★ 추가: 변수에 담아서
+    try { aw.setSkipTaskbar?.(false); } catch {}    // ★ 추가: 작업표시줄 아이콘 보장
+    return;
+  }
+
+  // employee: 기능부와 챗봇을 '항상' 새로 보장 (이전 세션 잔재 제거)
+  try { featureWindow?.destroy?.(); } catch {}
+  try { chatWindow?.destroy?.(); } catch {}
+  featureWindow = null;
+  chatWindow = null;
+
+  const fw = createFeatureWindow("employee");
+  const cw = createChatWindow();
+  try { fw.setSkipTaskbar?.(false); } catch {}      // ★ 추가
+  try { cw.setSkipTaskbar?.(false); } catch {}      // ★ 추가
+  try { fw.focus(); } catch {}
+  try { cw.show(); cw.focus(); } catch {}
 });
 
-// 기능/관리자 창 열기 API
+
 ipcMain.handle("open-feature-window", (_evt, role = "employee") => {
   if (role === "admin") createAdminWindow();
   else createFeatureWindow(role);
   return true;
 });
 
-// 분리된 ‘명시적’ 로그아웃 요청 처리  — 기본 스코프 'all'
+// 전역 로그아웃 요청(버튼/메뉴에서 호출 가능)
 ipcMain.on("app:logout-request", (event, scope = "all") => {
-  // scope: 'current' | 'all'
+  console.log("[MAIN] app:logout-request scope=", scope);
+
+  // 1) 로그아웃 브로드캐스트
   if (scope === "current") {
-    const target = BrowserWindow.fromWebContents(event.sender);
-    target?.webContents?.send("logout");
-    return;
-  }
-
-  // 메인 로그인 창 표시 트리거(레거시 위치 유지)
-  ipcMain.on("app:show-main", () => {
-    const w = createMainWindow(); // 없으면 생성, 있으면 가져옴
-    w.show();
-    w.focus();
-  });
-
-  // 전체 창으로 브로드캐스트
-  BrowserWindow.getAllWindows().forEach((w) => w.webContents?.send("logout"));
-});
-
-// 스마트 열기 (미지원/외부열기 분기)
-ipcMain.handle("fs:openSmart", async (_evt, { name }) => {
-  const base = resolveBaseDir();
-  const full = safeJoin(base, name);
-  const ext = path.extname(name).toLowerCase();
-
-  await upsertOpened({ path: full, name, opened_at: new Date().toISOString() });
-
-  if (ext === ".doc") {
-    return { mode: "notImplemented", reason: ".doc 내부 편집은 준비 중입니다." };
+    const w = BrowserWindow.fromWebContents(event.sender);
+    w?.webContents?.send("logout");
   } else {
-    await shell.openPath(full);
-    return { mode: "external" };
+    broadcastLogout();
   }
+
+  // 2) 창 상태를 '완전히' 초기화 (hide 말고 destroy)
+  destroyFeatureWindows();
+  currentRole = null;
+
+  // 3) 로그인 창만 복귀 (항상위/포커스 보장 후 즉시 해제)
+  const mw = createMainWindow();
+  try { if (mw.isMinimized?.()) mw.restore(); } catch {}
+  if (!mw.isVisible?.()) mw.show();
+  mw.focus();
+  mw.setSkipTaskbar?.(false);
+  mw.setAlwaysOnTop?.(true, "screen-saver");
+  setTimeout(() => mw.setAlwaysOnTop?.(false), 50); // 약간의 지연으로 확실히 해제
+  console.log("[MAIN] show+focus mainWindow id=", mw?.id);
 });
 
-// 레거시 on 채널(하위 호환)
-ipcMain.on("win:minimize", (event) => getSenderWindow(event)?.minimize());
-ipcMain.on("win:maximize", (event) => {
-  const w = getSenderWindow(event);
-  if (!w) return;
-  if (w.isMaximized()) w.unmaximize();
-  else w.maximize();
-  w.webContents?.send?.("window-resized");
+// ===== DOCX 파일 처리 =====
+const mammoth = require('mammoth');
+
+// DOCX 파일을 HTML로 변환하는 함수
+async function convertDocxToHtml(filePath) {
+  try {
+    const result = await mammoth.convertToHtml({ path: filePath });
+    return {
+      success: true,
+      html: result.value,
+      messages: result.messages // 변환 중 발생한 메시지들
+    };
+  } catch (error) {
+    console.error('DOCX 변환 오류:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// IPC 핸들러: DOCX 파일 변환
+ipcMain.handle("convert-docx-to-html", async (event, filePath) => {
+  console.log("[MAIN] DOCX 변환 요청:", filePath);
+  return await convertDocxToHtml(filePath);
 });
-ipcMain.on("win:close", (event) => getSenderWindow(event)?.close());
-ipcMain.on("window-minimize", (e) => getSenderWindow(e)?.minimize());
-ipcMain.on("window-maximize", (e) => {
-  const w = getSenderWindow(e);
-  if (!w) return;
-  if (w.isMaximized()) w.unmaximize();
-  else w.maximize();
-  w.webContents?.send?.("window-resized");
-});
-ipcMain.on("window-close", (e) => getSenderWindow(e)?.close());

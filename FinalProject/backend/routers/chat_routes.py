@@ -1,17 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
-from typing import List, Generator, Optional
-import json, uuid
+from typing import List, Generator, Optional, Sequence
+import json, uuid, os
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from ..database import get_db, ChatSession, ChatMessage, ToolMessageRecord, User
+from ..routers.auth_routes import get_current_user
+import boto3
+from botocore.config import Config
 from ..ChatBot.agents.RoutingAgent import RoutingAgent, generate_config
 from ..ChatBot.core.AgentState import AgentState
 from langchain_core.messages.tool import ToolMessage
 
 # APIRouter 인스턴스 생성
 router = APIRouter()
+
+# S3 설정
+DOCS_BUCKET = os.getenv("DOCS_BUCKET", "your-docs-bucket-name")
+_s3 = boto3.client("s3", config=Config(retries={"max_attempts": 3, "mode": "standard"}))
 
 # --- Pydantic 모델 ---
 # 메시지 저장 요청을 위한 데이터 모델
@@ -28,7 +35,7 @@ def _create_chat_message(db: Session, session_id: str, role: str, content: str, 
         role=role,
         content=content,
         message_id=message_id,
-        timestamp=datetime.now() # 현재 시간으로 타임스탬프 설정
+        timestamp=datetime.now(timezone.utc) # 현재 시간을 UTC로 타임스탬프 설정
     )
     db.add(message) # DB 세션에 추가
     db.commit() # 변경사항 커밋
@@ -59,21 +66,35 @@ def _create_tool_message(
 
 # 도구 시작 이벤트를 처리하고 SSE(Server-Sent Events)를 전송하는 함수
 async def _handle_tool_start(event: dict, session_id: str, db: Session):
-    tool_name = event.get("name", "Unknown Tool") # 도구 이름
-    tool_input = event.get("data", {}).get("input", {}) # 도구 입력
-    tool_call_id = event.get("tool_call_id") # 도구 호출 ID
-    tool_artifact = event.get("artifact") # 도구 아티팩트
+    tool_name = event.get("name", "Unknown Tool")
+    tool_input = event.get("data", {}).get("input", {})
 
-    # 사용자 화면에 표시할 생각 중 메시지
-    thinking_message = (
-        f"[AI Thinking]: Using tool '{tool_name}' with input:\n"
-        f"```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
-    )
+    # 사용자 친화적인 메시지 생성
+    user_friendly_message = ""
+    if tool_name == "hybrid_document_search_tool":
+        keywords = tool_input.get('keywords', [])
+        if keywords:
+            user_friendly_message = f"'{', '.join(keywords)}' 관련 문서를 검색하고 있습니다... 🔎"
+        else:
+            user_friendly_message = "문서를 검색하고 있습니다... 🔎"
+    elif tool_name == "get_presigned_download_url":
+        file_key = tool_input.get('file_key', '문서')
+        user_friendly_message = f"'{file_key}'의 다운로드 링크를 생성하고 있습니다... 🔗"
+    elif tool_name == "run_document_edit":
+        user_friendly_message = "문서 편집 작업을 준비하고 있습니다... ✍️"
+    else:
+        user_friendly_message = "요청하신 작업을 처리하기 위해 도구를 준비하고 있습니다... ⚙️"
 
-    # 1. ChatMessage 저장 (AI의 생각 중 메시지)
-    chat_msg = _create_chat_message(db, session_id, "assistant", thinking_message)
+    # thinking_message를 사용자 친화적인 메시지로 교체
+    thinking_message = user_friendly_message
 
-    # 2. ToolMessageRecord 저장 (도구 호출 시작 기록)
+    # 1. ChatMessage 저장 (AI의 생각 중 메시지) - DB에는 상세 정보 저장
+    db_message_content = f"[Tool Start: {tool_name}]\nInput:\n```json\n{json.dumps(tool_input, indent=2, ensure_ascii=False)}\n```"
+    chat_msg = _create_chat_message(db, session_id, "assistant", db_message_content)
+
+    # 2. ToolMessageRecord 저장 (기존 로직 유지)
+    tool_call_id = event.get("tool_call_id")
+    tool_artifact = event.get("artifact")
     tool_raw_content = {"tool_name": tool_name, "input": tool_input}
     _create_tool_message(
         db,
@@ -84,7 +105,7 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
         raw_content=tool_raw_content,
     )
 
-    # 3. SSE 전송 (프론트엔드로 생각 중 메시지 전송)
+    # 3. SSE 전송 (프론트엔드로 사용자 친화적 메시지 전송)
     yield f"data: {json.dumps({'thinking_message': thinking_message}, ensure_ascii=False)}\n\n"
 
 # 도구 종료 이벤트를 처리하고 SSE를 전송하는 함수
@@ -95,6 +116,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
 
     # 문서 업데이트 관련 도구 목록
     DOCUMENT_UPDATE_TOOLS = {
+    "insert_content_at_position", # 방금 추가
     "run_document_edit",  # 메인 편집 도구 (기존)
     "replace_text_in_document",  # 기존 도구
     "create_document_structure",  # 문서 구조 생성
@@ -113,8 +135,38 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
         content_to_send = raw_output.content if isinstance(raw_output, ToolMessage) else raw_output
         print(f"--- Sending document_update for replace_text_in_document. Content length: {len(content_to_send) if isinstance(content_to_send, str) else 'N/A'} ---")
         yield f"data: {json.dumps({'document_update': content_to_send}, ensure_ascii=False)}\n\n"
+    
+    # 로컬 문서 검색 도구 또는 하이브리드 검색 도구인 경우, 프론트엔드에 문서 목록 전송
+    if tool_name in ["local_document_search_tool", "hybrid_document_search_tool"]:
+        try:
+            # raw_output이 ToolMessage 객체인 경우 content 추출
+            if isinstance(raw_output, ToolMessage):
+                tool_output = raw_output.content
+            else:
+                tool_output = raw_output
+            
+            # 문자열인 경우 JSON으로 파싱 시도
+            if isinstance(tool_output, str):
+                import json as json_module
+                try:
+                    parsed_output = json_module.loads(tool_output)
+                except json_module.JSONDecodeError:
+                    parsed_output = {"found_documents": []}
+            else:
+                parsed_output = tool_output
+            
+            # 찾은 문서가 있으면 프론트엔드로 전송
+            if isinstance(parsed_output, dict) and "found_documents" in parsed_output:
+                documents = parsed_output["found_documents"]
+                if documents:
+                    print(f"--- Sending local_documents. Found {len(documents)} documents ---")
+                    yield f"data: {json.dumps({'local_documents': documents}, ensure_ascii=False)}\n\n"
+                    
+        except Exception as e:
+            print(f"--- Error processing local document search results: {e} ---")
 
-    formatted_output = "[Tool Output]: " # 도구 출력 포맷팅을 위한 초기 문자열
+#    formatted_output = "[Tool Output]: " # 도구 출력 포맷팅을 위한 초기 문자열
+    formatted_output = ""
     tool_raw_json = None
 
     try:
@@ -151,8 +203,8 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
         formatted_output += f"`Error processing output: {e}`"
         print(f"[Error] raw_output={raw_output} -> {e}")
 
-    # 1. SSE 전송 (도구 출력 메시지 전송)
-    yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
+    # 1. SSE 전송 (도구 출력 메시지 전송) - 사용자에게는 숨김
+    # yield f"data: {json.dumps({'tool_message': formatted_output}, ensure_ascii=False)}\n\n"
 
     # 2. ChatMessage 저장 (도구 출력 메시지)
     chat_msg = _create_chat_message(
@@ -173,7 +225,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
     )
 
 # LLM 응답 스트리밍을 위한 비동기 함수
-async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], chat_agent, config, db: Session) -> Generator:
+async def _stream_llm_response(session_id: str, prompt: str, document_content: Optional[str], workflow_agent, config, db: Session) -> Generator:
     # 채팅 세션 가져오기 또는 생성 (외래 키 제약 조건 방지)
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
@@ -202,20 +254,16 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
     if not messages or messages[-1] != ("user", prompt): # 마지막 메시지가 현재 프롬프트와 다르면 추가
         messages.append(("user", prompt))
 
-    # 초기 AgentState 객체 생성
-    initial_state: AgentState = {
-        "prompt": prompt,
-        "document_content": document_content,
-        "messages": messages,
-        # 다음 필드들은 에이전트에 의해 채워질 것임
-        "intent": None,
-        "needs_document_content": False,
-        "intermediate_steps": [],
-        "generation": None,
-    }
+    # 초기 AgentState 생성 (새로운 헬퍼 사용)
+    from ..ChatBot.core.AgentState import AgentStateHelper
+    initial_state = AgentStateHelper.create_initial_state(
+        prompt=prompt,
+        document_content=document_content,
+        messages=messages
+    )
 
     # 에이전트 스트림을 통해 상태 객체 전달
-    async for event in chat_agent.astream_events(initial_state, config=config):
+    async for event in workflow_agent.astream_events(initial_state, config=config):
         
         kind = event["event"] # 이벤트 종류
         name = event.get("name") # 이벤트 이름
@@ -243,6 +291,7 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 full_response_content += content
                 
         elif kind == "on_tool_start": # 도구 시작 이벤트
+            has_tool_execution = True  # 도구 실행 플래그 설정
             async for chunk in _handle_tool_start(event, session_id, db):
                 yield chunk
         
@@ -252,27 +301,74 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         
         elif kind == "on_end": # 스트림 종료 이벤트
             final_state = event.get("data", {}).get("output", {})
-            # ... (나머지 로직)
-            yield "data: [DONE]\n\n" # 스트림 종료 신호
+            
+            # --- 문서편집창 IPC 전송 로직 ---
+            if final_state and final_state.get("send_to_editor", False):
+                selected_document = final_state.get("selected_document")
+                if selected_document:
+                    # IPC 메시지 데이터 준비
+                    ipc_data = {
+                        "action": "open_document_in_editor",
+                        "document": {
+                            "filename": selected_document.get("filename", "문서"),
+                            "content": selected_document.get("content", ""),
+                            "filePath": selected_document.get("filePath", ""),
+                            "source": selected_document.get("source", "unknown")
+                        }
+                    }
+                    
+                    # IPC 메시지를 스트림으로 전송 (프론트엔드에서 처리)
+                    yield f"data: {json.dumps(ipc_data, ensure_ascii=False)}\n\n"
+                    print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
+            
+            # --- NEW LOGIC FOR HANDLING SPECIAL ACTION PAYLOAD ---
+            if final_state and "response" in final_state:
+                try:
+                    # Attempt to parse the final response as JSON
+                    parsed_response = json.loads(final_state["response"])
+                    if "action" in parsed_response:
+                        # If it contains an "action" key, stream the whole JSON
+                        yield f"data: {json.dumps(parsed_response, ensure_ascii=False)}\n\n"
+                        # Do not process further as this is a special action
+                        yield "data: [DONE]\n\n" # Stream end signal
+                        return # Exit the generator
+                except json.JSONDecodeError:
+                    # Not a JSON action payload, continue with normal processing
+                    pass
+            # --- END NEW LOGIC ---
+
+            # Extract and stream final messages from agents (existing logic)
+            if final_state and "messages" in final_state:
+                messages = final_state["messages"]
+                for msg in messages:
+                    if hasattr(msg, 'content') and msg.content and hasattr(msg, 'type'):
+                        if msg.type == "ai" and msg.content:
+                            content_to_stream = msg.content
+                            if not content_to_stream.startswith("{}") and len(content_to_stream) > 10:
+                                full_response_content += content_to_stream
+                                yield f"data: {json.dumps({'content': content_to_stream}, ensure_ascii=False)}\n\n"
+            
+            yield "data: [DONE]\n\n"
 
     if full_response_content: # 전체 응답 내용이 있으면 저장
         _create_chat_message(db, session_id, "assistant", full_response_content)
 
 # --- 채팅 API 엔드포인트 ---
 # 메시지 저장 엔드포인트
-@router.post("/chat/save")
-async def save_message(request: MessageSaveRequest, db: Session = Depends(get_db)):
-    default_user_id = 1 # 임시 사용자 ID
-    user = db.query(User).filter(User.id == default_user_id).first()
-    if not user: # 사용자가 없으면 새로 생성
-        user = User(id=default_user_id, unique_auth_number="default_auth", username="default_user", hashed_password="", email="default@example.com")
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+@router.post("/save")
+async def save_message(
+    request: MessageSaveRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 실제 로그인 사용자 사용
 
-    session = db.query(ChatSession).filter(ChatSession.id == request.session_id).first()
+    session = db.query(ChatSession).filter(
+        ChatSession.id == request.session_id,
+        ChatSession.user_id == current_user.id  # 보안: 자신의 세션만
+    ).first()
     if not session: # 세션이 없으면 새로 생성
-        session = ChatSession(id=request.session_id, user_id=user.id, title="새로운 대화")
+        session = ChatSession(id=request.session_id, user_id=current_user.id, title="새로운 대화")
         db.add(session)
         db.commit()
         db.refresh(session)
@@ -289,26 +385,196 @@ async def save_message(request: MessageSaveRequest, db: Session = Depends(get_db
     return {"status": "success"} # 성공 상태 반환
 
 # 채팅 세션 목록 조회 엔드포인트
-@router.get("/chat/sessions")
-async def get_chat_sessions(db: Session = Depends(get_db)):
-    default_user_id = 1 # 임시 사용자 ID
-    sessions = db.query(ChatSession).filter(ChatSession.user_id == default_user_id).order_by(ChatSession.created_at.desc()).all() # 사용자 ID로 세션 조회
+@router.get("/sessions")
+async def get_chat_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 자신의 세션만 조회
+    sessions = db.query(ChatSession).filter(
+        ChatSession.user_id == current_user.id
+    ).order_by(ChatSession.created_at.desc()).all()
     sessions_list = []
     for session in sessions: # 세션 정보를 딕셔너리 형태로 변환
         sessions_list.append({"id": session.id, "title": session.title})
     return {"sessions": sessions_list} # 세션 목록 반환
 
 # 특정 세션의 메시지 목록 조회 엔드포인트
-@router.get("/chat/messages/{session_id}")
-async def get_messages(session_id: str, db: Session = Depends(get_db)):
-    messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp).all() # 세션 ID로 메시지 조회
+@router.get("/{session_id}/messages")
+async def get_messages(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 보안: 자신의 세션인지 확인
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id,
+        ChatSession.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found or access denied")
+    
+    messages = db.query(ChatMessage).filter(
+        ChatMessage.session_id == session_id
+    ).order_by(ChatMessage.timestamp).all()
     return {"messages": [{"role": msg.role, "content": msg.content} for msg in messages]} # 메시지 목록 반환
 
 # LLM 응답 스트리밍 엔드포인트
-@router.get("/llm/stream")
-async def llm_stream(session_id: str, prompt: str, document_content: Optional[str] = None, db: Session = Depends(get_db)):
+@router.get("/stream")
+async def llm_stream(session_id: str, prompt: str, current_user: User = Depends(get_current_user), document_content: Optional[str] = None, db: Session = Depends(get_db)):
     config = generate_config(session_id) # 세션 ID로 설정 생성
-    chat_agent = RoutingAgent() # 라우팅 에이전트 인스턴스 생성
+    workflow_agent = RoutingAgent() # 멀티스텝 워크플로우 에이전트 인스턴스 생성
 
     # LLM 응답을 스트리밍 형태로 반환
-    return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, chat_agent, config, db), media_type="text/event-stream")
+    return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, workflow_agent, config, db), media_type="text/event-stream")
+
+# --- S3 파일 삭제 유틸리티 ---
+def delete_s3_objects(bucket: str, keys: list[str]) -> None:
+    """S3에서 파일들을 삭제하는 함수"""
+    if not keys:
+        return
+    # 1000개 단위로 삭제
+    for i in range(0, len(keys), 1000):
+        chunk = keys[i : i + 1000]
+        _s3.delete_objects(
+            Bucket=bucket,
+            Delete={"Objects": [{"Key": k} for k in chunk], "Quiet": True},
+        )
+
+def _collect_attachment_keys(messages: Sequence[ChatMessage]) -> list[str]:
+    """메시지들에서 첨부파일 S3 키들을 추출하는 함수"""
+    keys: list[str] = []
+    for msg in messages:
+        # 메시지 content에서 첨부파일 정보 추출 (JSON 파싱 필요시)
+        try:
+            if hasattr(msg, 'tool_message') and msg.tool_message:
+                artifact = msg.tool_message.tool_artifact
+                if artifact and isinstance(artifact, dict):
+                    # S3 키 추출 로직 (프로젝트에 맞게 수정 필요)
+                    s3_key = artifact.get('s3_key') or artifact.get('key')
+                    if s3_key:
+                        keys.append(s3_key)
+        except Exception:
+            # 파싱 실패시 무시
+            pass
+    return keys
+
+# --- 삭제 엔드포인트들 ---
+@router.delete("/messages/{message_id}")
+async def delete_message(
+    message_id: str,
+    hard: bool = Query(False, description="하드 삭제 여부 (True: 완전삭제, False: 소프트삭제)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """메시지 삭제 (소프트/하드 삭제 지원)"""
+    # 메시지 조회 및 권한 확인
+    message = db.query(ChatMessage).filter(ChatMessage.message_id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # 세션 소유자 확인
+    session = db.query(ChatSession).filter(ChatSession.id == message.session_id).first()
+    if not session or session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if hard:
+        # 하드 삭제: S3 파일도 함께 삭제
+        keys = _collect_attachment_keys([message])
+        if keys:
+            delete_s3_objects(DOCS_BUCKET, keys)
+        db.delete(message)
+    else:
+        # 소프트 삭제: is_deleted 플래그 설정 (향후 구현)
+        # message.is_deleted = True  # 현재 ChatMessage 모델에 is_deleted 필드가 없음
+        db.delete(message)  # 임시로 하드 삭제
+    
+    db.commit()
+    return {"ok": True, "message": "Message deleted successfully"}
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    hard: bool = Query(False, description="하드 삭제 여부"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """세션 삭제 (세션의 모든 메시지 포함)"""
+    # 세션 조회 및 권한 확인
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if hard:
+        # 하드 삭제: 세션의 모든 메시지와 S3 파일 삭제
+        messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).all()
+        keys = _collect_attachment_keys(messages)
+        if keys:
+            delete_s3_objects(DOCS_BUCKET, keys)
+        
+        # 메시지들 삭제 (CASCADE로 인해 자동 삭제되지만 명시적으로)
+        db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+        db.delete(session)
+    else:
+        # 소프트 삭제
+        session.is_deleted = True
+    
+    db.commit()
+    return {"ok": True, "message": "Session deleted successfully"}
+
+@router.delete("/sessions/{session_id}/messages")
+async def delete_older_messages_in_session(
+    session_id: str,
+    before: Optional[str] = Query(None, description="이 날짜 이전 메시지 삭제 (ISO8601 형식, 예: 2025-01-01T00:00:00Z)"),
+    keep_last: Optional[int] = Query(None, ge=0, description="최신 N개 메시지만 보존"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """세션 내 특정 조건의 오래된 메시지들 삭제"""
+    # 세션 권한 확인
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    deleted_count = 0
+    
+    if before:
+        # 특정 날짜 이전 메시지 삭제
+        try:
+            before_datetime = datetime.fromisoformat(before.replace('Z', '+00:00'))
+            messages_to_delete = db.query(ChatMessage).filter(
+                ChatMessage.session_id == session_id,
+                ChatMessage.timestamp < before_datetime
+            ).all()
+            deleted_count = len(messages_to_delete)
+            
+            for msg in messages_to_delete:
+                db.delete(msg)
+                
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use ISO8601 format.")
+    
+    elif keep_last is not None:
+        # 최신 N개만 보존하고 나머지 삭제
+        all_messages = db.query(ChatMessage).filter(
+            ChatMessage.session_id == session_id
+        ).order_by(ChatMessage.timestamp.desc()).all()
+        
+        if len(all_messages) > keep_last:
+            messages_to_delete = all_messages[keep_last:]
+            deleted_count = len(messages_to_delete)
+            
+            for msg in messages_to_delete:
+                db.delete(msg)
+    
+    else:
+        raise HTTPException(status_code=400, detail="Either 'before' or 'keep_last' parameter is required")
+    
+    db.commit()
+    return {"ok": True, "soft_deleted": deleted_count, "message": f"Deleted {deleted_count} messages"}

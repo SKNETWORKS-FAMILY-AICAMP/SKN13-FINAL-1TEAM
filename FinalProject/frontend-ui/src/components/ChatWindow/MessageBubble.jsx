@@ -2,61 +2,91 @@
   파일: src/components/ChatWindow/MessageBubble.jsx
   역할: 단일 메시지(사용자/AI) 말풍선 렌더링. 텍스트(Markdown 지원), 첨부 파일 칩, 이미지 썸네일/라이트박스를 제공.
 
-  변경점:
-    - 파일 칩 클릭 시: 브라우저 기본 다운로드 대신
-      downloadPresignedToLocal()을 호출해 하드코딩 폴더(및 기본 다운로드 폴더)에 저장
-      → 저장 성공/실패 시 ChatWindow가 수신하는 'app:toast' 이벤트를 발행
-
   LINKS:
-    - 사용: ChatWindow.jsx → messages.map(...)으로 각 메시지를 MessageBubble로 렌더
-    - 의존: react-markdown + remark-gfm, @heroicons/react, uploadPresigned.js
+    - 이 파일을 사용하는 곳:
+      * ChatWindow.jsx → messages.map(...)으로 각 메시지를 MessageBubble로 렌더
+    - 이 파일이 사용하는 것:
+      * react-markdown + remark-gfm → Markdown 렌더링(표/체크박스 등 GFM 확장)
+      * @heroicons/react → 아이콘
+      * 브라우저 이벤트/키보드(ESC/좌우)로 라이트박스 제어
+
+  데이터 흐름(요약):
+    1) message.attachments를 이미지/비이미지로 분리
+    2) 비이미지 → 파일 칩(FileChip)로 다운로드 링크 표시
+    3) 이미지 → 최대 4개 썸네일 + 초과 수량(+N) 표시, 클릭 시 라이트박스 열림
+    4) 텍스트가 있으면 ReactMarkdown으로 렌더(사용자 말풍선은 회색 박스)
+
+  주의사항:
+    - 라이트박스가 열린 상태(viewerOpen=true)에서 ESC/←/→ 키로 닫기/이전/다음 구현
+    - 첨부의 url/previewUrl/filename 등 다양한 필드 명을 수용(백엔드 다양성 방어)
 */
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { PaperClipIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { downloadPresignedToLocal } from '../services/uploadPresigned.js'; // ✅ 추가
 
-/* ------------------------- 출력 분류/세그먼트 유틸 ------------------------- */
+/* ------------------------- 추가 유틸: 출력 분류/세그먼트 ------------------------- */
+
+/** 어시스턴트 출력 분류 */
 const classifyAssistantOutput = (raw = '') => {
   const s = String(raw || '').trim();
   const startsWithFence = s.startsWith('```');
   const pureJson =
     (s.startsWith('{') && s.endsWith('}')) ||
     (s.startsWith('[') && s.endsWith(']'));
+
   if (startsWithFence || pureJson) return 'fenced';
 
-  const hasToolLog = /AI Thinking:|Using tool|tool_call_id|artifact"|status"|"type":"tool"/m.test(s);
+  const hasToolLog =
+    /AI Thinking:|Using tool|tool_call_id|artifact"|status"|"type":"tool"/m.test(s);
+
   const lines = s.split(/\r?\n/);
   const longLine = lines.some(l => l.length > 140);
   const braceDensity = ((s.match(/[{}]/g) || []).length) / Math.max(s.length, 1);
+
   if (hasToolLog || longLine || braceDensity > 0.02) return 'log';
   return 'plain';
 };
+
+/** 한 메시지 문자열을 plain/bubble 세그먼트 배열로 분리 */
 const segmentAssistantContent = (raw = '') => {
   const text = String(raw || '');
   const segments = [];
   const fenceRe = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```/g;
-  let lastIndex = 0, m;
+
+  let lastIndex = 0;
+  let m;
   while ((m = fenceRe.exec(text)) !== null) {
     const before = text.slice(lastIndex, m.index);
     if (before.trim().length > 0) {
       const cls = classifyAssistantOutput(before);
-      segments.push({ type: cls === 'plain' ? 'plain' : 'bubble', mode: cls, content: before });
+      segments.push({
+        type: cls === 'plain' ? 'plain' : 'bubble',
+        mode: cls,
+        content: before
+      });
     }
-    const fencedBlock = m[0];
+    const fencedBlock = m[0]; // 코드펜스 전체
     segments.push({ type: 'bubble', mode: 'fenced', content: fencedBlock });
     lastIndex = fenceRe.lastIndex;
   }
   const tail = text.slice(lastIndex);
   if (tail.trim().length > 0) {
     const cls = classifyAssistantOutput(tail);
-    segments.push({ type: cls === 'plain' ? 'plain' : 'bubble', mode: cls, content: tail });
+    segments.push({
+      type: cls === 'plain' ? 'plain' : 'bubble',
+      mode: cls,
+      content: tail
+    });
   }
-  if (segments.length === 0) segments.push({ type: 'plain', mode: 'plain', content: text });
+  if (segments.length === 0) {
+    segments.push({ type: 'plain', mode: 'plain', content: text });
+  }
   return segments;
 };
+
+/** 인접한 bubble 세그먼트를 하나로 합치기(전체를 한 박스로 보여주기 위함) */
 const mergeAdjacentBubbles = (segs = []) => {
   const out = [];
   for (const seg of segs) {
@@ -67,37 +97,89 @@ const mergeAdjacentBubbles = (segs = []) => {
         mode: (last.mode === 'fenced' || seg.mode === 'fenced') ? 'fenced' : 'log',
         content: `${last.content}\n\n${seg.content}`
       };
-    } else out.push(seg);
+    } else {
+      out.push(seg);
+    }
   }
   return out;
 };
-/* ------------------------------------------------------------------------- */
+/* ------------------------------------------------------------------------------ */
 
-/* ⬇ 파일칩: onClick에서 기본 동작을 막고, 프리사인드 다운로드 → 토스트 이벤트 발행 */
-const FileChip = ({ name, url, onClick }) => (
+// 비이미지 첨부 파일 칩
+const FileChip = ({ name, url }) => (
   <a
     href={url || '#'}
     download={name || 'file'}
-    onClick={(e) => {
-      // (옵션) Alt/Cmd/Ctrl/휠클릭은 브라우저 기본 동작 허용하려면 주석 해제
-      // if (e.altKey || e.metaKey || e.ctrlKey || e.button === 1) return;
-      e.preventDefault();
-      onClick?.();
-    }}
     className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-gray-100 text-sm text-gray-800 hover:bg-gray-200"
     title={name}
     rel="noreferrer"
   >
     <PaperClipIcon className="w-4 h-4 text-gray-700" />
-    <span className="truncate max-w-[200px]">{name || 'attachment'}</span>
+    <span className="truncate max-w-[160px]">{name}</span>
   </a>
 );
 
-export default function MessageBubble({ message }) {
+// 문서 선택 컴포넌트
+const DocumentSelector = ({ documents, onSelect }) => {
+  if (!documents || documents.length === 0) return null;
+
+  return (
+    <div className="w-full mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+      <div className="text-sm font-medium text-blue-800 mb-2">
+        📄 찾은 문서 ({documents.length}개)
+      </div>
+      <div className="space-y-2">
+        {documents.map((doc, index) => (
+          <button
+            key={index}
+            onClick={() => onSelect(doc)}
+            className="w-full text-left p-3 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-gray-900 truncate">
+                    {doc.filename}
+                  </div>
+                  {doc.source === 's3' && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                      ☁️ S3
+                    </span>
+                  )}
+                  {doc.source === 'local' && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                      📁 로컬
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-gray-500 truncate">
+                  {doc.relative_path}
+                </div>
+              </div>
+              <div className="ml-3 flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  {doc.extension.replace('.', '').toUpperCase()}
+                </span>
+                <span className="text-xs text-blue-600 font-medium">
+                  {Math.round(doc.score * 100)}% 일치
+                </span>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 text-xs text-gray-500">
+        원하는 문서를 클릭하면 문서편집창에서 열립니다.
+      </div>
+    </div>
+  );
+};
+
+export default function MessageBubble({ message, onDocumentSelect }) {
   const role = message?.role || 'assistant';
   const isUser = role === 'user';
 
-  // 첨부 표준화
+  // 첨부 표준화: message.attachments 또는 file 레거시 필드 대응
   const attachments = Array.isArray(message?.attachments)
     ? message.attachments
     : (message?.file ? [message.file] : []);
@@ -108,13 +190,15 @@ export default function MessageBubble({ message }) {
   const extra  = Math.max(0, images.length - 4);
   const hasText = !!(message?.content && message.content.trim().length > 0);
 
-  /* 이미지 라이트박스 */
+  /* 이미지 라이트박스 상태/이동 로직 */
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const openViewer = useCallback((idx) => { setViewerIndex(idx); setViewerOpen(true); }, []);
   const closeViewer = useCallback(() => setViewerOpen(false), []);
   const prevImg = useCallback(() => { if (images.length) setViewerIndex(i => (i - 1 + images.length) % images.length); }, [images.length]);
-  const nextImg = useCallback(() => { if (images.length) setViewerIndex(i => (i + 1) % images.length); }, [images.length]);
+  const nextImg = useCallback(() => { if (images.length) setViewerIndex(i => (i + 1) % images.length) }, [images.length]);
+
+  // 키보드 핸들러: ESC, ArrowLeft, ArrowRight
   useEffect(() => {
     if (!viewerOpen) return;
     const onKey = (e) => {
@@ -126,53 +210,22 @@ export default function MessageBubble({ message }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [viewerOpen, closeViewer, prevImg, nextImg]);
 
-  // 텍스트 세그먼트
+  // 어시스턴트 텍스트를 세그먼트로 분리(+ 인접 버블 병합)
   const segments = useMemo(
     () => (isUser ? [] : mergeAdjacentBubbles(segmentAssistantContent(message?.content || ''))),
     [isUser, message?.content]
   );
 
-  /* ✅ 파일 클릭 → 다운로드 → 토스트 이벤트 발행 */
-  const handleFileClick = useCallback(async (file) => {
-    try {
-      if (!file?.url) return;
-      const res = await downloadPresignedToLocal(file.url, file.name || file.filename || 'download.bin');
-      const shownName = res?.nameInBase || file.name || file.filename || '파일';
-      window.dispatchEvent(new CustomEvent('app:toast', {
-        detail: {
-          id: Date.now(),
-          title: '다운로드 완료',
-          message: `${shownName} 이(가) 저장되었습니다.`,
-          timeoutMs: 4000
-        }
-      }));
-    } catch (err) {
-      console.error('프리사인드 다운로드 실패:', err);
-      window.dispatchEvent(new CustomEvent('app:toast', {
-        detail: {
-          id: Date.now(),
-          kind: 'error',
-          title: '다운로드 실패',
-          message: String(err?.message || err),
-          timeoutMs: 5000
-        }
-      }));
-    }
-  }, []);
-
+  // 🔒 방어 로직 반영: 최상단 컨테이너 overflow-hidden (예비 안전망)
   return (
-    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}>
+    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'} mb-2 overflow-hidden`}>
+      {/* 세로 스택: [첨부] -> [텍스트] */}
       <div className={`flex flex-col gap-2 max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
-        {/* 첨부: 파일칩 + 이미지 썸네일 */}
+        {/* ⬆ 첨부: 파일칩 + 이미지 썸네일(최대 4) + +N 표시 */}
         {(files.length > 0 || images.length > 0) && (
           <div className={`w-full flex flex-wrap gap-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
             {files.map((f, i) => (
-              <FileChip
-                key={`chip-${i}`}
-                name={f.name || f.filename || 'attachment'}
-                url={f.url || f.previewUrl}
-                onClick={() => handleFileClick(f)} // ✅ 클릭 시 다운로드+토스트
-              />
+              <FileChip key={`chip-${i}`} name={f.name || f.filename || 'attachment'} url={f.url || f.previewUrl} />
             ))}
 
             {images.slice(0, 4).map((img, i) => (
@@ -204,24 +257,17 @@ export default function MessageBubble({ message }) {
           </div>
         )}
 
-        {/* 텍스트 */}
+        {/* ⬇ 텍스트: 사용자(회색 말풍선) / AI(세그먼트별 렌더) - Markdown 지원 */}
         {hasText && (
           isUser ? (
-            <div className="bg-gray-100 border border-gray-200 rounded-2xl px-4 py-3 text-sm leading-6 text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  a({ href, children }) {
-                    const safeHref = /^javascript:/i.test(href || "") ? "#" : href;
-                    return <a href={safeHref} target="_blank" rel="noopener noreferrer">{children}</a>;
-                  },
-                }}
-              >
+            <div className="bg-gray-100 border border-gray-200 rounded-2xl px-4 py-3 text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {message.content}
               </ReactMarkdown>
             </div>
           ) : (
             (() => {
+              // 전부 버블(=로그/코드/JSON)인 경우 → 단일 회색 박스
               const allBubble = segments.length > 0 && segments.every(s => s.type === 'bubble');
               const hasFenced = segments.some(s => s.mode === 'fenced');
 
@@ -232,15 +278,11 @@ export default function MessageBubble({ message }) {
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          a({ href, children }) {
-                            const safeHref = /^javascript:/i.test(href || "") ? "#" : href;
-                            return <a href={safeHref} target="_blank" rel="noopener noreferrer">{children}</a>;
-                          },
                           code({ inline, children }) {
                             if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
                             return (
-                              <pre className="whitespace-pre px-4 py-3 text-sm leading-6 max-w-full">
-                                <code>{children}</code>
+                              <pre className="px-4 py-3 text-sm leading-6 whitespace-pre max-w-full">
+                                <code className="whitespace-pre">{children}</code>
                               </pre>
                             );
                           },
@@ -256,7 +298,7 @@ export default function MessageBubble({ message }) {
                 ) : (
                   <div className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
                     <div className="max-w-full overflow-x-auto">
-                      <pre className="whitespace-pre px-4 py-3 text-sm leading-6 min-w-0">
+                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre">
                         {message.content}
                       </pre>
                     </div>
@@ -264,6 +306,7 @@ export default function MessageBubble({ message }) {
                 );
               }
 
+              // plain이 섞여 있으면: plain은 말풍선 없이, bubble은 개별 회색 박스
               return (
                 <div className="w-full flex flex-col gap-2">
                   {segments.map((seg, idx) => {
@@ -275,15 +318,11 @@ export default function MessageBubble({ message }) {
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
-                                  a({ href, children }) {
-                                    const safeHref = /^javascript:/i.test(href || "") ? "#" : href;
-                                    return <a href={safeHref} target="_blank" rel="noopener noreferrer">{children}</a>;
-                                  },
                                   code({ inline, children }) {
                                     if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
                                     return (
-                                      <pre className="whitespace-pre px-4 py-3 text-sm leading-6 max-w-full">
-                                        <code>{children}</code>
+                                      <pre className="px-4 py-3 text-sm leading-6 whitespace-pre max-w-full">
+                                        <code className="whitespace-pre">{children}</code>
                                       </pre>
                                     );
                                   },
@@ -301,7 +340,7 @@ export default function MessageBubble({ message }) {
                       return (
                         <div key={idx} className="bg-gray-100 border border-gray-200 rounded-2xl overflow-hidden max-w-full">
                           <div className="max-w-full overflow-x-auto">
-                            <pre className="whitespace-pre px-4 py-3 text-sm leading-6 min-w-0">
+                            <pre className="px-4 py-3 text-sm leading-6 whitespace-pre min-w-0">
                               {seg.content}
                             </pre>
                           </div>
@@ -309,20 +348,17 @@ export default function MessageBubble({ message }) {
                       );
                     }
 
+                    // plain
                     return (
                       <div key={idx} className="text-gray-900 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            a({ href, children }) {
-                              const safeHref = /^javascript:/i.test(href || "") ? "#" : href;
-                              return <a href={safeHref} target="_blank" rel="noopener noreferrer">{children}</a>;
-                            },
                             code({ inline, children }) {
                               if (inline) return <code className="px-1 py-0.5 rounded bg-gray-200">{children}</code>;
                               return (
-                                <pre className="whitespace-pre overflow-x-auto max-w-full">
-                                  <code>{children}</code>
+                                <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full">
+                                  <code className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{children}</code>
                                 </pre>
                               );
                             },
@@ -341,9 +377,17 @@ export default function MessageBubble({ message }) {
             })()
           )
         )}
+
+        {/* 문서 선택기 - AI 메시지이고 documents가 있을 때만 표시 */}
+        {!isUser && message?.documents && (
+          <DocumentSelector 
+            documents={message.documents} 
+            onSelect={onDocumentSelect}
+          />
+        )}
       </div>
 
-      {/* 라이트박스 Overlay */}
+      {/* 라이트박스 Overlay: ESC/←/→ 제어 가능 */}
       {viewerOpen && images.length > 0 && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={closeViewer}>
           <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -353,10 +397,10 @@ export default function MessageBubble({ message }) {
 
             {images.length > 1 && (
               <>
-                <button className="absolute left-[-56px] top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/20 hover:bg-white/30" onClick={prevImg} title="이전">
+                <button className="absolute left-[-56px] top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/20 hover:bg-white/30" onClick={prevImg} title="이전">
                   <ChevronLeftIcon className="w-7 h-7 text-white" />
                 </button>
-                <button className="absolute right-[-56px] top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/20 hover:bg-white/30" onClick={nextImg} title="다음">
+                <button className="absolute right-[-56px] top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/20 hover:bg-white/30" onClick={nextImg} title="다음">
                   <ChevronRightIcon className="w-7 h-7 text-white" />
                 </button>
               </>
