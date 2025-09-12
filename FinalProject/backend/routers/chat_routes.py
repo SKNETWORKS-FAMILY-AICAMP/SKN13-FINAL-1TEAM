@@ -27,6 +27,12 @@ class MessageSaveRequest(BaseModel):
     role: str # 메시지 발신자 역할 (예: "user", "ai")
     content: str # 메시지 내용
 
+# 문서 클릭 요청을 위한 데이터 모델
+class DocumentClickRequest(BaseModel):
+    document_id: str # 클릭된 문서 ID
+    document_data: dict # 문서의 전체 데이터
+    session_id: str # 채팅 세션 ID
+
 # --- 채팅 메시지 처리 헬퍼 함수 ---
 # 채팅 메시지를 데이터베이스에 저장하는 함수
 def _create_chat_message(db: Session, session_id: str, role: str, content: str, message_id: str = None):
@@ -337,6 +343,19 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                     pass
             # --- END NEW LOGIC ---
 
+            # 문서 선택 버튼 데이터 전송 로직
+            if final_state and final_state.get("action") == "show_document_buttons":
+                document_selection = final_state.get("document_selection")
+                if document_selection:
+                    # 문서 선택 버튼을 위한 특별한 메시지 전송
+                    button_message = {
+                        "type": "document_buttons",
+                        "content": final_state.get("final_answer", "문서를 찾았습니다!"),
+                        "document_selection": document_selection
+                    }
+                    yield f"data: {json.dumps(button_message, ensure_ascii=False)}\n\n"
+                    print(f"📋 [chat_routes] 문서 선택 버튼 전송: {len(document_selection.get('documents', []))}개")
+
             # Extract and stream final messages from agents (existing logic)
             if final_state and "messages" in final_state:
                 messages = final_state["messages"]
@@ -346,7 +365,9 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                             content_to_stream = msg.content
                             if not content_to_stream.startswith("{}") and len(content_to_stream) > 10:
                                 full_response_content += content_to_stream
-                                yield f"data: {json.dumps({'content': content_to_stream}, ensure_ascii=False)}\n\n"
+                                # 문서 선택 버튼이 있는 경우 일반 콘텐츠는 스트리밍하지 않음
+                                if not (final_state and final_state.get("action") == "show_document_buttons"):
+                                    yield f"data: {json.dumps({'content': content_to_stream}, ensure_ascii=False)}\n\n"
             
             yield "data: [DONE]\n\n"
 
@@ -427,6 +448,290 @@ async def llm_stream(session_id: str, prompt: str, current_user: User = Depends(
 
     # LLM 응답을 스트리밍 형태로 반환
     return StreamingResponse(_stream_llm_response(session_id, prompt, document_content, workflow_agent, config, db), media_type="text/event-stream")
+
+# 문서 클릭 처리 엔드포인트
+@router.post("/document/open")
+async def open_document(
+    request: DocumentClickRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """사용자가 문서 버튼을 클릭했을 때 문서를 로드하고 문서편집창에 전송"""
+    try:
+        print(f"📄 [open_document] 문서 클릭 요청: {request.document_id}")
+        
+        # 세션 권한 확인
+        session = db.query(ChatSession).filter(
+            ChatSession.id == request.session_id,
+            ChatSession.user_id == current_user.id
+        ).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found or access denied")
+        
+        # 문서 데이터 추출
+        doc_data = request.document_data.get("document_data", {})
+        filename = doc_data.get('filename', '알 수 없는 파일')
+        source = doc_data.get('source', '')
+        file_path = doc_data.get('path', '')
+        
+        print(f"📄 [open_document] 문서 정보: {filename} ({source})")
+        
+        # 문서 내용 로드
+        document_content = None
+        
+        if source == 'local':
+            # 로컬 파일 로드
+            document_content = await _load_local_document(file_path)
+        elif source == 's3':
+            # S3 파일 로드
+            document_content = await _load_s3_document(file_path)
+        
+        if document_content is None:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"문서 '{filename}'를 로드할 수 없습니다."}
+            )
+        
+        # IPC 메시지 데이터 생성
+        ipc_data = {
+            "action": "open_document_in_editor",
+            "document": {
+                "filename": filename,
+                "content": document_content,
+                "filePath": file_path,
+                "source": source
+            }
+        }
+        
+        # 클릭 완료 메시지를 채팅에 추가
+        success_message = f"✅ **{filename}** 문서를 문서편집창에서 열었습니다!"
+        _create_chat_message(db, request.session_id, "assistant", success_message)
+        
+        print(f"📄 [open_document] 문서 로드 완료: {filename}")
+        
+        # 성공 응답과 함께 IPC 데이터 반환
+        return JSONResponse(content={
+            "success": True,
+            "message": success_message,
+            "ipc_data": ipc_data
+        })
+        
+    except Exception as e:
+        print(f"❌ [open_document] 오류: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"문서 열기 중 오류가 발생했습니다: {str(e)}"}
+        )
+
+# 문서 다운로드 처리 엔드포인트
+@router.post("/document/download")
+async def download_document(
+    request: DocumentClickRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """사용자가 지원하지 않는 파일 버튼을 클릭했을 때 다운로드 URL 제공"""
+    try:
+        print(f"⬇️ [download_document] 다운로드 요청: {request.document_id}")
+        
+        # 세션 권한 확인
+        session = db.query(ChatSession).filter(
+            ChatSession.id == request.session_id,
+            ChatSession.user_id == current_user.id
+        ).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found or access denied")
+        
+        # 문서 데이터 추출
+        doc_data = request.document_data.get("document_data", {})
+        filename = doc_data.get('filename', '알 수 없는 파일')
+        source = doc_data.get('source', '')
+        file_path = doc_data.get('path', '')
+        
+        print(f"⬇️ [download_document] 다운로드 정보: {filename} ({source})")
+        
+        download_url = None
+        
+        if source == 'local':
+            # 로컬 파일 다운로드: 임시 URL 생성 또는 파일 전송
+            download_url = await _generate_local_download_url(file_path, filename)
+        elif source == 's3':
+            # S3 파일: presigned URL 생성
+            download_url = await _generate_s3_download_url(file_path, filename)
+        
+        if download_url is None:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"파일 '{filename}'의 다운로드 URL을 생성할 수 없습니다."}
+            )
+        
+        # 성공 메시지 생성
+        success_message = f"📄 '{filename}' 파일이 다운로드 준비되었습니다."
+        
+        # 채팅 메시지로 기록
+        _create_chat_message(db, request.session_id, "assistant", success_message)
+        
+        print(f"⬇️ [download_document] 다운로드 준비 완료: {filename}")
+        
+        # 성공 응답과 함께 다운로드 URL 반환
+        return JSONResponse(content={
+            "success": True,
+            "message": success_message,
+            "download_url": download_url,
+            "filename": filename
+        })
+        
+    except Exception as e:
+        print(f"❌ [download_document] 오류: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"파일 다운로드 중 오류가 발생했습니다: {str(e)}"}
+        )
+
+# --- 문서 로드 헬퍼 함수들 ---
+async def _load_local_document(file_path: str) -> Optional[str]:
+    """로컬 문서 로드"""
+    try:
+        from pathlib import Path
+        
+        path = Path(file_path)
+        if not path.exists():
+            print(f"❌ [_load_local_document] 파일 없음: {file_path}")
+            return None
+        
+        extension = path.suffix.lower()
+        
+        if extension in ['.md', '.txt', '.html']:
+            # 텍스트 파일 직접 읽기
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return content
+        elif extension == '.docx':
+            # DOCX 파일 처리
+            try:
+                from docx import Document as DocxDocument
+                doc = DocxDocument(path)
+                content = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+                return content
+            except ImportError:
+                print("❌ [_load_local_document] python-docx 라이브러리가 설치되지 않음")
+                return None
+        else:
+            print(f"❌ [_load_local_document] 지원하지 않는 파일 형식: {extension}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ [_load_local_document] 로컬 파일 읽기 오류: {e}")
+        return None
+
+async def _load_s3_document(s3_key: str) -> Optional[str]:
+    """S3 문서 로드"""
+    try:
+        from botocore.config import Config
+        
+        # S3 클라이언트 설정 (엔드포인트 문제 해결)
+        config = Config(
+            region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
+            retries={'max_attempts': 3, 'mode': 'standard'},
+            s3={'addressing_style': 'virtual'}
+        )
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
+            config=config
+        )
+        
+        bucket_name = os.getenv('AWS_S3_BUCKET', 'clickabbbucket')
+        
+        print(f"📄 [_load_s3_document] S3 파일 다운로드: {s3_key}")
+        
+        response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+        content = response['Body'].read().decode('utf-8')
+        
+        print(f"📄 [_load_s3_document] S3 파일 로드 성공: {len(content)} 문자")
+        return content
+        
+    except Exception as e:
+        print(f"❌ [_load_s3_document] S3 파일 읽기 오류: {e}")
+        return None
+
+# --- 다운로드 URL 생성 헬퍼 함수들 ---
+async def _generate_local_download_url(file_path: str, filename: str) -> Optional[str]:
+    """로컬 파일에 대한 다운로드 URL 생성"""
+    try:
+        from pathlib import Path
+        import base64
+        
+        path = Path(file_path)
+        if not path.exists():
+            print(f"❌ [_generate_local_download_url] 파일 없음: {file_path}")
+            return None
+        
+        # 파일을 Base64로 인코딩하여 data URL 생성
+        with open(path, 'rb') as f:
+            file_content = f.read()
+        
+        # MIME 타입 추정
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(filename)
+        if mime_type is None:
+            mime_type = 'application/octet-stream'
+        
+        # Base64 인코딩
+        base64_content = base64.b64encode(file_content).decode('utf-8')
+        
+        # Data URL 생성
+        data_url = f"data:{mime_type};base64,{base64_content}"
+        
+        print(f"✅ [_generate_local_download_url] 로컬 파일 data URL 생성 완료: {filename}")
+        return data_url
+        
+    except Exception as e:
+        print(f"❌ [_generate_local_download_url] 로컬 다운로드 URL 생성 오류: {e}")
+        return None
+
+async def _generate_s3_download_url(s3_key: str, filename: str) -> Optional[str]:
+    """S3 파일에 대한 presigned URL 생성"""
+    try:
+        from botocore.config import Config
+        
+        # S3 클라이언트 설정
+        config = Config(
+            region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
+            retries={'max_attempts': 3, 'mode': 'standard'},
+            s3={'addressing_style': 'virtual'}
+        )
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
+            config=config
+        )
+        
+        bucket_name = os.getenv('AWS_S3_BUCKET', 'clickabbbucket')
+        
+        # Presigned URL 생성 (1시간 유효)
+        download_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': bucket_name,
+                'Key': s3_key,
+                'ResponseContentDisposition': f'attachment; filename="{filename}"'
+            },
+            ExpiresIn=3600  # 1시간
+        )
+        
+        print(f"✅ [_generate_s3_download_url] S3 presigned URL 생성 완료: {filename}")
+        return download_url
+        
+    except Exception as e:
+        print(f"❌ [_generate_s3_download_url] S3 다운로드 URL 생성 오료: {e}")
+        return None
 
 # --- S3 파일 삭제 유틸리티 ---
 def delete_s3_objects(bucket: str, keys: list[str]) -> None:
