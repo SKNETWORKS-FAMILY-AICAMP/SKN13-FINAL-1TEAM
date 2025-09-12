@@ -103,31 +103,15 @@ class DocumentSearchAgent:
                                     # 클릭 가능한 문서 선택지 생성
                                     document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
                                     
-                                    # 텍스트 응답
-                                    text_response = document_selection_data["text_response"]
-                                    search_results["final_answer"] = text_response
-                                    
                                     # 구조화된 데이터 (프론트엔드용)
                                     search_results["document_selection"] = document_selection_data["selection_data"]
                                     search_results["action"] = "show_document_buttons"  # 프론트엔드 액션 플래그
-                                    
-                                    skip_final_response_generation = True
-                                    from langchain_core.messages import AIMessage
-                                    messages.append(AIMessage(content=text_response))
-                                else:
-                                    final_answer = f"'{result.get('search_query', '검색어')}'와 관련된 문서를 찾지 못했습니다. 다른 키워드로 다시 시도해보시거나, 문서가 올바른 위치에 있는지 확인해주세요."
-                                    search_results["final_answer"] = final_answer
-                                    skip_final_response_generation = True
-                                    from langchain_core.messages import AIMessage
-                                    messages.append(AIMessage(content=final_answer))
+                                    search_results["search_summary"] = f"{len(documents)}개의 관련 문서를 찾았습니다."
                             
                             # 다운로드 링크 도구 특별 처리
                             elif tool_name == "get_presigned_download_url":
-                                final_answer = f"요청하신 문서의 다운로드 링크입니다: [다운로드]({result})"
-                                search_results["final_answer"] = final_answer
-                                skip_final_response_generation = True # 최종 응답 생성 건너뛰기
-                                from langchain_core.messages import AIMessage
-                                messages.append(AIMessage(content=final_answer))
+                                search_results["download_link"] = result
+                                search_results["download_message"] = "다운로드 링크를 준비했습니다."
 
                             search_results.update(result if isinstance(result, dict) else {"result": result})
                             
@@ -149,8 +133,8 @@ class DocumentSearchAgent:
                 messages.append(response)
                 search_results = self._extract_search_results(response)
             
-            # After tool execution, generate final response for the user
-            if not skip_final_response_generation and hasattr(response, 'tool_calls') and response.tool_calls:
+            # After tool execution, always generate final response for the user
+            if hasattr(response, 'tool_calls') and response.tool_calls:
                 print(">> [SEARCH AGENT] Generating final user response after tool execution")
                 
                 try:
