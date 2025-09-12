@@ -20,10 +20,20 @@ if (!BUCKET_NAME) {
  * @param {string} fileName - 업로드할 파일의 이름.
  * @returns {Promise<string>} - Presigned URL.
  */
-async function getUploadUrl(fileName) {
+/**
+ * @param {string} fileName - 업로드할 파일의 이름
+ * @param {string} [pathHint=""] - 저장 경로(prefix). 없으면 루트
+ */
+async function getUploadUrl(fileName, pathHint = "") {
+    // prefix 조립
+    let prefix = pathHint.trim() || "";
+    if (prefix && !prefix.endsWith("/")) prefix += "/";
+
+    const key = `${prefix}${Date.now()}-${fileName}`;
+
     const command = new PutObjectCommand({
         Bucket: BUCKET_NAME,
-        Key: `uploads/${Date.now()}-${fileName}`, // 덮어쓰기 방지를 위해 타임스탬프 추가
+        Key: key,
     });
 
     try {
