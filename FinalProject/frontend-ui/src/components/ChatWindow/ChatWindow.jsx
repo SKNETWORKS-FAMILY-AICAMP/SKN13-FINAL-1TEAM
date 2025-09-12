@@ -237,6 +237,26 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
       prompt,
       documentContent,
       onDelta: (content, full) => {
+        try {
+          const parsed = JSON.parse(content);
+          if (parsed.action?.type === 'open_document') {
+            // Special action to open document
+            console.log('[ChatWindow] 문서 열기 액션 감지됨:', parsed.action.filename);
+            if (window.electron?.onDocumentOpenFromChat) {
+              window.electron.onDocumentOpenFromChat({
+                content: parsed.action.content,
+                filename: parsed.action.filename
+              });
+              appendMessage({ role: 'assistant', content: parsed.response_text });
+            } else {
+              console.error('[ChatWindow] window.electron.onDocumentOpenFromChat 함수를 찾을 수 없습니다.');
+              appendMessage({ role: 'assistant', content: '문서 열기 기능을 사용할 수 없습니다.' });
+            }
+            return; // Stop further processing of this delta
+          }
+        } catch (e) {
+          // Not a JSON action, continue with normal delta processing
+        }
         updateLastMessage(content);
       },
       onToolMessage: (msg) => {

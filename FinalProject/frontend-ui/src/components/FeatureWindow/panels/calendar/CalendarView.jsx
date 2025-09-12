@@ -62,6 +62,7 @@ export default function CalendarView({
     events,
     onEventClick,
     onRangeChange,
+    onSelectSlot,
     height = 560,
 }) {
     const date = useMemo(() => currentDate ?? new Date(), [currentDate]);
@@ -90,6 +91,7 @@ export default function CalendarView({
                     /* ⬇️ 내부 헤더 텍스트는 비워서 공간 자체를 없앰 */
                     formats={FORMATS}
                     onSelectEvent={onEventClick}
+                    onSelectSlot={onSelectSlot}
                     onRangeChange={(range) => onRangeChange?.(range)}
                     eventPropGetter={(event) => {
                         const base =
@@ -106,9 +108,12 @@ export default function CalendarView({
                                 padding: "0 8px",
                                 display: "flex",
                                 alignItems: "center",
-                                justifyContent: "center", // ⬅️ 중앙 정렬
+                                justifyContent: "center",
                                 fontWeight: 600,
                                 boxShadow: "0 1px 0 rgba(0,0,0,0.06)",
+                                minWidth: 0,
+                                width: "100%",
+
                             },
                         };
                     }}

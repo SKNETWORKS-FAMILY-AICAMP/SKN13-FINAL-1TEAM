@@ -87,10 +87,9 @@ export default function AgendaPanel({
   }, [range]);
 
   return (
-    <aside className="bg-white rounded-2xl shadow-sm border border-neutral-200 w-full h-[620px] overflow-hidden flex flex-col">
+    <aside className="bg-white rounded-2xl shadow-sm border border-neutral-200 w-full h-[100%] overflow-hidden flex flex-col">
       {/* 헤더: 탭 */}
-      <div className="border-b border-neutral-200 px-4 pt-3">
-        <div className="text-sm font-semibold mb-2">일정 리스트</div>
+      <div className="mt-3 mb-3">
         <TabBar tab={tab} onChange={setTab} />
       </div>
 
@@ -123,34 +122,50 @@ export default function AgendaPanel({
 /* ------------------- UI Partials ------------------- */
 
 function TabBar({ tab, onChange }) {
-  const base = "text-sm px-2 pb-2 cursor-pointer";
-  const active =
-    "font-semibold text-neutral-900 border-b-2 border-neutral-900";
-  const inactive = "text-neutral-400 hover:text-neutral-700";
+  const TABS = [
+    { key: "today", label: "오늘" },
+    { key: "week", label: "주간" },
+    { key: "month", label: "월간" },
+  ];
+  const activeIdx = Math.max(0, TABS.findIndex((t) => t.key === tab));
 
   return (
-    <div className="flex gap-6">
-      <button
-        className={`${base} ${tab === "today" ? active : inactive}`}
-        onClick={() => onChange("today")}
-      >
-        오늘
-      </button>
-      <button
-        className={`${base} ${tab === "week" ? active : inactive}`}
-        onClick={() => onChange("week")}
-      >
-        주간
-      </button>
-      <button
-        className={`${base} ${tab === "month" ? active : inactive}`}
-        onClick={() => onChange("month")}
-      >
-        월간
-      </button>
+    <div className="w-full flex justify-center">
+      <div className="relative grid grid-cols-3 w-[100%]">
+        {/* 하단 인디케이터 (부드럽게 이동) */}
+        <span
+          className="pointer-events-none absolute bottom-0 left-0 h-[3px] bg-neutral-900 rounded-lg transition-transform duration-300 ease-out"
+          style={{ width: "33.3333%", transform: `translateX(${activeIdx * 100}%)` }}
+        />
+        {TABS.map((t) => {
+          const isActive = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              onClick={() => onChange(t.key)}
+              className={[
+                "relative pt-2 pb-4 text-sm text-center",
+                "transition-colors duration-200 ease-out",
+                isActive ? "text-neutral-900 font-semibold" : "text-neutral-400 hover:text-neutral-700",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "inline-block transition-all duration-200",
+                  isActive ? "opacity-100 translate-y-0" : "opacity-80 translate-y-[2px]",
+                ].join(" ")}
+              >
+                {t.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
+
 
 function MonthlyRow({ ev, onClick, onJumpToDate }) {
   const start = ev.start instanceof Date ? ev.start : new Date(ev.start);

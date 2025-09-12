@@ -5,7 +5,7 @@ export default function HeaderBar({ onMenuClick, showMenuButton }) {
   const win = window?.electron?.window; // preload에서 노출된 안전 브릿지
 
   return (
-    <div className="flex items-center justify-between px-2 h-10 bg-white border-b border-gray-200 drag">
+    <div className="flex items-center justify-between px-2 h-8 bg-white border-b border-gray-200 drag">
       {showMenuButton && (
         <div className="no-drag">
           <button onClick={onMenuClick} className="text-xl px-3 py-1 hover:bg-gray-100 rounded">☰</button>

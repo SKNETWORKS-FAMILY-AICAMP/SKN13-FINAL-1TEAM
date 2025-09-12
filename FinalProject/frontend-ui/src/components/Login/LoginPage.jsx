@@ -3,6 +3,10 @@ import React, { useState, useEffect } from "react";
 import HeaderBar from "../shared/HeaderBar";
 import { login } from "../services/authApi";
 import { saveUser } from "../services/authStore";
+// 로고 이미지
+import logoImg from "../../assets/sample_logo.svg";
+// 아이콘
+import { LuEye, LuEyeClosed } from "react-icons/lu"; // 비밀번호 표시/숨김
 
 const EMP_ID_KEY = "employee_saved_id";
 const ADM_ID_KEY = "admin_saved_id";
@@ -14,7 +18,7 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
     const [errorMessage, setErrorMessage] = useState(""); // 로그인 실패 시 에러 메시지
     const [role, setRole] = useState("employee"); // 로그인 역할 (employee=사원 / admin=관리자)
     const [saveId, setSaveId] = useState(false); // 아이디 저장 여부 (체크박스 상태)
-    const [logoError, setLogoError] = useState(false); // 로고 이미지 불러오기 실패 시 true
+    const [showPassword, setShowPassword] = useState(false); // 비밀번호 표시 여부
 
     // localStorage에 저장된 ID 불러오기(role 상태 변화 시)
     useEffect(() => {
@@ -92,45 +96,65 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
             <HeaderBar />
             <div className="flex items-center justify-center h-[calc(100%-40px)]">
                 <div className="w-[380px] p-10">
-                    {logoError ? (
-                        <div className="h-20 flex items-center justify-center text-xl font-bold text-gray-400 mb-6">
-                            로고 이미지
-                        </div>
-                    ) : (
+                    <div className="flex flex-row items-center justify-center">
                         <img
-                            src="/logo.png"
+                            src={logoImg}
                             alt="앱 로고"
-                            className="h-20 mx-auto mb-6"
+                            className="h-8 mb-6"
                             onError={() => setLogoError(true)}
                         />
-                    )}
+                        <div className="h-20 flex items-center justify-center text-[26px] font-extrabold mb-6">
+                            ClickA
+                        </div>
+                    </div>
 
-                    <h2 className="text-md font-semibold text-left mb-4">
+                    <h2 className="text-[20px] ml-2 font-bold text-left mb-4">
                         Sign-in
                     </h2>
 
-                    {/* 사원/관리자 선택 */}
-                    <div className="flex mb-4 rounded-full overflow-hidden border border-gray-200">
-                        <button
-                            onClick={() => setRole("employee")}
-                            className={`w-1/2 py-2 ${
-                                role === "employee"
-                                    ? "bg-black text-white font-bold"
-                                    : "bg-gray-100 text-gray-600"
-                            }`}
-                        >
-                            사원
-                        </button>
-                        <button
-                            onClick={() => setRole("admin")}
-                            className={`w-1/2 py-2 ${
-                                role === "admin"
-                                    ? "bg-black text-white font-bold"
-                                    : "bg-gray-100 text-gray-600"
-                            }`}
-                        >
-                            관리자
-                        </button>
+                    {/* 사원/관리자 선택 토글 */}
+                    <div className="relative mb-4 h-12 rounded-2xl bg-gray-100 p-1 select-none">
+                        {/* 트랙(패딩 안쪽 영역) */}
+                        <div className="relative h-full w-full">
+                            {/* 슬라이더(선택된 박스) */}
+                            <span
+                                className={[
+                                    "absolute left-0 top-0 h-full w-1/2 bg-white rounded-xl shadow-sm",
+                                    "transform-gpu transition-transform duration-300 ease-out",
+                                    role === "admin" ? "translate-x-full" : "translate-x-0",
+                                ].join(" ")}
+                                aria-hidden="true"
+                            />
+                            {/* 탭 버튼 */}
+                            <div className="grid grid-cols-2 h-full relative z-10">
+                                <button
+                                    type="button"
+                                    onClick={() => setRole("employee")}
+                                    role="tab"
+                                    aria-selected={role === "employee"}
+                                    className={[
+                                        "w-full h-full text-sm font-medium",
+                                        "transition-colors duration-200",
+                                        role === "employee" ? "text-black font-semibold" : "text-gray-600 hover:text-gray-800",
+                                    ].join(" ")}
+                                >
+                                    사원
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRole("admin")}
+                                    role="tab"
+                                    aria-selected={role === "admin"}
+                                    className={[
+                                        "w-full h-full text-sm font-medium",
+                                        "transition-colors duration-200",
+                                        role === "admin" ? "text-black font-semibold" : "text-gray-600 hover:text-gray-800",
+                                    ].join(" ")}
+                                >
+                                    관리자
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <input
@@ -139,56 +163,60 @@ export default function LoginPage({ onLoginSuccess, onFindId, onFindPw }) {
                         value={userId}
                         onChange={(e) => setUserId(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        className="w-full bg-gray-100 placeholder-gray-400 px-4 py-3 mb-3 rounded-lg focus:outline-none"
+                        className="w-full h-12 bg-gray-100 text-[14px] placeholder-gray-400 px-4 py-3 mb-3 rounded-lg focus:outline-none"
                     />
+                    <div className="relative mb-2">
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="비밀번호를 입력하세요"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            className="w-full h-12 bg-gray-100 text-[14px] placeholder-gray-400 px-4 py-3 rounded-lg focus:outline-none pr-10"
+                        />
+                        {password && 
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 mr-1 -translate-y-1/2 text-gray-500"
+                            >
+                                {showPassword ? <LuEye size={18} /> : <LuEyeClosed size={18} />}
+                            </button>
+                        }
+                    </div>
 
-                    <input
-                        type="password"
-                        placeholder="비밀번호를 입력하세요"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        className="w-full bg-gray-100 placeholder-gray-400 px-4 py-3 mb-2 rounded-lg focus:outline-none"
-                    />
-
-                    <div className="flex items-center mb-3">
+                    <div className="flex mt-1 ml-2 items-center mb-3">
                         <input
                             type="checkbox"
                             id="saveId"
                             checked={saveId}
                             onChange={(e) => setSaveId(e.target.checked)}
-                            className="mr-2"
+                            className="mr-2 accent-black"
                         />
                         <label
                             htmlFor="saveId"
-                            className="text-sm text-gray-600"
+                            className="text-[12px] text-gray-600"
                         >
                             아이디 저장
                         </label>
                     </div>
 
                     {errorMessage && (
-                        <p className="text-red-500 text-sm mb-3 text-center">
+                        <p className="text-red-500 text-[12px] mb-1 text-center">
                             {errorMessage}
                         </p>
                     )}
 
                     <button
                         onClick={handleLogin}
-                        className="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-800 transition"
+                        disabled={!userId || !password}
+                        className={`mt-[10px] w-full h-12 text-[14px] py-2 rounded-lg transition
+                            ${!userId || !password
+                                ? "bg-gray-200 cursor-not-allowed"
+                                : "bg-black text-white hover:bg-gray-800"}`}
                     >
                         로그인
                     </button>
-
-                    {/* <div className="text-sm text-center text-gray-500 mt-4 space-x-2">
-                        <button className="underline" onClick={onFindId}>
-                            아이디 찾기
-                        </button>
-                        <span>/</span>
-                        <button className="underline" onClick={onFindPw}>
-                            비밀번호 찾기
-                        </button>
-                    </div> */}
                 </div>
             </div>
         </div>

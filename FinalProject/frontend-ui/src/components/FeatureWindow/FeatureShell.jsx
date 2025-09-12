@@ -25,12 +25,12 @@ export default function FeatureShell({ userType = "user" }) {
 
     // 🚩 2) 초기 활성 탭
     const [activeKey, setActiveKey] = useState(() =>
-        role === "admin" ? "employees" : "calendar"
+        role === "admin" ? "employees" : "docs"
     );
 
     // 🚩 3) role 바뀌면 기본 탭 리셋
     useEffect(() => {
-        setActiveKey(role === "admin" ? "employees" : "calendar");
+        setActiveKey(role === "admin" ? "employees" : "docs");
     }, [role]);
 
     // 사이드바 메뉴 선택
@@ -93,7 +93,7 @@ export default function FeatureShell({ userType = "user" }) {
                 />
 
                 {/* 컨텐츠 영역 */}
-                <main className="flex-1 overflow-auto p-6">
+                <main className="flex-1 overflow-auto pl-6 pt-4">
                     <div className="max-w-[1200px] mx-auto">
                         <RoleRouter userType={userType} activeKey={activeKey} />
                     </div>

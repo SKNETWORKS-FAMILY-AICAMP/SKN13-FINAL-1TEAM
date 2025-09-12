@@ -21,9 +21,9 @@ export const employeeSections = [
   {
     title: null,
     items: [
-      { key: "calendar", label: "캘린더" },  // FeatureWindow: defaultTab="calendar"
       { key: "docs",     label: "문서 목록" },   // FeatureWindow: defaultTab="docs"
-      { key: "forms",    label: "문서 작성" },  // FeatureWindow: defaultTab="forms"    
+      { key: "forms",    label: "문서 작성" },  // FeatureWindow: defaultTab="forms"
+      { key: "calendar", label: "일정 관리" },     // FeatureWindow: defaultTab="calendar"
       { key: "mypage",   label: "마이페이지" }, // 공용
     ],
   },
@@ -35,7 +35,7 @@ export const employeeSections = [
 // ──────────────────────────────────────────────────────────────
 export const adminSections = [
   {
-    title: "관리자",
+    title: null,
     items: [
       { key: "employees", label: "사원 관리" },  // Admin 라우트: /admin/employee 등으로 매핑
       { key: "mypage",   label: "마이페이지" }, // 공용
