@@ -103,6 +103,7 @@ class DocumentEditorAgent:
                             messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call['id']))
                     else:
                         # print(f">> [AGENT] Warning: Tool '{tool_name}' not found.")
+                        pass
             else:
                  # 도구 호출이 없는 경우, LLM의 텍스트 응답을 메시지에 추가
                 messages.append(response)
