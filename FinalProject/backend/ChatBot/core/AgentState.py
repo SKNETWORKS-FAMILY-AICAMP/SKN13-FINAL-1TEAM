@@ -48,6 +48,22 @@ class AgentState(TypedDict):
     needs_document_content: bool
     document_content: str
     search_results: List[Dict[str, Any]]
+    
+    # 다운로드 버튼 관련 필드들
+    action: Optional[str]  # "show_document_buttons" 등 프론트엔드 액션
+    document_selection: Optional[Dict[str, Any]]  # 문서 선택 버튼 데이터
+    final_answer: Optional[str]  # 최종 답변
+    
+    # 워크플로우 관련 필드들 (create_initial_state에서 사용됨)
+    generation: Optional[Any]
+    workflow_results: Optional[Dict[str, Any]]
+    workflow_context: Optional[Dict[str, Any]]
+    workflow_error: Optional[str]
+    agent_data: Optional[Dict[str, Any]]
+    
+    # 문서 편집 관련 필드들
+    send_to_editor: Optional[bool]
+    selected_document: Optional[Dict[str, Any]]
 
 
 # Helper functions for easier AgentState manipulation
@@ -62,18 +78,34 @@ class AgentStateHelper:
     ) -> AgentState:
         """Create a clean initial state."""
         return AgentState(
-            document_content=document_content,
+            # 기본 필드들
             messages=(messages or []) + [HumanMessage(content=prompt)], # Add current prompt as HumanMessage
-            generation=None,
-            needs_document_content=False,
             workflow_step=WorkflowStep.INITIAL,
-            workflow_complete=False,
-            workflow_results={},
             next_agents=[],
+            workflow_complete=False,
+            tool_name="",
+            tool_args={},
+            tool_output=None,
+            response="",
+            needs_document_content=False,
+            document_content=document_content or "",
+            search_results=[], # Ensure search_results is initialized
+            
+            # 다운로드 버튼 관련 필드들
+            action=None,
+            document_selection=None,
+            final_answer=None,
+            
+            # 워크플로우 관련 필드들
+            generation=None,
+            workflow_results={},
             workflow_context={},
             workflow_error=None,
             agent_data={},
-            search_results=[] # Ensure search_results is initialized
+            
+            # 문서 편집 관련 필드들
+            send_to_editor=None,
+            selected_document=None
         )
     
     @staticmethod
