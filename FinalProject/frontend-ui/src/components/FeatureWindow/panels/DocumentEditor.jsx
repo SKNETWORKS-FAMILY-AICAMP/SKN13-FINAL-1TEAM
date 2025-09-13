@@ -103,37 +103,45 @@ export default function DocEditor({ onClose }) {
 
   // ✅ [NEW] 챗봇에서 온 문서 열기 요청 처리
   useEffect(() => {
-    if (!window.electron?.onDocumentOpenFromChat) return;
-    
-    const handleDocumentOpen = ({ content, filename, filePath }) => {
-      console.log('📄 [DocEditor] 챗봇에서 문서 열기 요청:', { filename, filePath });
-      
+    if (!window.fsBridge?.onDocumentOpenFromChat) return;
+
+    const handleDocumentOpen = (data) => {
+      console.log('📄 [DocEditor] 챗봇에서 문서 열기 요청 받음:', data);
+
       try {
+        // IPC 데이터에서 문서 정보 추출
+        const ipc_data = data.ipc_data || data;
+        const documentData = ipc_data.document || {};
+        const content = documentData.content || "";
+        const filename = documentData.filename || "문서";
+
+        console.log('📄 [DocEditor] 추출된 데이터:', { filename, contentLength: content.length });
+
         // 에디터에 내용 설정
         if (editorRef.current && !editorRef.current.isDestroyed) {
-          editorRef.current.commands.setContent(content || "", false);
+          editorRef.current.commands.setContent(content, false);
         }
-        
-        setEditorContent(content || "");
-        setDocumentTitle(filename || "문서");
+
+        setEditorContent(content);
+        setDocumentTitle(filename);
         setIsDirty(false);
-        
+
         // 로컬스토리지에도 저장
         try {
-          localStorage.setItem("document-editor-content", content || "");
-          localStorage.setItem("document-editor-title", filename || "문서");
+          localStorage.setItem("document-editor-content", content);
+          localStorage.setItem("document-editor-title", filename);
         } catch (e) {
           console.warn('로컬스토리지 저장 실패:', e);
         }
-        
+
         console.log('✅ [DocEditor] 챗봇 요청 문서 로드 완료');
-        
+
       } catch (error) {
         console.error('❌ [DocEditor] 챗봇 문서 로드 중 오류:', error);
       }
     };
-    
-    const off = window.electron.onDocumentOpenFromChat(handleDocumentOpen);
+
+    const off = window.fsBridge.onDocumentOpenFromChat(handleDocumentOpen);
     return () => { typeof off === "function" && off(); };
   }, []);
 

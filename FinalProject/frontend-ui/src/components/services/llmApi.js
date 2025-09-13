@@ -157,6 +157,24 @@ export function streamLLM({
                 onLocalDocuments?.(parsed.local_documents);
               }
 
+              // 문서 자동 열기 처리 (백엔드의 IPC 데이터)
+              if (parsed.action === 'open_document_in_editor' && parsed.document) {
+                console.log('📄 문서 자동 열기 감지!', parsed.document.filename);
+
+                // ChatWindow의 IPC 처리 로직으로 전달
+                if (window.electron?.openDocumentInEditor) {
+                  window.electron.openDocumentInEditor(parsed)
+                    .then(result => {
+                      console.log('✅ 문서 자동 열기 성공:', result);
+                    })
+                    .catch(error => {
+                      console.error('❌ 문서 자동 열기 실패:', error);
+                    });
+                } else {
+                  console.error('❌ IPC 통신 함수를 찾을 수 없습니다');
+                }
+              }
+
               // 문서 버튼 처리
               if (parsed.type === 'document_buttons' && parsed.document_selection) {
                 console.log('📄 document_buttons 감지!', parsed.document_selection);

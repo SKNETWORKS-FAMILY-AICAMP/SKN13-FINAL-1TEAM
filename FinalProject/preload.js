@@ -55,12 +55,7 @@ const electronAPI = {
 /* ✅ (추가) 메인 로그인 창 다시 띄우기 */
 electronAPI.showMain = () => ipcRenderer.send("app:show-main");
 
-/* ✅ (추가) 챗봇 문서 열기 관련 */
-electronAPI.onDocumentOpenFromChat = (cb) => {
-  const handler = (_evt, ...args) => cb?.(...args);
-  ipcRenderer.on("document:openFromChat", handler);
-  return () => ipcRenderer.removeListener("document:openFromChat", handler);
-};
+/* (제거됨) 중복된 onDocumentOpenFromChat - fsBridge에서 제공 */
 
 /* ✅ (추가) 문서편집창에 문서 열기 IPC 호출 */
 electronAPI.openDocumentInEditor = (data) => {
