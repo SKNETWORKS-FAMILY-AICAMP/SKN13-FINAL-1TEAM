@@ -144,5 +144,3 @@ def delete_event(event_id: int, db: Session = Depends(get_db), current_user: Use
     db.delete(db_event) # 이벤트 삭제
     db.commit() # 변경사항 커밋
     return # 204 응답 반환
-#####
-####

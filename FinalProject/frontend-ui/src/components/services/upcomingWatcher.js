@@ -37,8 +37,16 @@ function pickTarget(events) {
     return true;
   });
 
-  // 가장 빠른 시작시간 우선
-  candidates.sort((a, b) => new Date(a.start) - new Date(b.start));
+
+  // 마감(끝) 시간 빠른 순으로 우선, end가 없으면 start로 대체
+  candidates.sort((a, b) => {
+    const aKey = new Date(a.end ?? a.start).getTime();
+    const bKey = new Date(b.end ?? b.start).getTime();
+    // 1) 마감(또는 시작) 시간 비교
+    if (aKey !== bKey) return aKey - bKey;
+    // 2) 동률이면 시작 시간이 더 이른 것 우선
+    return new Date(a.start).getTime() - new Date(b.start).getTime();
+  });
   return candidates[0] || null;
 }
 

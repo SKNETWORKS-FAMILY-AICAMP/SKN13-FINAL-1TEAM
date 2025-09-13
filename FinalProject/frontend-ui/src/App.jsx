@@ -416,17 +416,30 @@ async function showTodayEventsOnce(user) {
         return;
     }
 
-    // 간결한 리스트(제목 / 마감시간 HH시 mm분까지 / 내용 요약 1줄)
-    const lines = events.map(ev => {
-        const t = ev.title || "(제목 없음)";
-        const dlBase = ev.end || ev.start;
-        const d = new Date(dlBase);
-        const hh = String(d.getHours()).padStart(2, "0");
-        const mm = String(d.getMinutes()).padStart(2, "0");
-        const until = `${hh}시 ${mm}분까지`;
-        const desc = (ev.description || "").trim().split("\n")[0]; // 첫 줄만
-        return `• ${t} — ${until}${desc ? `\n  ${desc}` : ""}`;
-    }).join("\n\n");
+   // ✅ (선택) 이미 끝난 일정은 제외하려면 이 줄을 활성화
+   // const now = Date.now();
+   // events = events.filter(ev => new Date(ev.end ?? ev.start).getTime() >= now);
+ 
+   // ✅ 마감(끝) 빠른 순 → 동률이면 시작 빠른 순으로 정렬
+   const sorted = [...events].sort((a, b) => {
+     const ak = new Date(a.end ?? a.start).getTime();
+     const bk = new Date(b.end ?? b.start).getTime();
+     if (ak !== bk) return ak - bk;
+     return new Date(a.start).getTime() - new Date(b.start).getTime();
+   });
+ 
+   // 간결한 리스트(제목 / 마감시간 HH시 mm분까지 / 내용 요약 1줄)
+   const lines = sorted.map(ev => {
+     const title = ev.title || "(제목 없음)";
+     const desc  = (ev.description || "").trim().split("\n")[0] || "";
+     const base  = ev.end || ev.start;
+     const d     = new Date(base);
+     const hh    = String(d.getHours()).padStart(2, "0");
+     const mm    = String(d.getMinutes()).padStart(2, "0");
+     const until = `마감 ${hh}시 ${mm}분`;
+     // 제목·내용 같은 줄, 그 아래 마감시간
+     return `• ${title}${desc ? ` — ${desc}` : ""}\n  ${until}`;
+   }).join("\n\n");
 
     // 하나의 커스텀 이벤트 payload로 notify 창 열기
     window.notify?.openUpcoming?.({

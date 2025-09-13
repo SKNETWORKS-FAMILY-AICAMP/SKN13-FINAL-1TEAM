@@ -29,6 +29,8 @@ export default function UpcomingEventModal({ event, onClose, onSnooze }) {
         backdrop-blur-md
         ring-1 ring-white/10
         animate-[slideUp_220ms_ease-out]
+        flex flex-col               
+        max-h-[70vh]                 
       "
     >
       {/* 헤더 */}
@@ -56,10 +58,9 @@ export default function UpcomingEventModal({ event, onClose, onSnooze }) {
       </div>
 
       {/* 본문: 스크롤 가능한 영역 */}
-      <div className="px-4 pt-3 pb-2">
-        <div
-          className="max-h-[260px] overflow-y-auto pr-1 space-y-2"  /* ▶ 내부 스크롤 높이(필요 시 조절) */
-        >
+      <div className="px-4 pt-3 pb-2 flex-1 min-h-0">
+        {/* 부모는 flex-1로 남은 공간을 차지, 자식은 명시적 max-h로 스크롤 강제 */}
+        <div className="overflow-y-auto pr-2 space-y-2 custom-scroll max-h-[48vh]">
           {event.description ? (
             <div className="text-sm text-gray-100/90 whitespace-pre-wrap break-words">
               {event.description /* JSX 배열/문자열 모두 OK */}
@@ -71,7 +72,7 @@ export default function UpcomingEventModal({ event, onClose, onSnooze }) {
       </div>
 
       {/* 푸터 */}
-      <div className="px-4 pb-4 pt-2 flex items-center justify-end gap-2">
+      {/* <div className="px-4 pb-4 pt-2 flex items-center justify-end gap-2">
         <button
           onClick={onClose}
           className="
@@ -83,7 +84,7 @@ export default function UpcomingEventModal({ event, onClose, onSnooze }) {
         >
           확인
         </button>
-      </div>
+      </div> */}
 
       {/* 애니메이션 키프레임 */}
       <style>{`
@@ -91,12 +92,21 @@ export default function UpcomingEventModal({ event, onClose, onSnooze }) {
           from { transform: translateY(16px); opacity: 0; }
           to   { transform: translateY(0);     opacity: 1; }
         }
-        /* ▶ 스크롤바 미니멀 스타일 (WebKit/Chromium) */
-        div.max-h-[260px]::-webkit-scrollbar { width: 6px; }
-        div.max-h-[260px]::-webkit-scrollbar-track { background: transparent; }
-        div.max-h-[260px]::-webkit-scrollbar-thumb {
-          background: rgba(255,255,255,0.3);
+        .custom-scroll {
+          scrollbar-width: thin;                                  /* Firefox */
+          scrollbar-color: rgba(255,255,255,0.35) transparent;    /* thumb / track */
+          overscroll-behavior: contain;                           /* 휠 전파 방지 */
+        }
+        .custom-scroll::-webkit-scrollbar { width: 8px; }         /* WebKit/Chromium */
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.35);
           border-radius: 9999px;
+          border: 2px solid transparent;      /* 가장자리 부드럽게 */
+          background-clip: padding-box;       /* 투명 테두리 적용 */
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.5);
         }
       `}</style>
     </div>
