@@ -42,7 +42,7 @@ class ErrorBoundary extends React.Component {
   render(){
     if(this.state.hasError){
       return (
-        <div className="p-4 rounded-xl border border-red-300 bg-red-50 text-red-700">
+        <div className="mx-auto w-full max-w-[1200px] px-6 rounded-xl border border-red-300 bg-red-50 text-red-700">
           <p className="font-semibold mb-1">문서 편집기에서 오류가 발생했습니다.</p>
           <p className="text-sm opacity-80">콘솔을 확인해 주세요.</p>
         </div>
@@ -615,11 +615,11 @@ export default function DocEditor({ onClose }) {
 
   return (
     <ErrorBoundary>
-      <div className="flex flex-col h-full rounded-xl border border-gray-200 bg-white">
+      <div className="fixed inset-x-[-1] top-[215px] bottom-0 mx-auto w-[90%] max-w-[1200px] flex flex-col overflow-hidden rounded-xl border border-gray-200">
         {/* 상단 전체 영역 (헤더 + 툴바) - 고정 및 하얀색 배경 */}
-        <div className="fixed z-20 bg-white" style={{ top: '40px', paddingTop: '0px' }}>
+        <div className="fixed bg-white w-[90%] max-w-[1200px] rounded-xl border border-gray-200" style={{ top: '48px', paddingTop: '0px' }}>
           {/* 상단 앱바(파일 불러오기/저장/DOCX/AI/닫기) */}
-          <div className="flex-shrink-0 p-2 border-b flex items-center justify-between">
+          <div className="flex-shrink-0 pt-2 pb-2 sborder-b border-b border-gray-200 flex items-center justify-between">
             <div className="flex items-center ml-2 flex-1 mr-4">
               {isEditingTitle ? (
                 /* 제목 편집 모드 */
@@ -646,13 +646,13 @@ export default function DocEditor({ onClose }) {
               )}
             </div>
             <div>
-              <button onClick={handleLoad} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-gray-500 text-white hover:bg-gray-600">
+              <button onClick={handleLoad} className="px-4 py-2 mr-2 text-[14px] font-semibold rounded-xl bg-gray-500 text-white hover:bg-gray-600">
                 불러오기
               </button>
-              <button onClick={handleSave} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-blue-500 text-white hover:bg-blue-600">
+              <button onClick={handleSave} className="px-4 py-2 mr-2 text-[14px] font-semibold rounded-xl bg-blue-500 text-white hover:bg-blue-600">
                 저장
               </button>
-              <button onClick={handleExportDocx} className="px-4 py-2 mr-2 text-sm font-semibold rounded-xl bg-green-600 text-white hover:bg-green-700">
+              <button onClick={handleExportDocx} className="px-4 py-2 mr-2 text-[14px] font-semibold rounded-xl bg-green-600 text-white hover:bg-green-700">
                 DOCX로 내보내기
               </button>
               {/* AI편집 버튼 주석처리 - 필요없음 */}
@@ -675,9 +675,8 @@ export default function DocEditor({ onClose }) {
             )}
           </div>
         </div>
-
         {/* 본문 에디터 */}
-        <div className="flex-1 overflow-y-auto bg-white" style={{ marginTop: '150px' }} onClick={() => editorRef.current?.commands.focus()}>
+        <div className="flex-1 overflow-y-auto bg-white simple-scroll" onClick={() => editorRef.current?.commands.focus()}>
           <RichEditor
             initialHTML={editorContent}
             setEditorRef={(inst) => {

@@ -91,7 +91,7 @@ export default function ChangePasswordView({
                 </button>
                 <button
                     type="submit"
-                    className="h-12 rounded-xl bg-gray-500 text-white disabled:opacity-50"
+                    className="h-12 rounded-xl bg-black text-white disabled:opacity-40"
                     disabled={!h.canSubmit || h.pending}
                 >
                     {h.pending ? "변경 중..." : "변경하기"}

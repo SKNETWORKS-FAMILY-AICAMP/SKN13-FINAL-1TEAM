@@ -313,7 +313,7 @@ export default function CreateorEditEventModal({
         <div>
           <div className={label}>일정 제목</div>
           <input
-            className="mt-2 w-full h-11 rounded-xl border border-gray-300 px-3 text-sm"
+            className="mt-2 w-full h-11 rounded-xl border border-gray-300 focus:outline-none px-3 text-sm"
             placeholder="일정 제목을 입력하세요"
             maxLength='50'
             value={title}
@@ -325,7 +325,7 @@ export default function CreateorEditEventModal({
         <div>
           <div className={label}>일정 설명</div>
           <input
-            className="mt-2 w-full h-11 rounded-xl border border-gray-300 px-3 text-sm"
+            className="mt-2 w-full h-11 rounded-xl border border-gray-300 focus:outline-none px-3 text-sm"
             placeholder="일정 설명을 입력하세요"
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
@@ -392,7 +392,7 @@ export default function CreateorEditEventModal({
               type="checkbox"
               checked={allDay}
               onChange={(e) => setAllDay(e.target.checked)}
-              className="h-4 w-4"
+              className="h-4 w-4 accent-black"
             />
             <span className="text-sm text-gray-800">하루종일</span>
           </label>
@@ -421,8 +421,8 @@ export default function CreateorEditEventModal({
                   onClick={() => setType(t.key)}
                   className={`h-10 px-4 rounded-xl border text-sm flex items-center gap-2 transition-colors ${
                     active
-                      ? "border-gray-800 bg-gray-100 font-semibold text-gray-900 shadow"
-                      : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                      ? "border-black-2 bg-white font-semibold text-gray-900 shadow"
+                      : "bg-gray-100 text-gray-400 hover:bg-gray-50"
                   }`}
                   aria-pressed={active}
                 >
