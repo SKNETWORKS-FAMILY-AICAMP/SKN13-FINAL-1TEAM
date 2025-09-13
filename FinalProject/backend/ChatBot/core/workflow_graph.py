@@ -238,7 +238,9 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         # If no more agents, check if workflow should continue
         workflow_step = state.get('workflow_step')
         if workflow_step in [WorkflowStep.SEARCH_COMPLETED, WorkflowStep.EDIT_COMPLETED, WorkflowStep.ANALYSIS_COMPLETED]:
-            return "continue"  # Let orchestrator decide next steps
+            # Only continue if workflow is not explicitly marked as complete
+            if not workflow_complete:
+                return "continue"  # Let orchestrator decide next steps
         
         return "complete"
 
