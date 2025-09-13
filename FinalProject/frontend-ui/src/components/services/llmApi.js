@@ -123,11 +123,16 @@ export function streamLLM({
               return;
             }
 
+            // Raw 데이터 디버깅 (액션이 포함된 경우만)
+            if (data.includes('open_document_in_editor')) {
+              console.log('🔍 SSE Raw 데이터 (액션 포함):', data);
+            }
+
             try {
               const parsed = JSON.parse(data);
 
-              // 디버깅을 위한 로그 추가
-              console.log('🔍 SSE 데이터 파싱 성공:', Object.keys(parsed));
+              // 디버깅을 위한 로그 추가 - 더 상세하게
+              console.log('🔍 SSE 데이터 파싱 성공:', Object.keys(parsed), parsed);
 
               // 문서 자동 열기 처리 (백엔드의 IPC 데이터) - 최우선 처리
               if (parsed.action === 'open_document_in_editor' && parsed.document) {

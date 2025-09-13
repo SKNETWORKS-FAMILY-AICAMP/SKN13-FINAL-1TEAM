@@ -472,6 +472,29 @@ class DocumentSearchAgent:
                 return True
         return False
     
+    def _convert_text_to_html(self, text: str) -> str:
+        """
+        텍스트 파일의 줄바꿈을 HTML 형식으로 변환
+        """
+        if not text:
+            return ""
+
+        import html
+
+        # HTML 특수문자 이스케이프
+        escaped_text = html.escape(text)
+
+        # 줄바꿈 문자들을 HTML로 변환
+        # \r\n -> <br>, \n -> <br>, \r -> <br>
+        html_content = escaped_text.replace('\r\n', '<br>').replace('\n', '<br>').replace('\r', '<br>')
+
+        # 연속된 공백을 &nbsp;로 변환하여 들여쓰기 유지
+        import re
+        html_content = re.sub(r'  +', lambda m: '&nbsp;' * len(m.group()), html_content)
+
+        # 전체를 <p> 태그로 감싸기
+        return f"<p>{html_content}</p>"
+
     def _auto_open_document_in_editor(self, document: Dict[str, Any], user_query: str) -> Dict[str, Any]:
         """문서를 자동으로 편집창에 열기"""
         import asyncio
@@ -505,9 +528,22 @@ class DocumentSearchAgent:
             
             # S3에서 파일 내용 다운로드
             response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
-            content = response['Body'].read().decode('utf-8')
-            
-            print(f"📄 [DocumentSearchAgent] 문서 자동 로드 성공: {len(content)} 문자")
+            raw_content = response['Body'].read().decode('utf-8')
+
+            # 파일 확장자에 따라 적절한 HTML로 변환
+            file_extension = filename.lower().split('.')[-1] if '.' in filename else ''
+
+            if file_extension == 'html':
+                # HTML 파일은 그대로 사용 (이미 HTML 형식)
+                content = raw_content
+            elif file_extension == 'docx':
+                # DOCX 파일은 이미 HTML로 변환되어 들어옴 (S3에 저장 시 변환됨)
+                content = raw_content
+            else:
+                # 모든 텍스트 파일(.md, .txt, 기타)을 HTML로 변환
+                content = self._convert_text_to_html(raw_content)
+
+            print(f"📄 [DocumentSearchAgent] 문서 자동 로드 성공: {len(content)} 문자 (원본: {len(raw_content)} 문자)")
             
             # 편집창에 전송할 문서 데이터 준비
             document_for_editor = {
