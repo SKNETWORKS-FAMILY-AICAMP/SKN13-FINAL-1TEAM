@@ -123,49 +123,77 @@ export function streamLLM({
               return;
             }
 
+            // Raw 데이터 디버깅 (액션이 포함된 경우만)
+            if (data.includes('open_document_in_editor')) {
+              console.log('🔍 SSE Raw 데이터 (액션 포함):', data);
+            }
+
             try {
               const parsed = JSON.parse(data);
-              
-              // 디버깅을 위한 로그 추가
-              console.log('🔍 SSE 데이터 파싱:', Object.keys(parsed));
 
-              // --- 백엔드에서 오는 SSE payload 처리 ---
-              if (parsed.content) {
-                full += parsed.content;
-                onDelta?.(parsed.content, full);
-              }
+              // 디버깅을 위한 로그 추가 - 더 상세하게
+              console.log('🔍 SSE 데이터 파싱 성공:', Object.keys(parsed), parsed);
 
-              if (parsed.tool_message) {
-                onToolMessage?.(parsed.tool_message);
-              }
+              // 문서 자동 열기 처리 (백엔드의 IPC 데이터) - 최우선 처리
+              if (parsed.action === 'open_document_in_editor' && parsed.document) {
+                console.log('📄 문서 자동 열기 감지!', parsed.document.filename);
 
-              if (parsed.thinking_message) {
-                onThinking?.(parsed.thinking_message);
-              }
+                // IPC 데이터 형식 맞추기 (main.js의 핸들러가 기대하는 형식)
+                const ipc_data = {
+                  ipc_data: parsed  // main.js가 기대하는 { ipc_data } 형식
+                };
 
-              if (parsed.document_update) {
-                console.log('🎯 document_update 감지!', parsed.document_update);
-                onDocumentUpdate?.(parsed.document_update);
-              }
+                // ChatWindow의 IPC 처리 로직으로 전달
+                if (window.electron?.openDocumentInEditor) {
+                  window.electron.openDocumentInEditor(ipc_data)
+                    .then(result => {
+                      console.log('✅ 문서 자동 열기 성공:', result);
+                    })
+                    .catch(error => {
+                      console.error('❌ 문서 자동 열기 실패:', error);
+                    });
+                } else {
+                  console.error('❌ IPC 통신 함수를 찾을 수 없습니다');
+                }
+              } else {
+                // 일반적인 SSE payload 처리
+                if (parsed.content) {
+                  full += parsed.content;
+                  onDelta?.(parsed.content, full);
+                }
 
-              if (parsed.needs_document_content) {
-                onNeedsDocument?.(parsed.agent_context);
-              }
+                if (parsed.tool_message) {
+                  onToolMessage?.(parsed.tool_message);
+                }
 
-              if (parsed.local_documents) {
-                console.log('🎯 local_documents 감지!', parsed.local_documents);
-                onLocalDocuments?.(parsed.local_documents);
-              }
+                if (parsed.thinking_message) {
+                  onThinking?.(parsed.thinking_message);
+                }
 
-              // 문서 버튼 처리
-              if (parsed.type === 'document_buttons' && parsed.document_selection) {
-                console.log('📄 document_buttons 감지!', parsed.document_selection);
-                onDocumentButtons?.(parsed.document_selection, parsed.content);
+                if (parsed.document_update) {
+                  console.log('🎯 document_update 감지!', parsed.document_update);
+                  onDocumentUpdate?.(parsed.document_update);
+                }
+
+                if (parsed.needs_document_content) {
+                  onNeedsDocument?.(parsed.agent_context);
+                }
+
+                if (parsed.local_documents) {
+                  console.log('🎯 local_documents 감지!', parsed.local_documents);
+                  onLocalDocuments?.(parsed.local_documents);
+                }
+
+                // 문서 버튼 처리
+                if (parsed.type === 'document_buttons' && parsed.document_selection) {
+                  console.log('📄 document_buttons 감지!', parsed.document_selection);
+                  onDocumentButtons?.(parsed.document_selection, parsed.content);
+                }
               }
 
             } catch (parseError) {
               if (data.trim()) { // 빈 문자열이 아닌 경우만 로그
-                console.error('SSE parse error:', parseError, 'Raw data:', data);
+                console.error('❌ SSE parse error:', parseError, 'Raw data:', data);
               }
             }
           }
