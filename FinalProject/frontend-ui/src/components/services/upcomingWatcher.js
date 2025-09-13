@@ -32,7 +32,7 @@ function pickTarget(events) {
     if (!inWindow) return false;
 
     if (dismissed[ev.id]) return false;
-    if (snooze[ev.id] && snooze[ev.id] > now) return false;
+    if (snooze[ev.id] && snooze[ev.id] > now) return false;s
     if (lastShown[ev.id] && (now - lastShown[ev.id] < 60 * 1000)) return false; // 60초 내 재노출 방지
     return true;
   });

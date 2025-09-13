@@ -436,7 +436,7 @@ async function showTodayEventsOnce(user) {
      const d     = new Date(base);
      const hh    = String(d.getHours()).padStart(2, "0");
      const mm    = String(d.getMinutes()).padStart(2, "0");
-     const until = `마감 ${hh}시 ${mm}분`;
+     const until = `일정 종료 : ${hh}시 ${mm}분`;
      // 제목·내용 같은 줄, 그 아래 마감시간
      return `• ${title}${desc ? ` — ${desc}` : ""}\n  ${until}`;
    }).join("\n\n");
