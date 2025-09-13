@@ -4,6 +4,7 @@ import os
 import json
 import boto3
 import asyncio
+import logging
 from typing import Dict, Any, List, Tuple
 from langchain_core.tools import tool
 from pathlib import Path
@@ -11,6 +12,9 @@ from difflib import SequenceMatcher
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# 로깅 설정
+logger = logging.getLogger(__name__)
 
 # 문서편집창에서 지원하는 확장자
 SUPPORTED_EXTENSIONS = {'.docx', '.md', '.txt', '.html'}
@@ -43,8 +47,10 @@ class EnhancedHybridSearcher:
                 config=config
             )
             self.bucket_name = os.getenv('AWS_S3_BUCKET', 'clickabbbucket')
+            logger.info(f"[ENHANCED_SEARCH] S3 클라이언트 초기화 완료 - 버킷: {self.bucket_name}")
             print(f"[EnhancedHybridSearcher] S3 클라이언트 초기화 완료: {self.bucket_name}")
         except Exception as e:
+            logger.error(f"[ENHANCED_SEARCH] S3 초기화 실패: {e}")
             print(f"[EnhancedHybridSearcher] S3 초기화 실패: {e}")
             self.s3_client = None
     
