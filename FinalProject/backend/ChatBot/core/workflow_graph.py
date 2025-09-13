@@ -173,6 +173,7 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         
         current_step = state.get('workflow_step')
         workflow_results = state.get('workflow_results', {})
+        workflow_complete = state.get('workflow_complete', False)
         
         # Update workflow state based on completed step
         updates = {}
@@ -183,6 +184,16 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
             updates['workflow_step'] = WorkflowStep.EDIT_COMPLETED
         elif current_step == WorkflowStep.ANALYSIS_NEEDED:
             updates['workflow_step'] = WorkflowStep.ANALYSIS_COMPLETED
+        elif current_step == WorkflowStep.WORKFLOW_COMPLETED:
+            # Preserve the workflow completion state
+            updates['workflow_step'] = WorkflowStep.WORKFLOW_COMPLETED
+            updates['workflow_complete'] = True
+            print(f"--- 📋 Workflow tracker: 워크플로 완료 상태 보존됨 ---")
+        
+        # Always preserve workflow_complete flag if it was set
+        if workflow_complete:
+            updates['workflow_complete'] = workflow_complete
+            print(f"--- 📋 Workflow tracker: workflow_complete={workflow_complete} 플래그 보존됨 ---")
         
         # DocumentSearchAgent의 특별한 데이터 보존 (다운로드 버튼 등)
         if state.get('action') == 'show_document_buttons':
@@ -190,6 +201,13 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
             updates['document_selection'] = state.get('document_selection')
             updates['final_answer'] = state.get('final_answer')
             print(f"--- 📋 Workflow tracker: 다운로드 버튼 데이터 보존됨 ---")
+        
+        # Auto-open editor data preservation
+        if state.get('send_to_editor'):
+            updates['send_to_editor'] = state.get('send_to_editor')
+            updates['editor_file_name'] = state.get('editor_file_name')
+            updates['editor_file_content'] = state.get('editor_file_content')
+            print(f"--- 📋 Workflow tracker: 에디터 자동 열기 데이터 보존됨 ---")
         
         print(f"--- Workflow tracker updates: {updates} ---")
         return updates
