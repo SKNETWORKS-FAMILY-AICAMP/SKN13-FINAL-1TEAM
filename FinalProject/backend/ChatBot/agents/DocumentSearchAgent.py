@@ -99,20 +99,36 @@ class DocumentSearchAgent:
                             # 개선된 하이브리드 검색 도구 특별 처리
                             if tool_name == "enhanced_hybrid_search_tool":
                                 documents = result.get('found_documents', [])
+                                print(f"🔍 [DEBUG] enhanced_hybrid_search_tool 결과: {len(documents)}개 문서 발견")
                                 if documents:
+                                    print(f"🔍 [DEBUG] 사용자 쿼리: '{user_query}'")
+                                    
                                     # "편집창에 띄워줘" 요청인지 확인
-                                    if self._should_auto_open_editor(user_query):
+                                    should_auto_open = self._should_auto_open_editor(user_query)
+                                    print(f"🔍 [DEBUG] 편집창 자동 열기 요청 감지: {should_auto_open}")
+                                    
+                                    if should_auto_open:
                                         # 첫 번째 문서를 자동으로 편집창에 열기
                                         first_doc = documents[0]
-                                        if self._is_editor_supported_file(first_doc):
-                                            search_results.update(self._auto_open_document_in_editor(first_doc, user_query))
+                                        print(f"🔍 [DEBUG] 첫 번째 문서: {first_doc.get('filename', 'Unknown')}")
+                                        
+                                        is_supported = self._is_editor_supported_file(first_doc)
+                                        print(f"🔍 [DEBUG] 편집창 지원 파일 여부: {is_supported}")
+                                        
+                                        if is_supported:
+                                            print(f"🔍 [DEBUG] 자동으로 편집창에 문서 열기 시도...")
+                                            auto_result = self._auto_open_document_in_editor(first_doc, user_query)
+                                            print(f"🔍 [DEBUG] 자동 열기 결과: {auto_result}")
+                                            search_results.update(auto_result)
                                         else:
+                                            print(f"🔍 [DEBUG] 지원하지 않는 파일 - 다운로드 버튼 표시")
                                             # 편집창 지원하지 않는 파일이면 다운로드 버튼 표시
                                             document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
                                             search_results["document_selection"] = document_selection_data["selection_data"]
                                             search_results["action"] = "show_document_buttons"
                                             search_results["search_summary"] = f"편집창에서 지원하지 않는 파일입니다. 다운로드하여 확인해주세요."
                                     else:
+                                        print(f"🔍 [DEBUG] 일반 검색 요청 - 문서 버튼 표시")
                                         # 일반 검색 요청 - 문서 버튼 표시
                                         document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
                                         search_results["document_selection"] = document_selection_data["selection_data"]
@@ -408,6 +424,8 @@ class DocumentSearchAgent:
     def _should_auto_open_editor(self, user_query: str) -> bool:
         """사용자 쿼리에서 편집창 자동 열기 요청인지 확인"""
         import re
+        print(f"🔍 [DEBUG] _should_auto_open_editor 호출됨. 쿼리: '{user_query}'")
+        
         editor_patterns = [
             r'.*(문서편집창|편집창|에디터).*(띄워|열어|보여).*줘',
             r'.*(편집창|에디터).*(띄워|열어|오픈).*',
@@ -415,9 +433,14 @@ class DocumentSearchAgent:
             r'.*편집창.*에서.*열.*'
         ]
         
-        for pattern in editor_patterns:
-            if re.search(pattern, user_query, re.IGNORECASE):
+        for i, pattern in enumerate(editor_patterns):
+            match = re.search(pattern, user_query, re.IGNORECASE)
+            print(f"🔍 [DEBUG] 패턴 {i+1}: {pattern} -> 매치: {bool(match)}")
+            if match:
+                print(f"🔍 [DEBUG] 매치된 부분: '{match.group()}'")
                 return True
+        
+        print(f"🔍 [DEBUG] 편집창 패턴 매치 실패")
         return False
     
     def _is_editor_supported_file(self, document: Dict[str, Any]) -> bool:

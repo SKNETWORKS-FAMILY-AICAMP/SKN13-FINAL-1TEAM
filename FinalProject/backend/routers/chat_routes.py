@@ -313,9 +313,12 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 print(f"🐛 [DEBUG] document_selection: {final_state.get('document_selection', 'None')}")
             
             # --- 문서편집창 IPC 전송 로직 ---
+            print(f"🔍 [DEBUG] on_end 이벤트 - send_to_editor 확인: {final_state.get('send_to_editor', False) if final_state else 'final_state is None'}")
             if final_state and final_state.get("send_to_editor", False):
                 selected_document = final_state.get("selected_document")
+                print(f"🔍 [DEBUG] selected_document 있음: {selected_document is not None}")
                 if selected_document:
+                    print(f"🔍 [DEBUG] 문서편집창 IPC 전송 준비: {selected_document.get('filename', 'Unknown')}")
                     # IPC 메시지 데이터 준비
                     ipc_data = {
                         "action": "open_document_in_editor",
@@ -327,9 +330,12 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                         }
                     }
                     
+                    print(f"🔍 [DEBUG] IPC 데이터 전송: {json.dumps(ipc_data, ensure_ascii=False)[:200]}...")
                     # IPC 메시지를 스트림으로 전송 (프론트엔드에서 처리)
                     yield f"data: {json.dumps(ipc_data, ensure_ascii=False)}\n\n"
                     print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
+                else:
+                    print(f"🔍 [DEBUG] selected_document가 None입니다!")
             
             # --- NEW LOGIC FOR HANDLING SPECIAL ACTION PAYLOAD ---
             if final_state and "response" in final_state:
