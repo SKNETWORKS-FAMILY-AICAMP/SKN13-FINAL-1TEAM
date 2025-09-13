@@ -103,48 +103,59 @@ class DocumentSearchAgent:
                                 if documents:
                                     print(f"🔍 [DEBUG] 사용자 쿼리: '{user_query}'")
                                     
-                                    # "편집창에 띄워줘" 요청인지 확인
-                                    should_auto_open = self._should_auto_open_editor(user_query)
-                                    print(f"🔍 [DEBUG] 편집창 자동 열기 요청 감지: {should_auto_open}")
-                                    
-                                    if should_auto_open:
-                                        # 첫 번째 문서를 자동으로 편집창에 열기
-                                        first_doc = documents[0]
-                                        print(f"🔍 [DEBUG] 첫 번째 문서: {first_doc.get('filename', 'Unknown')}")
-                                        
-                                        is_supported = self._is_editor_supported_file(first_doc)
-                                        print(f"🔍 [DEBUG] 편집창 지원 파일 여부: {is_supported}")
-                                        
-                                        if is_supported:
-                                            print(f"🔍 [DEBUG] 자동으로 편집창에 문서 열기 시도...")
-                                            auto_result = self._auto_open_document_in_editor(first_doc, user_query)
-                                            print(f"🔍 [DEBUG] 자동 열기 결과: {auto_result}")
-                                            search_results.update(auto_result)
+                                    # 문서 초안 생성 요청인지 먼저 확인
+                                    should_create_draft = self._should_create_document_draft(user_query)
+                                    print(f"🔍 [DEBUG] 문서 초안 생성 요청 감지: {should_create_draft}")
 
-                                            # 자동 열기 실패한 경우에만 버튼 표시 로직 진행
-                                            if not auto_result.get("auto_open_success", False):
-                                                print(f"🔍 [DEBUG] 자동 열기 실패 - 다운로드 버튼 표시")
-                                                # 편집창 지원하지만 자동 열기 실패한 경우 다운로드 버튼 표시
+                                    if should_create_draft:
+                                        # 여러 문서를 참고해서 새로운 초안 생성
+                                        print(f"🔍 [DEBUG] {len(documents)}개 문서를 참고하여 초안 생성 시작...")
+                                        draft_result = self._create_document_draft(documents, user_query)
+                                        print(f"🔍 [DEBUG] 초안 생성 결과: {draft_result}")
+                                        search_results.update(draft_result)
+                                    else:
+                                        # "편집창에 띄워줘" 요청인지 확인
+                                        should_auto_open = self._should_auto_open_editor(user_query)
+                                        print(f"🔍 [DEBUG] 편집창 자동 열기 요청 감지: {should_auto_open}")
+
+                                        if should_auto_open:
+                                            # 첫 번째 문서를 자동으로 편집창에 열기
+                                            first_doc = documents[0]
+                                            print(f"🔍 [DEBUG] 첫 번째 문서: {first_doc.get('filename', 'Unknown')}")
+
+                                            is_supported = self._is_editor_supported_file(first_doc)
+                                            print(f"🔍 [DEBUG] 편집창 지원 파일 여부: {is_supported}")
+
+                                            if is_supported:
+                                                print(f"🔍 [DEBUG] 자동으로 편집창에 문서 열기 시도...")
+                                                auto_result = self._auto_open_document_in_editor(first_doc, user_query)
+                                                print(f"🔍 [DEBUG] 자동 열기 결과: {auto_result}")
+                                                search_results.update(auto_result)
+
+                                                # 자동 열기 실패한 경우에만 버튼 표시 로직 진행
+                                                if not auto_result.get("auto_open_success", False):
+                                                    print(f"🔍 [DEBUG] 자동 열기 실패 - 다운로드 버튼 표시")
+                                                    # 편집창 지원하지만 자동 열기 실패한 경우 다운로드 버튼 표시
+                                                    document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
+                                                    search_results["document_selection"] = document_selection_data["selection_data"]
+                                                    search_results["action"] = "show_document_buttons"
+                                                    search_results["search_summary"] = f"문서 로드에 실패했습니다. 아래 버튼을 클릭해 주세요."
+                                                else:
+                                                    print(f"🔍 [DEBUG] 자동 열기 성공 - 버튼 표시 생략")
+                                            else:
+                                                print(f"🔍 [DEBUG] 지원하지 않는 파일 - 다운로드 버튼 표시")
+                                                # 편집창 지원하지 않는 파일이면 다운로드 버튼 표시
                                                 document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
                                                 search_results["document_selection"] = document_selection_data["selection_data"]
                                                 search_results["action"] = "show_document_buttons"
-                                                search_results["search_summary"] = f"문서 로드에 실패했습니다. 아래 버튼을 클릭해 주세요."
-                                            else:
-                                                print(f"🔍 [DEBUG] 자동 열기 성공 - 버튼 표시 생략")
+                                                search_results["search_summary"] = f"편집창에서 지원하지 않는 파일입니다. 다운로드하여 확인해주세요."
                                         else:
-                                            print(f"🔍 [DEBUG] 지원하지 않는 파일 - 다운로드 버튼 표시")
-                                            # 편집창 지원하지 않는 파일이면 다운로드 버튼 표시
+                                            print(f"🔍 [DEBUG] 일반 검색 요청 - 문서 버튼 표시")
+                                            # 일반 검색 요청 - 문서 버튼 표시
                                             document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
                                             search_results["document_selection"] = document_selection_data["selection_data"]
                                             search_results["action"] = "show_document_buttons"
-                                            search_results["search_summary"] = f"편집창에서 지원하지 않는 파일입니다. 다운로드하여 확인해주세요."
-                                    else:
-                                        print(f"🔍 [DEBUG] 일반 검색 요청 - 문서 버튼 표시")
-                                        # 일반 검색 요청 - 문서 버튼 표시
-                                        document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
-                                        search_results["document_selection"] = document_selection_data["selection_data"]
-                                        search_results["action"] = "show_document_buttons"
-                                        search_results["search_summary"] = f"{len(documents)}개의 관련 문서를 찾았습니다."
+                                            search_results["search_summary"] = f"{len(documents)}개의 관련 문서를 찾았습니다."
                             
                             # 다운로드 링크 도구 특별 처리 - 다운로드 버튼 생성
                             elif tool_name == "get_presigned_download_url":
@@ -440,6 +451,28 @@ class DocumentSearchAgent:
         """사용 가능한 도구 목록 반환"""
         return [tool.name for tool in self.tools]
     
+    def _should_create_document_draft(self, user_query: str) -> bool:
+        """사용자 쿼리에서 문서 초안 생성 요청인지 확인"""
+        print(f"🔍 [DEBUG] _should_create_document_draft 호출됨. 쿼리: '{user_query}'")
+
+        draft_patterns = [
+            r'.*(토대로|참고.*해서|기반.*으로).*(만들|작성|생성).*',
+            r'.*(년|연도).*용.*문서.*(만들|작성|생성).*',
+            r'.*(초안|draft).*(만들|작성|생성).*',
+            r'.*([0-9]{4}년.*){2,}.*(토대|참고|기반).*',  # 여러 연도 언급
+            r'.*(이전.*년도|과거.*문서).*(참고|토대).*'
+        ]
+
+        for i, pattern in enumerate(draft_patterns):
+            match = re.search(pattern, user_query, re.IGNORECASE)
+            print(f"🔍 [DEBUG] 초안생성 패턴 {i+1}: {pattern} -> 매치: {bool(match)}")
+            if match:
+                print(f"🔍 [DEBUG] 매치된 부분: '{match.group()}'")
+                return True
+
+        print(f"🔍 [DEBUG] 문서 초안 생성 패턴 매치 실패")
+        return False
+
     def _should_auto_open_editor(self, user_query: str) -> bool:
         """사용자 쿼리에서 편집창 자동 열기 요청인지 확인"""
         import re
@@ -472,6 +505,235 @@ class DocumentSearchAgent:
                 return True
         return False
     
+    def _create_document_draft(self, documents: List[Dict[str, Any]], user_query: str) -> Dict[str, Any]:
+        """여러 문서를 참고해서 새로운 문서 초안 생성"""
+        import boto3
+        import os
+        from botocore.config import Config
+        from openai import OpenAI
+
+        try:
+            print(f"📝 [DocumentSearchAgent] 문서 초안 생성 시작: {len(documents)}개 문서 참고")
+
+            # S3 클라이언트 설정
+            config = Config(
+                region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
+                retries={'max_attempts': 3, 'mode': 'standard'},
+                s3={'addressing_style': 'virtual'}
+            )
+
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
+                config=config
+            )
+
+            bucket_name = os.getenv('AWS_S3_BUCKET', 'clickabbbucket')
+
+            # 참고 문서들의 내용 로드
+            reference_documents = []
+            for i, doc in enumerate(documents[:5]):  # 최대 5개 문서만 참고
+                try:
+                    s3_key = doc.get('path', '')
+                    filename = doc.get('filename', f'문서{i+1}')
+
+                    print(f"📄 [DocumentSearchAgent] 참고 문서 {i+1} 로드: {filename}")
+                    response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+                    content = response['Body'].read().decode('utf-8')
+
+                    reference_documents.append({
+                        'filename': filename,
+                        'content': content[:10000],  # 최대 10,000자만 참고
+                        'year': self._extract_year_from_filename(filename)
+                    })
+
+                except Exception as e:
+                    print(f"❌ [DocumentSearchAgent] 참고 문서 로드 실패 {filename}: {e}")
+                    continue
+
+            if not reference_documents:
+                return {
+                    "action": "show_message",
+                    "message": "참고할 문서들을 로드할 수 없어 초안을 생성할 수 없습니다."
+                }
+
+            # OpenAI 클라이언트로 초안 생성
+            openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+            # 새 문서의 연도 추출 (사용자 쿼리에서)
+            target_year = self._extract_target_year_from_query(user_query)
+
+            # 프롬프트 생성
+            prompt = self._create_draft_generation_prompt(reference_documents, user_query, target_year)
+
+            print(f"📝 [DocumentSearchAgent] AI로 초안 생성 중... (참고문서: {len(reference_documents)}개)")
+
+            # AI로 초안 생성
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "당신은 한국방송광고진흥공사의 전문 문서 작성자입니다. 이전 연도의 문서들을 참고하여 새로운 연도의 문서 초안을 정확하고 전문적으로 작성해주세요."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=4000
+            )
+
+            draft_content = response.choices[0].message.content
+
+            # HTML 형식으로 변환
+            draft_html = self._convert_text_to_html(draft_content)
+
+            # 새 문서의 파일명 생성
+            draft_filename = self._generate_draft_filename(reference_documents, target_year)
+
+            print(f"📝 [DocumentSearchAgent] 초안 생성 완료: {len(draft_content)} 문자")
+
+            # 편집창에 전송할 문서 데이터 준비
+            document_for_editor = {
+                "filename": draft_filename,
+                "content": draft_html,
+                "filePath": f"draft/{draft_filename}",
+                "source": "generated"
+            }
+
+            return {
+                "action": "open_document_in_editor",
+                "document": document_for_editor,
+                "message": f"📝 {draft_filename} 초안이 생성되었습니다. ({len(reference_documents)}개 문서 참고)"
+            }
+
+        except Exception as e:
+            print(f"❌ [DocumentSearchAgent] 문서 초안 생성 실패: {e}")
+            import traceback
+            traceback.print_exc()
+
+            return {
+                "action": "show_message",
+                "message": f"문서 초안 생성 중 오류가 발생했습니다: {str(e)}"
+            }
+
+    def _extract_year_from_filename(self, filename: str) -> str:
+        """파일명에서 연도를 추출 (예: '2024년' 또는 '2024' 형태)"""
+        import re
+
+        # 2024년 형태 또는 _2024 형태 또는 공고문_2024년 형태 매칭
+        year_patterns = [
+            r'(\d{4})년',  # 2024년
+            r'_(\d{4})년', # _2024년
+            r'(\d{4})',    # 2024
+            r'공고문_(\d{4})년'  # 공고문_2024년
+        ]
+
+        for pattern in year_patterns:
+            match = re.search(pattern, filename)
+            if match:
+                return match.group(1)
+
+        return "알 수 없음"
+
+    def _extract_target_year_from_query(self, user_query: str) -> str:
+        """사용자 쿼리에서 목표 연도 추출 (예: '2025년용', '2025년'"""
+        import re
+
+        # 2025년용, 2025년, 2025 형태 매칭
+        target_patterns = [
+            r'(\d{4})년용',  # 2025년용
+            r'(\d{4})년',    # 2025년
+            r'(\d{4})',      # 2025
+        ]
+
+        for pattern in target_patterns:
+            match = re.search(pattern, user_query)
+            if match:
+                year = match.group(1)
+                # 현재 연도보다 미래이거나 같은 연도만 반환
+                import datetime
+                current_year = datetime.datetime.now().year
+                if int(year) >= current_year:
+                    return year
+
+        # 기본적으로 내년 반환
+        import datetime
+        return str(datetime.datetime.now().year + 1)
+
+    def _create_draft_generation_prompt(self, reference_documents: List[Dict[str, Any]], user_query: str, target_year: str) -> str:
+        """AI 문서 생성을 위한 프롬프트 생성"""
+
+        # 참고 문서들의 정보 정리
+        docs_info = []
+        for i, doc in enumerate(reference_documents):
+            year = doc.get('year', '알 수 없음')
+            filename = doc.get('filename', f'문서{i+1}')
+            content = doc.get('content', '')[:1000]  # 프롬프트용으로는 1000자만
+
+            docs_info.append(f"""
+참고문서 {i+1}: {filename} ({year}년)
+내용 요약:
+{content}
+""")
+
+        docs_text = "\n".join(docs_info)
+
+        prompt = f"""
+사용자 요청: {user_query}
+
+아래 {len(reference_documents)}개의 참고 문서들을 기반으로 {target_year}년용 문서 초안을 작성해주세요.
+
+{docs_text}
+
+작성 지침:
+1. 기존 문서들의 구조와 형식을 유지하되, {target_year}년에 맞게 내용을 업데이트
+2. 연도, 기간, 일정 등은 {target_year}년 기준으로 수정
+3. 기존 문서들의 주요 항목과 내용을 참고하되, 최신 트렌드나 변화사항을 반영
+4. 한국어로 작성하고, 공식 문서의 어투와 형식을 유지
+5. 문서 제목에는 반드시 '{target_year}년'을 포함
+
+새로운 {target_year}년용 문서를 작성해주세요:
+"""
+
+        return prompt
+
+    def _generate_draft_filename(self, reference_documents: List[Dict[str, Any]], target_year: str) -> str:
+        """새 초안의 파일명 생성"""
+
+        # 가장 최근 참고 문서의 파일명 패턴을 기반으로 생성
+        if reference_documents:
+            base_filename = reference_documents[0].get('filename', '')
+
+            # 기존 연도를 새 연도로 교체
+            import re
+
+            # 연도 패턴들 찾아서 교체
+            year_patterns = [
+                (r'\d{4}년', f'{target_year}년'),
+                (r'_\d{4}년', f'_{target_year}년'),
+                (r'\d{4}', target_year)
+            ]
+
+            new_filename = base_filename
+            for pattern, replacement in year_patterns:
+                if re.search(pattern, new_filename):
+                    new_filename = re.sub(pattern, replacement, new_filename)
+                    break
+
+            # 만약 연도 교체가 안 되었다면 기본 형태로
+            if new_filename == base_filename:
+                # 확장자 분리
+                name_parts = base_filename.rsplit('.', 1)
+                if len(name_parts) == 2:
+                    name, ext = name_parts
+                    new_filename = f"{name}_{target_year}년.{ext}"
+                else:
+                    new_filename = f"{base_filename}_{target_year}년"
+
+            return new_filename
+
+        # 참고 문서가 없는 경우 기본 파일명
+        return f"초안_문서_{target_year}년.md"
+
     def _convert_text_to_html(self, text: str) -> str:
         """
         텍스트 파일의 줄바꿈을 HTML 형식으로 변환
