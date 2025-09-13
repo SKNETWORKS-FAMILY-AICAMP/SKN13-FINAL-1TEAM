@@ -71,11 +71,13 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
         else:
             next_step = WorkflowStep.WORKFLOW_COMPLETED
             workflow_complete = True
+            next_agents = []  # Clear agents when completing
             
     elif current_step == WorkflowStep.EDIT_COMPLETED:
         # After editing, usually done unless more work needed
         next_step = WorkflowStep.WORKFLOW_COMPLETED
         workflow_complete = True
+        next_agents = []  # Clear agents when completing
         
     elif current_step == WorkflowStep.ANALYSIS_COMPLETED:
         # After analysis, check if editing is needed
@@ -85,6 +87,7 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
         else:
             next_step = WorkflowStep.WORKFLOW_COMPLETED
             workflow_complete = True
+            next_agents = []  # Clear agents when completing
     
     # Document content is now always sent from frontend, no need to request it
     
@@ -98,6 +101,7 @@ def workflow_orchestrator_node(state: AgentState) -> dict:
     # Add workflow_complete flag if set
     if 'workflow_complete' in locals():
         result["workflow_complete"] = workflow_complete
+        print(f"--- 🏁 Orchestrator: workflow_complete={workflow_complete} 설정됨 ---")
         
     return result
 
