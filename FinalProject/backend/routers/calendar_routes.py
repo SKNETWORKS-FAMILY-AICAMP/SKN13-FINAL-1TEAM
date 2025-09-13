@@ -44,7 +44,6 @@ class EventOut(BaseModel):
     end: Optional[str] = None # 이벤트 종료 시간 (ISO 형식 문자열, 선택적)
     allDay: bool # 종일 이벤트 여부
     color: Optional[str] = None # 이벤트 색상
-    reminder_enabled: bool = True
 
 # 사용자의 기본 캘린더를 가져오거나 생성하는 헬퍼 함수
 def get_or_create_default_calendar(db: Session, user_id: int) -> Calendar:
