@@ -16,6 +16,7 @@ def replace_text_in_document(document_content: str, old_text: str, new_text: str
     주어진 문서 내용에서 특정 텍스트를 찾아 다른 텍스트로 교체합니다.
     GPT가 단순 문자열 치환을 해야 할 때 사용하는 경량 툴.
     """
+    logger.debug(f"[EDITOR_TOOL] replace_text_in_document 실행 - 교체 전: '{old_text[:50]}...', 교체 후: '{new_text[:50]}...'")
     print(f"--- Running replace_text_in_document Tool: Replacing '{old_text}' with '{new_text}' ---")
     return document_content.replace(old_text, new_text)
 
@@ -27,13 +28,16 @@ def edit_html_document(document_content: str, instruction: str) -> str:
     지원 기능: 헤딩, 텍스트 스타일링, 리스트, 테이블, 블록쿼트, 텍스트 추가/수정 등
     """
     try:
-        logger.info(f"HTML 문서 편집 시작 - 지시사항: {instruction[:100]}...")
-        
+        logger.info(f"[EDITOR_TOOL] HTML 문서 편집 시작 - 지시사항: {instruction[:100]}...")
+        logger.debug(f"[EDITOR_TOOL] 입력 문서 길이: {len(document_content)} 문자")
+
         # HTML 문서가 비어있거나 매우 간단한 경우 기본 구조 생성
         if not document_content.strip() or document_content.strip() == '<p></p>':
+            logger.debug("[EDITOR_TOOL] 빈 문서 감지, 기본 구조 생성")
             soup = BeautifulSoup('<p></p>', 'html.parser')
         else:
             soup = BeautifulSoup(document_content, 'html.parser')
+            logger.debug(f"[EDITOR_TOOL] HTML 파싱 완료 - 요소 수: {len(soup.find_all())}")
 
         # 텍스트에서 따옴표나 특정 패턴으로 내용 추출
         def extract_quoted_text(text, default=""):
@@ -391,11 +395,13 @@ def edit_html_document(document_content: str, instruction: str) -> str:
             result = result.replace('<html><body>', '').replace('</body></html>', '')
             result = result.strip()
             
-            logger.info(f"HTML 문서 편집 완료 - 결과 길이: {len(result)}자")
+            logger.info(f"[EDITOR_TOOL] HTML 문서 편집 완료 - 결과 길이: {len(result)}자")
+            logger.debug(f"[EDITOR_TOOL] 편집 결과 미리보기: {result[:200]}...")
             return result
         
     except Exception as e:
-        logger.error(f"HTML 문서 편집 중 오류 발생: {str(e)}")
+        logger.error(f"[EDITOR_TOOL] HTML 문서 편집 중 오류 발생: {str(e)}", exc_info=True)
+        logger.debug(f"[EDITOR_TOOL] 오류 발생 시 원본 문서 반환 - 길이: {len(document_content)}")
         # 오류 발생 시 원본 문서 반환하면서 오류 메시지 추가
         error_message = f"<p style='color: red;'>편집 중 오류가 발생했습니다: {str(e)}</p>"
         return f"{document_content}\n{error_message}"

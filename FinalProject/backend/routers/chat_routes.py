@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Generator, Optional, Sequence
-import json, uuid, os
+import json, uuid, os, logging
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from ..database import get_db, ChatSession, ChatMessage, ToolMessageRecord, User
@@ -12,6 +12,10 @@ from botocore.config import Config
 from ..ChatBot.agents.RoutingAgent import RoutingAgent, generate_config
 from ..ChatBot.core.AgentState import AgentState
 from langchain_core.messages.tool import ToolMessage
+
+# 로깅 설정
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # APIRouter 인스턴스 생성
 router = APIRouter()
@@ -77,17 +81,27 @@ async def _handle_tool_start(event: dict, session_id: str, db: Session):
 
     # 사용자 친화적인 메시지 생성
     user_friendly_message = ""
-    if tool_name == "hybrid_document_search_tool":
+    if tool_name in ["hybrid_document_search_tool", "enhanced_hybrid_search_tool"]:
         keywords = tool_input.get('keywords', [])
-        if keywords:
-            user_friendly_message = f"'{', '.join(keywords)}' 관련 문서를 검색하고 있습니다... 🔎"
+        query = tool_input.get('query', '')
+        search_term = keywords or [query] if query else []
+
+        if search_term:
+            if isinstance(search_term, list):
+                search_display = ', '.join(search_term)
+            else:
+                search_display = str(search_term)
+            user_friendly_message = f"'{search_display}' 관련 문서를 검색하고 있습니다... 🔎"
+            logger.debug(f"[DOCUMENT_SEARCH] 검색 시작 - 키워드: {search_term}")
         else:
             user_friendly_message = "문서를 검색하고 있습니다... 🔎"
+            logger.debug("[DOCUMENT_SEARCH] 일반 검색 시작")
     elif tool_name == "get_presigned_download_url":
         file_key = tool_input.get('file_key', '문서')
         user_friendly_message = f"'{file_key}'의 다운로드 링크를 생성하고 있습니다... 🔗"
     elif tool_name == "run_document_edit":
         user_friendly_message = "문서 편집 작업을 준비하고 있습니다... ✍️"
+        logger.debug(f"[DOCUMENT_EDIT] 문서 편집 도구 시작 - 입력: {tool_input}")
     else:
         user_friendly_message = "요청하신 작업을 처리하기 위해 도구를 준비하고 있습니다... ⚙️"
 
@@ -504,6 +518,7 @@ async def open_document(
 ):
     """사용자가 문서 버튼을 클릭했을 때 문서를 로드하고 문서편집창에 전송"""
     try:
+        logger.info(f"📄 [OPEN_DOCUMENT] 문서 클릭 요청 - 문서ID: {request.document_id}, 세션ID: {request.session_id}")
         print(f"📄 [open_document] 문서 클릭 요청: {request.document_id}")
         
         # 세션 권한 확인
@@ -520,19 +535,23 @@ async def open_document(
         source = doc_data.get('source', '')
         file_path = doc_data.get('path', '')
         
+        logger.info(f"📄 [OPEN_DOCUMENT] 문서 정보 - 파일명: {filename}, 소스: {source}, 경로: {file_path}")
         print(f"📄 [open_document] 문서 정보: {filename} ({source})")
-        
+
         # 문서 내용 로드
         document_content = None
-        
+
         if source == 'local':
-            # 로컬 파일 로드
+            logger.debug(f"📄 [OPEN_DOCUMENT] 로컬 파일 로드 시작 - 경로: {file_path}")
             document_content = await _load_local_document(file_path)
         elif source == 's3':
-            # S3 파일 로드
+            logger.debug(f"📄 [OPEN_DOCUMENT] S3 파일 로드 시작 - 키: {file_path}")
             document_content = await _load_s3_document(file_path)
+        else:
+            logger.error(f"📄 [OPEN_DOCUMENT] 지원하지 않는 소스: {source}")
         
         if document_content is None:
+            logger.error(f"📄 [OPEN_DOCUMENT] 문서 로드 실패 - 파일명: {filename}, 소스: {source}")
             return JSONResponse(
                 status_code=400,
                 content={"error": f"문서 '{filename}'를 로드할 수 없습니다."}
@@ -552,9 +571,11 @@ async def open_document(
         # 클릭 완료 메시지를 채팅에 추가
         success_message = f"✅ **{filename}** 문서를 문서편집창에서 열었습니다!"
         _create_chat_message(db, request.session_id, "assistant", success_message)
-        
+
+        logger.info(f"📄 [OPEN_DOCUMENT] 문서 로드 완료 - 파일명: {filename}, 문서 크기: {len(document_content)} 문자")
+        logger.debug(f"📄 [OPEN_DOCUMENT] IPC 데이터 생성 - 액션: {ipc_data['action']}")
         print(f"📄 [open_document] 문서 로드 완료: {filename}")
-        
+
         # 성공 응답과 함께 IPC 데이터 반환
         return JSONResponse(content={
             "success": True,
@@ -563,6 +584,7 @@ async def open_document(
         })
         
     except Exception as e:
+        logger.error(f"❌ [OPEN_DOCUMENT] 예외 발생 - 오류: {str(e)}", exc_info=True)
         print(f"❌ [open_document] 오류: {e}")
         return JSONResponse(
             status_code=500,
@@ -642,6 +664,7 @@ async def _load_local_document(file_path: str) -> Optional[str]:
         
         path = Path(file_path)
         if not path.exists():
+            logger.error(f"❌ [_LOAD_LOCAL] 파일 없음 - 경로: {file_path}")
             print(f"❌ [_load_local_document] 파일 없음: {file_path}")
             return None
         
@@ -649,8 +672,10 @@ async def _load_local_document(file_path: str) -> Optional[str]:
         
         if extension in ['.md', '.txt', '.html']:
             # 텍스트 파일 직접 읽기
+            logger.debug(f"📄 [_LOAD_LOCAL] 텍스트 파일 읽기 - 확장자: {extension}")
             with open(path, 'r', encoding='utf-8') as f:
                 content = f.read()
+            logger.info(f"📄 [_LOAD_LOCAL] 텍스트 파일 로드 성공 - 크기: {len(content)} 문자")
             return content
         elif extension == '.docx':
             # DOCX 파일 처리
@@ -692,10 +717,12 @@ async def _load_s3_document(s3_key: str) -> Optional[str]:
         
         bucket_name = os.getenv('AWS_S3_BUCKET', 'clickabbbucket')
         
+        logger.debug(f"📄 [_LOAD_S3] S3 파일 다운로드 시작 - 버킷: {bucket_name}, 키: {s3_key}")
         print(f"📄 [_load_s3_document] S3 파일 다운로드: {s3_key}")
-        
+
         response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
         content = response['Body'].read().decode('utf-8')
+        logger.info(f"📄 [_LOAD_S3] S3 파일 로드 성공 - 크기: {len(content)} 문자")
         
         print(f"📄 [_load_s3_document] S3 파일 로드 성공: {len(content)} 문자")
         return content
