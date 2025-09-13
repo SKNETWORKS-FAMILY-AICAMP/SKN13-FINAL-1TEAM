@@ -1,6 +1,5 @@
 export const handleResponse = (response) => {
     // 성공적인 응답 (2xx 범위)
-    console.log("서버 응답:", response.data);
     return response.data;
 };
 

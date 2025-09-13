@@ -774,11 +774,26 @@ ipcMain.handle("window:close", (event) => {
 });
 
 /* ✅ IPC: 알림 열기/닫기 */
-ipcMain.handle("notify:openUpcoming", async (_evt, eventPayload) => {
-  const win = createNotifyWindow();
-  win.webContents.send("notify:cmd", { type: "show", event: eventPayload });
-  return true;
-});
+ ipcMain.handle("notify:openUpcoming", async (_evt, eventPayload) => {
+   const win = createNotifyWindow();
+   const payload = { type: "show", event: eventPayload };
+   const send = () => {
+     try {
+       win.webContents.send("notify:cmd", payload);
+       win.showInactive?.(); // 포커스 뺏지 않고 표시
+     } catch (e) {
+       console.error("[MAIN] notify:openUpcoming send failed:", e);
+     }
+   };
+
+   // 아직 로딩 중이면 로딩 완료 후에 전송해서 IPC 유실 방지
+   if (win.webContents.isLoading()) {
+     win.webContents.once("did-finish-load", send);
+   } else {
+     send();
+   }
+   return true;
+ });
 ipcMain.handle("notify:closeUpcoming", async () => {
   if (notifyWindow && !notifyWindow.isDestroyed()) {
     notifyWindow.close();

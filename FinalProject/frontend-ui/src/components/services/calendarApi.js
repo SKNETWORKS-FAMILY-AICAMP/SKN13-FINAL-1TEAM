@@ -93,14 +93,12 @@ class calendarApi {
       console.log("[calendarApi.updateEvent] patchBody(raw):", filtered);
 
       const body = toServerEvent(filtered);
-      console.log("[calendarApi.updateEvent] patchBody(toServerEvent):", body);
 
       const res = await this.axios.put(`/${eventId}`, body);
       const data = handleResponse(res);
       const conv = toClientEvent(data);
 
-      console.log("[calendarApi.updateEvent] server resp(raw):", data);
-      console.log("[calendarApi.updateEvent] server resp(toClientEvent):", conv);
+
       return conv;
     } catch (err) {
       return handleError(err);

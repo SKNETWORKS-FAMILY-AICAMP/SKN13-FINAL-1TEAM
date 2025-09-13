@@ -28,6 +28,7 @@ const USER_KEY = "user";
 const TOKEN_KEY = "userToken";
 
 const TODAY_SHOWN_PREFIX = "shown:today:";
+const SESSION_SHOWN_PREFIX = "shown:session:";
 
 export default function App() {
     // ----- 기존 상태/로직 유지 -----
@@ -263,7 +264,10 @@ export default function App() {
                 localStorage.removeItem(TOKEN_KEY);
                 try {
                     const keys = Object.keys(sessionStorage);
-                    keys.forEach(k => { if (k.startsWith(TODAY_SHOWN_PREFIX)) sessionStorage.removeItem(k); });
+                    keys.forEach(k => {
+                        if (k.startsWith(TODAY_SHOWN_PREFIX)) sessionStorage.removeItem(k);
+                        if (k.startsWith(SESSION_SHOWN_PREFIX)) sessionStorage.removeItem(k); // ✅ 세션 1회 플래그도 제거
+                    });
                 } catch {}
             } catch {}
             setCurrentPage("login");
@@ -392,17 +396,18 @@ export default function App() {
 /* ---------------------------------------------
    오늘 해야할 일정 1회 알림
    - 로그인 직후 1회만 표시
-   - 닫고 나면 ‘재로그인 전까지’ 안 뜸: sessionStorage 플래그로 제어
    --------------------------------------------- */
 async function showTodayEventsOnce(user) {
     const userId = user?.id || user?.user_id || "anonymous";
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const flagKey = `${TODAY_SHOWN_PREFIX}:${userId}`;
-    if (sessionStorage.getItem(flagKey) === today) return; // 이미 오늘 한 번 띄움
+    const flagKey = `${SESSION_SHOWN_PREFIX}${userId}`;
+    if (sessionStorage.getItem(flagKey) === "done") return;
+    // 로컬(PC 시간 = 한국시간) 기준 오늘 00:00 ~ 23:59:59.999
+    const startLocal = new Date();
+    startLocal.setHours(0, 0, 0, 0);
+    const endLocal = new Date(startLocal.getTime() + 24 * 60 * 60 * 1000 - 1);
 
-    // 금일 00:00 ~ 23:59:59 범위
-    const start = new Date(`${today}T00:00:00`);
-    const end   = new Date(`${today}T23:59:59`);
+    const start = startLocal.toISOString();
+    const end   = endLocal.toISOString();
     let events = [];
     try {
         events = await calendarApi.getEvents({ start, end });
@@ -411,8 +416,16 @@ async function showTodayEventsOnce(user) {
         return;
     }
     if (!Array.isArray(events) || events.length === 0) {
-        // 할 일이 없으면 표시하지 않음
-        sessionStorage.setItem(flagKey, today); // 그래도 오늘은 표시 완료로 처리(중복 방지)
+        // 일정이 없으면 "오늘 일정이 없습니다." 팝업 출력
+        const todayKey = startLocal.toLocaleDateString("sv-SE"); // YYYY-MM-DD
+        window.notify?.openUpcoming?.({
+            id: `todayEvents:${todayKey}:${Date.now()}`,
+            title: "오늘 해야 할 일정",
+            description: "오늘 일정이 없습니다.",
+            start,
+            end,
+            reminder_minutes_before: null,
+        });
         return;
     }
 
@@ -442,15 +455,16 @@ async function showTodayEventsOnce(user) {
    }).join("\n\n");
 
     // 하나의 커스텀 이벤트 payload로 notify 창 열기
+    const todayKey = startLocal.toLocaleDateString("sv-SE");
     window.notify?.openUpcoming?.({
-        id: `todayEvents:${today}`,
+        id: `todayEvents:${todayKey}:${Date.now()}`,
         title: "오늘 해야 할 일정",
         description: lines,
-        start: start.toISOString(),
-        end: end.toISOString(),
+        start,
+        end,
         reminder_minutes_before: null, // 일반 알림과 구분(시계열 트리거 아님)
     });
 
-    // 닫고 나면 재로그인 전까지 안 뜨게 – 오늘자 플래그 설정
-    sessionStorage.setItem(flagKey, today);
+    // 이번 세션에서는 다시 안 뜨도록 플래그 저장
+    sessionStorage.setItem(flagKey, "done");
 }

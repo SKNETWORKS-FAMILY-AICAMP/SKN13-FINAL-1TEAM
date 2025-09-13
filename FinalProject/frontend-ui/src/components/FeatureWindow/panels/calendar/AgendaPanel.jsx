@@ -8,9 +8,10 @@ import {
   timeRangeLabel,
   dateRangeLabelShort, 
   buildLeftLines,  
-  ellipsis, 
+  ellipsis,
+  filterEventsByRange, 
 } from "./agendaUtils";
-import calendarApi from "../../../services/calendarApi.js";
+// import calendarApi from "../../../services/calendarApi.js";
 import { EVENT_TYPES } from "./calendarConstants";
 // import { format } from "date-fns";
 // import { ko } from "date-fns/locale";
@@ -55,36 +56,15 @@ export default function AgendaPanel({
 
 
   const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
+  // ✅ 상위에서 내려준 events가 바뀌거나 탭/날짜 범위가 바뀌면 즉시 필터링
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const [start, end] = range;
-        const data = await calendarApi.getEvents({ start, end });
-        if (!alive) return;
-        setList(
-          (data ?? [])
-            .map(normalizeEvent)
-            .sort((a, b) => {
-              const s = a.start - b.start;      // 시작일 오름차순
-              return s !== 0 ? s : (a.end - b.end); // 같은 날이면 종료가 빠른 것 먼저
-            })
-        );
-      } catch (err) {
-        if (!alive) return;
-        setError(err);
-        setList([]);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
-  }, [range]);
+    const [start, end] = range;
+    const filtered = filterEventsByRange(events, start, end)
+      .map(normalizeEvent)
+      .sort((a, b) => (a.start - b.start) || (a.end - b.end));
+    setList(filtered);
+  }, [events, range]);
 
   return (
     <aside className="bg-white rounded-2xl shadow-sm border border-neutral-200 w-full h-[100%] overflow-hidden flex flex-col">
@@ -93,16 +73,12 @@ export default function AgendaPanel({
         <TabBar tab={tab} onChange={setTab} />
       </div>
 
-      {/* 리스트 영역 */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 simple-scroll">
-        {loading ? (
-          <div className="text-sm text-neutral-500 px-1">불러오는 중…</div>
-        ) : error ? (
-          <div className="text-sm text-rose-600 px-1">일정 불러오기 실패</div>
-        ) : list.length === 0 ? (
-          <div className="text-sm text-neutral-500 px-1">일정이 없습니다.</div>
-        ) : (
-          <ul className="space-y-4">
+       {/* 리스트 영역 */}
+       <div className="flex-1 overflow-y-auto px-3 py-3 simple-scroll">
+         {list.length === 0 ? (
+           <div className="text-sm text-neutral-500 px-1">일정이 없습니다.</div>
+         ) : (
+           <ul className="space-y-4">
             {list.map((ev) => (
               <MonthlyRow
                 key={ev.id}
@@ -111,10 +87,9 @@ export default function AgendaPanel({
                 onJumpToDate={onJumpToDate}
               />
             ))}
-          </ul>
-        )}
-
-      </div>
+           </ul>
+         )}
+       </div>
     </aside>
   );
 }
