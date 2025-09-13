@@ -498,7 +498,7 @@ class DocumentSearchAgent:
                 "source": "s3"
             }
             
-            # 상태 업데이트 - 편집창에 문서 전송
+            # 상태 업데이트 - 편집창에 문서 전송 (프론트엔드에서 자동 처리)
             return {
                 "send_to_editor": True,
                 "selected_document": document_for_editor,
