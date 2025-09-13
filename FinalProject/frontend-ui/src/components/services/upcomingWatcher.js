@@ -112,8 +112,11 @@ export function startUpcomingWatcher() {
   let alignTimeout = null;
   let disposed = false;
 
+  let inFlight = false; // ← 추가: 진행 중 여부
   const tick = async () => {
     if (disposed) return;
+    if (inFlight) { console.debug("[upcoming] tick skipped (in-flight)"); return; }
+    inFlight = true;
     try {
       // 현재 시각 기준 앞으로 1시간 범위만 조회
       const start = new Date();
@@ -175,6 +178,8 @@ export function startUpcomingWatcher() {
       }
     } catch (err) {
       console.warn("[upcomingWatcher] tick error", err);
+    } finally {
+      inFlight = false; // ← 추가: 끝나면 해제
     }
   };
 
@@ -186,9 +191,9 @@ export function startUpcomingWatcher() {
     const now = new Date();
     const ms = (5 - (now.getMinutes() % 5)) * 60 * 1000 - now.getSeconds() * 1000 - now.getMilliseconds();
     console.debug("[upcoming] align next tick in", ms, "ms");
-    alignTimeout = setTimeout(() => {
-      tick();
-      timer = setInterval(tick, 5 * 60 * 1000);
+    alignTimeout = setTimeout(async () => {
+      await tick(); // ← 첫 aligned tick 완료를 기다림
+      timer = setInterval(tick, 5 * 60 * 1000)
       console.debug("[upcoming] interval set: every 5m");
     }, Math.max(ms, 0));
   };
