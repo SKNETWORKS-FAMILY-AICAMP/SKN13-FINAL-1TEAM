@@ -96,10 +96,10 @@ class DocumentSearchAgent:
                             # 도구 실행 및 결과 저장
                             result = tool_function.invoke(tool_args)
                             
-                            # 개선된 하이브리드 검색 도구 특별 처리
-                            if tool_name == "enhanced_hybrid_search_tool":
+                            # 하이브리드 검색 도구들 특별 처리 (enhanced와 기본 hybrid 모두)
+                            if tool_name in ["enhanced_hybrid_search_tool", "hybrid_document_search_tool"]:
                                 documents = result.get('found_documents', [])
-                                print(f"🔍 [DEBUG] enhanced_hybrid_search_tool 결과: {len(documents)}개 문서 발견")
+                                print(f"🔍 [DEBUG] {tool_name} 결과: {len(documents)}개 문서 발견")
                                 if documents:
                                     print(f"🔍 [DEBUG] 사용자 쿼리: '{user_query}'")
                                     
@@ -120,6 +120,17 @@ class DocumentSearchAgent:
                                             auto_result = self._auto_open_document_in_editor(first_doc, user_query)
                                             print(f"🔍 [DEBUG] 자동 열기 결과: {auto_result}")
                                             search_results.update(auto_result)
+
+                                            # 자동 열기 실패한 경우에만 버튼 표시 로직 진행
+                                            if not auto_result.get("auto_open_success", False):
+                                                print(f"🔍 [DEBUG] 자동 열기 실패 - 다운로드 버튼 표시")
+                                                # 편집창 지원하지만 자동 열기 실패한 경우 다운로드 버튼 표시
+                                                document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
+                                                search_results["document_selection"] = document_selection_data["selection_data"]
+                                                search_results["action"] = "show_document_buttons"
+                                                search_results["search_summary"] = f"문서 로드에 실패했습니다. 아래 버튼을 클릭해 주세요."
+                                            else:
+                                                print(f"🔍 [DEBUG] 자동 열기 성공 - 버튼 표시 생략")
                                         else:
                                             print(f"🔍 [DEBUG] 지원하지 않는 파일 - 다운로드 버튼 표시")
                                             # 편집창 지원하지 않는 파일이면 다운로드 버튼 표시
@@ -218,25 +229,33 @@ class DocumentSearchAgent:
                 success=bool(search_results),
                 data=search_results
             )
-            
+
             # 6. 워크플로우 단계 업데이트
             AgentStateHelper.set_workflow_step(state, WorkflowStep.SEARCH_COMPLETED)
-            
+
             print(f"--- DocumentSearchAgent: Search completed successfully ---")
-            
+
             # search_results에 action과 document_selection이 있으면 반환에 포함
             result = {
                 "messages": messages,
                 "workflow_step": WorkflowStep.SEARCH_COMPLETED
             }
-            
-            if search_results.get("action") == "show_document_buttons":
+
+            # 에디터 자동 열기 데이터가 있으면 우선적으로 처리
+            if search_results.get("send_to_editor", False):
+                result["send_to_editor"] = search_results["send_to_editor"]
+                result["selected_document"] = search_results.get("selected_document")
+                result["workflow_complete"] = True  # 자동 열기 성공 시 워크플로 완료
+                if search_results.get("search_summary"):
+                    result["final_answer"] = search_results["search_summary"]
+                print(f"📄 [DocumentSearchAgent] 에디터 자동 열기 데이터 설정됨: {search_results.get('selected_document', {}).get('filename', 'Unknown')}")
+            elif search_results.get("action") == "show_document_buttons":
                 result["action"] = search_results["action"]
                 result["document_selection"] = search_results["document_selection"]
                 if search_results.get("final_answer"):
                     result["final_answer"] = search_results["final_answer"]
                 print(f"📋 [DocumentSearchAgent] 다운로드 버튼 데이터 생성됨: {search_results['document_selection']}")
-            
+
             return result
             
         except Exception as e:
