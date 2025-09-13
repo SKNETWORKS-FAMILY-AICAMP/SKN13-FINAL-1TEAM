@@ -127,7 +127,7 @@ function toDate({ year, month, day, time }) {
   return new Date(Number(year), Number(month) - 1, Number(day), Number(hh), Number(mm), 0, 0);
 }
 
-function buildEventPayload({ title, desc, startDate, endDate, type, allDay }) {
+function buildEventPayload({ title, desc, startDate, endDate, type, allDay, reminderFlag }) {
   return {
     title: title.trim(),
     description: desc.trim(),
@@ -135,6 +135,7 @@ function buildEventPayload({ title, desc, startDate, endDate, type, allDay }) {
     end: endDate,
     type,
     allDay,
+    reminder_minutes_before: Number(reminderFlag),
   };
 }
 
@@ -163,6 +164,7 @@ export default function CreateorEditEventModal({
   const [desc, setDesc] = useState("");
   const [type, setType] = useState("meeting");
   const [allDay, setAllDay] = useState(false);
+  const [reminderFlag, setReminderFlag] = useState(-1);
 
   const [start, setStart] = useState({
     year: String(base.getFullYear()),
@@ -193,6 +195,8 @@ export default function CreateorEditEventModal({
       setDesc(editEvent.description ?? "");
       setType(colorToType(editEvent.color) ?? "etc");
       setAllDay(alld);
+      const rmb = Number(editEvent.reminder_minutes_before ?? -1);
+      setReminderFlag(rmb > 0 ? 1 : -1);
 
       setStart({
         year: String(s.getFullYear()),
@@ -212,6 +216,7 @@ export default function CreateorEditEventModal({
       setDesc("");
       setType("meeting");
       setAllDay(false);
+      setReminderFlag(-1)
       const b = defaultDate ?? APP_START;
       const endBase = new Date(b.getTime() + 30 * 60 * 1000);
       setStart({
@@ -286,7 +291,7 @@ export default function CreateorEditEventModal({
   const timeBox = "w-[104px]";
 
   const getEventPayload = () =>
-    buildEventPayload({ title, desc, startDate, endDate, type, allDay });
+    buildEventPayload({ title, desc, startDate, endDate, type, allDay, reminderFlag});
 
   function handleSubmit() {
     const payload = getEventPayload();
@@ -379,17 +384,27 @@ export default function CreateorEditEventModal({
           </div>
         </div>
 
-        {/* 하루종일 */}
-        <div className="flex items-center gap-2">
-          <input
-            id="toggle-allDay"
-            type="checkbox"
-            checked={allDay}
-            onChange={(e) => setAllDay(e.target.checked)}
-            className="h-4 w-4"
-          />
-          <label htmlFor="toggle-allDay" className="text-sm text-gray-800">
-            하루종일
+        {/* 하루종일 + 알림 */}
+        <div className="flex items-center gap-6">
+          <label className="flex items-center gap-2">
+            <input
+              id="toggle-allDay"
+              type="checkbox"
+              checked={allDay}
+              onChange={(e) => setAllDay(e.target.checked)}
+              className="h-4 w-4"
+            />
+            <span className="text-sm text-gray-800">하루종일</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              id="toggle-reminder"
+              type="checkbox"
+              checked={reminderFlag > 0}
+              onChange={(e) => setReminderFlag(e.target.checked ? 1 : -1)}
+              className="h-4 w-4"
+            />
+            <span className="text-sm text-gray-800">알림</span>
           </label>
         </div>
 

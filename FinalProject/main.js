@@ -69,6 +69,7 @@ const {
   nativeImage,
   dialog,
   globalShortcut,
+  screen,
 } = require("electron");
 
 // 윈도우 작업표시줄/트레이 아이콘 정상 표시용
@@ -292,7 +293,8 @@ process.on("unhandledRejection", (reason) => {
 let mainWindow = null;     // 로그인
 let featureWindow = null;  // 기능부(사원)
 let adminWindow = null;    // 관리자
-let chatWindow = null;     // ✅ 챗봇(사원)
+let chatWindow = null;     // 챗봇(사원)
+let notifyWindow = null;   // 알림 전용 창
 
 let tray = null;
 let currentRole = null;    // "employee" | "admin" | null
@@ -331,6 +333,37 @@ function wireWindowDebugEvents(win, label) {
     console.error(`[WIN:${label}] did-fail-load`, { code, desc, url });
   });
   win.on("closed", () => console.log(`[WIN:${label}] closed (id=${win.id})`));
+}
+
+/* ✅ 알림 전용 창 (우하단, 프레임리스, 반투명) */
+function createNotifyWindow() {
+  if (notifyWindow && !notifyWindow.isDestroyed()) return notifyWindow;
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const W = 420, H = 360, M = 16;
+
+  notifyWindow = new BrowserWindow({
+    width: W, height: H,
+    x: Math.max(0, width - W - M),
+    y: Math.max(0, height - H - M),
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: "#00000000",
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  notifyWindow.loadURL(`${INDEX_URL}#/notify`);
+  notifyWindow.once("ready-to-show", () => notifyWindow.showInactive());
+  notifyWindow.on("closed", () => { notifyWindow = null; });
+  return notifyWindow;
 }
 
 // DevTools 토글 헬퍼
@@ -737,6 +770,19 @@ ipcMain.handle("window:maximize-toggle", (event) => {
 });
 ipcMain.handle("window:close", (event) => {
   getSenderWindow(event)?.close();
+  return true;
+});
+
+/* ✅ IPC: 알림 열기/닫기 */
+ipcMain.handle("notify:openUpcoming", async (_evt, eventPayload) => {
+  const win = createNotifyWindow();
+  win.webContents.send("notify:cmd", { type: "show", event: eventPayload });
+  return true;
+});
+ipcMain.handle("notify:closeUpcoming", async () => {
+  if (notifyWindow && !notifyWindow.isDestroyed()) {
+    notifyWindow.close();
+  }
   return true;
 });
 

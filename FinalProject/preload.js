@@ -150,8 +150,21 @@ contextBridge.exposeInMainWorld("auth", authAPI);
 contextBridge.exposeInMainWorld("fsBridge", fsBridge);
 contextBridge.exposeInMainWorld("s3Shared", s3SharedBridge);
 
+/* ✅ 알림 전용 브리지 (별도 창 열기/닫기 + 명령 수신) */
+const notifyAPI = {
+  openUpcoming: (event) => ipcRenderer.invoke("notify:openUpcoming", event),
+  closeUpcoming: () => ipcRenderer.invoke("notify:closeUpcoming"),
+  onCommand: (cb) => {
+    const handler = (_evt, payload) => cb?.(payload);
+    ipcRenderer.on("notify:cmd", handler);
+    return () => ipcRenderer.removeListener("notify:cmd", handler);
+  },
+};
+contextBridge.exposeInMainWorld("notify", notifyAPI);
+
 Object.freeze(electronAPI);
 Object.freeze(electronAPI.ipcRenderer);
 Object.freeze(authAPI);
 Object.freeze(fsBridge);
 Object.freeze(s3SharedBridge);
+Object.freeze(notifyAPI);
