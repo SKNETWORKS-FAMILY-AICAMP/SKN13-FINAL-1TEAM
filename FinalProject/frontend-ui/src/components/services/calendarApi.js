@@ -42,6 +42,7 @@ const toClientEvent = (payload = {}) => {
     out.allDay = out.all_day;
     delete out.all_day;
   }
+  if ("reminder_minutes_before" in out) out.reminder_minutes_before = Number(out.reminder_minutes_before ?? 0);
   return out;
 };
 
