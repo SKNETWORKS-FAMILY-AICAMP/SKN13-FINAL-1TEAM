@@ -178,6 +178,16 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         # Update workflow state based on completed step
         updates = {}
         
+        # ALWAYS preserve critical state data first
+        print(f"--- 📋 Workflow tracker: 현재 상태 전체 보존 시작 ---")
+        
+        # Preserve ALL existing state data to prevent loss during transitions
+        for key in ['send_to_editor', 'selected_document', 'editor_file_name', 'editor_file_content', 
+                   'action', 'document_selection', 'final_answer', 'workflow_results', 'messages']:
+            if state.get(key):
+                updates[key] = state.get(key)
+                print(f"--- 📋 Preserving {key}: {type(state.get(key))}")
+        
         if current_step == WorkflowStep.SEARCH_REQUESTED:
             updates['workflow_step'] = WorkflowStep.SEARCH_COMPLETED
         elif current_step == WorkflowStep.EDIT_REQUESTED:
@@ -195,27 +205,15 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
             updates['workflow_complete'] = workflow_complete
             print(f"--- 📋 Workflow tracker: workflow_complete={workflow_complete} 플래그 보존됨 ---")
         
-        # DocumentSearchAgent의 특별한 데이터 보존 (다운로드 버튼 등)
-        if state.get('action') == 'show_document_buttons':
-            updates['action'] = state.get('action')
-            updates['document_selection'] = state.get('document_selection')
-            updates['final_answer'] = state.get('final_answer')
-            print(f"--- 📋 Workflow tracker: 다운로드 버튼 데이터 보존됨 ---")
-        
-        # Auto-open editor data preservation
+        # Special debugging for editor data
         if state.get('send_to_editor'):
-            updates['send_to_editor'] = state.get('send_to_editor')
-            updates['editor_file_name'] = state.get('editor_file_name')
-            updates['editor_file_content'] = state.get('editor_file_content')
-            updates['selected_document'] = state.get('selected_document')
-            print(f"--- 📋 Workflow tracker: 에디터 자동 열기 데이터 보존됨 ---")
-        
-        # If workflow is complete and we have editor data, ensure it's properly formatted
-        if workflow_complete and state.get('send_to_editor'):
-            print(f"--- 🎯 WORKFLOW COMPLETE + EDITOR DATA: 최종 상태 준비 중 ---")
-            # Ensure all required fields are present for successful IPC transmission
-            if not updates.get('selected_document') and state.get('selected_document'):
+            print(f"--- 🎯 CRITICAL: send_to_editor 데이터 감지됨! ---")
+            print(f"--- 🎯 selected_document: {state.get('selected_document') is not None}")
+            print(f"--- 🎯 workflow_complete: {workflow_complete}")
+            updates['send_to_editor'] = True  # Ensure this is always preserved
+            if state.get('selected_document'):
                 updates['selected_document'] = state.get('selected_document')
+                print(f"--- 🎯 문서 데이터 확실히 보존됨: {state.get('selected_document', {}).get('filename', 'Unknown')}")
             
         print(f"--- Workflow tracker updates: {updates} ---")
         return updates
