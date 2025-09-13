@@ -453,6 +453,7 @@ class DocumentSearchAgent:
     
     def _should_create_document_draft(self, user_query: str) -> bool:
         """사용자 쿼리에서 문서 초안 생성 요청인지 확인"""
+        print(f"=== [DEBUG] 문서 초안 생성 요청 확인 ===")
         print(f"🔍 [DEBUG] _should_create_document_draft 호출됨. 쿼리: '{user_query}'")
 
         draft_patterns = [
@@ -463,14 +464,20 @@ class DocumentSearchAgent:
             r'.*(이전.*년도|과거.*문서).*(참고|토대).*'
         ]
 
+        print(f"🔍 [DEBUG] 총 {len(draft_patterns)}개의 패턴으로 검사 시작...")
+
         for i, pattern in enumerate(draft_patterns):
             match = re.search(pattern, user_query, re.IGNORECASE)
-            print(f"🔍 [DEBUG] 초안생성 패턴 {i+1}: {pattern} -> 매치: {bool(match)}")
+            print(f"🔍 [DEBUG] 초안생성 패턴 {i+1}: {pattern}")
+            print(f"🔍 [DEBUG] -> 매치 결과: {bool(match)}")
             if match:
-                print(f"🔍 [DEBUG] 매치된 부분: '{match.group()}'")
+                print(f"🔍 [DEBUG] -> 매치된 부분: '{match.group()}'")
+                print(f"✅ [DEBUG] 문서 초안 생성 요청으로 판단됨!")
+                print(f"=== [DEBUG] 문서 초안 생성 요청 확인 완료 ===")
                 return True
 
-        print(f"🔍 [DEBUG] 문서 초안 생성 패턴 매치 실패")
+        print(f"❌ [DEBUG] 문서 초안 생성 패턴 매치 실패")
+        print(f"=== [DEBUG] 문서 초안 생성 요청 확인 완료 ===")
         return False
 
     def _should_auto_open_editor(self, user_query: str) -> bool:
@@ -513,7 +520,12 @@ class DocumentSearchAgent:
         from openai import OpenAI
 
         try:
+            print(f"=== [DRAFT] 문서 초안 생성 프로세스 시작 ===")
             print(f"📝 [DocumentSearchAgent] 문서 초안 생성 시작: {len(documents)}개 문서 참고")
+            print(f"📝 [DEBUG] 사용자 쿼리: '{user_query}'")
+
+            for i, doc in enumerate(documents):
+                print(f"📄 [DEBUG] 참고 문서 {i+1}: {doc.get('filename', 'Unknown')} (path: {doc.get('path', 'Unknown')})")
 
             # S3 클라이언트 설정
             config = Config(
@@ -582,12 +594,16 @@ class DocumentSearchAgent:
             )
 
             draft_content = response.choices[0].message.content
+            print(f"📝 [DEBUG] OpenAI 응답 길이: {len(draft_content)} 문자")
+            print(f"📝 [DEBUG] OpenAI 응답 첫 200자: {draft_content[:200]}...")
 
             # HTML 형식으로 변환
             draft_html = self._convert_text_to_html(draft_content)
+            print(f"📝 [DEBUG] HTML 변환 완료: {len(draft_html)} 문자")
 
             # 새 문서의 파일명 생성
             draft_filename = self._generate_draft_filename(reference_documents, target_year)
+            print(f"📝 [DEBUG] 생성된 파일명: {draft_filename}")
 
             print(f"📝 [DocumentSearchAgent] 초안 생성 완료: {len(draft_content)} 문자")
 
@@ -599,11 +615,24 @@ class DocumentSearchAgent:
                 "source": "generated"
             }
 
-            return {
+            print(f"📝 [DEBUG] 편집창 전송용 문서 데이터:")
+            print(f"  - filename: {document_for_editor['filename']}")
+            print(f"  - content 길이: {len(document_for_editor['content'])}")
+            print(f"  - filePath: {document_for_editor['filePath']}")
+            print(f"  - source: {document_for_editor['source']}")
+
+            result = {
                 "action": "open_document_in_editor",
                 "document": document_for_editor,
                 "message": f"📝 {draft_filename} 초안이 생성되었습니다. ({len(reference_documents)}개 문서 참고)"
             }
+
+            print(f"📝 [DEBUG] 반환할 result:")
+            print(f"  - action: {result['action']}")
+            print(f"  - message: {result['message']}")
+            print(f"=== [DRAFT] 문서 초안 생성 프로세스 완료 ===")
+
+            return result
 
         except Exception as e:
             print(f"❌ [DocumentSearchAgent] 문서 초안 생성 실패: {e}")
