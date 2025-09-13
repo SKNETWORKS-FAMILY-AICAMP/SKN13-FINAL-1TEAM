@@ -207,8 +207,16 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
             updates['send_to_editor'] = state.get('send_to_editor')
             updates['editor_file_name'] = state.get('editor_file_name')
             updates['editor_file_content'] = state.get('editor_file_content')
+            updates['selected_document'] = state.get('selected_document')
             print(f"--- 📋 Workflow tracker: 에디터 자동 열기 데이터 보존됨 ---")
         
+        # If workflow is complete and we have editor data, ensure it's properly formatted
+        if workflow_complete and state.get('send_to_editor'):
+            print(f"--- 🎯 WORKFLOW COMPLETE + EDITOR DATA: 최종 상태 준비 중 ---")
+            # Ensure all required fields are present for successful IPC transmission
+            if not updates.get('selected_document') and state.get('selected_document'):
+                updates['selected_document'] = state.get('selected_document')
+            
         print(f"--- Workflow tracker updates: {updates} ---")
         return updates
     

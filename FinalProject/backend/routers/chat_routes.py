@@ -282,6 +282,36 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                 tool_call_id = f"req_doc_{uuid.uuid4()}"
                 yield f"data: {json.dumps({'needs_document_content': True, 'agent_context': {'tool_call_id': tool_call_id}}, ensure_ascii=False)}\n\n"
                 
+        # 'workflow_tracker' 노드가 종료되었는지 확인하고 워크플로 완료 처리
+        if kind == "on_chain_end" and name == "workflow_tracker":
+            node_output = event.get("data", {}).get("output", {})
+            print(f"🔍 [DEBUG] workflow_tracker 노드 완료: {node_output}")
+            
+            # 워크플로가 완료되었고 에디터 자동 열기 데이터가 있는지 확인
+            if node_output and node_output.get('workflow_complete', False) and node_output.get('send_to_editor', False):
+                selected_document = node_output.get('selected_document')
+                print(f"🔍 [DEBUG] workflow_tracker에서 워크플로 완료 + 에디터 데이터 감지!")
+                print(f"🔍 [DEBUG] selected_document 있음: {selected_document is not None}")
+                
+                if selected_document:
+                    print(f"🔍 [DEBUG] 문서편집창 IPC 전송 준비: {selected_document.get('filename', 'Unknown')}")
+                    # IPC 메시지 데이터 준비
+                    ipc_data = {
+                        "action": "open_document_in_editor",
+                        "document": {
+                            "filename": selected_document.get("filename", "문서"),
+                            "content": selected_document.get("content", ""),
+                            "filePath": selected_document.get("filePath", ""),
+                            "source": selected_document.get("source", "unknown")
+                        }
+                    }
+                    
+                    print(f"🔍 [DEBUG] IPC 데이터 전송: {json.dumps(ipc_data, ensure_ascii=False)[:200]}...")
+                    # IPC 메시지를 스트림으로 전송 (프론트엔드에서 처리)
+                    yield f"data: {json.dumps(ipc_data, ensure_ascii=False)}\n\n"
+                    print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
+                else:
+                    print(f"🔍 [DEBUG] selected_document가 None입니다!")
 
         # 'route_question' 체인이 종료되었고, 'request_document'가 트리거되지 않았다면 버퍼된 LLM 출력을 yield
         if kind == "on_chain_end" and name == "route_question":
