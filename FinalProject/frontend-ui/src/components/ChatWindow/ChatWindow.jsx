@@ -239,6 +239,30 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
       },
       onDocumentButtons: (documentSelection, content) => {
         console.log('📄 [ChatWindow] 문서 버튼 데이터 수신:', documentSelection);
+
+        // auto_open_success가 true이면 첫 번째 문서를 자동으로 열기
+        if (documentSelection.auto_open_success && documentSelection.selected_document) {
+          console.log('📄 [ChatWindow] 자동 문서 열기 감지, IPC 전송 시도');
+
+          const ipc_data = {
+            action: "open_document_in_editor",
+            document: documentSelection.selected_document
+          };
+
+          // IPC를 통해 문서편집창에 문서 전송
+          if (window.electron?.openDocumentInEditor) {
+            window.electron.openDocumentInEditor({ ipc_data })
+              .then(result => {
+                console.log('✅ [ChatWindow] 자동 문서 열기 성공:', result);
+              })
+              .catch(error => {
+                console.error('❌ [ChatWindow] 자동 문서 열기 실패:', error);
+              });
+          } else {
+            console.error('❌ [ChatWindow] IPC 통신 함수를 찾을 수 없습니다');
+          }
+        }
+
         // 문서 선택 데이터를 포함한 메시지 추가
         appendMessage({
           role: 'assistant',
