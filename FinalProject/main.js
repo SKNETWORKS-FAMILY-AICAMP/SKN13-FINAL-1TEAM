@@ -790,6 +790,26 @@ ipcMain.handle("notify:closeUpcoming", async () => {
  *   S3 및 FS Bridge (원본 유지 + 기본 경로만 고정)
  * ==========================================================================*/
 // 렌더러에서 invoke 시 { fileName, token } 형태로 넘겨주세요.
+// 문서편집창에 문서 열기 IPC 핸들러
+ipcMain.handle("open-document-in-editor", async (_evt, { ipc_data }) => {
+  console.log("📄 [IPC] open-document-in-editor 요청 받음:", ipc_data);
+
+  try {
+    // 기능부 창이 있는지 확인
+    if (featureWindow && !featureWindow.isDestroyed()) {
+      console.log("📄 [IPC] 기능부 창으로 문서 데이터 전송");
+      featureWindow.webContents.send("document:openFromChat", ipc_data);
+      return { success: true, message: "문서를 편집창에서 열었습니다." };
+    } else {
+      console.log("❌ [IPC] 기능부 창이 없어서 문서를 열 수 없습니다.");
+      return { success: false, message: "문서편집창이 열려있지 않습니다." };
+    }
+  } catch (error) {
+    console.error("❌ [IPC] 문서 열기 중 오류:", error);
+    return { success: false, message: `문서 열기 중 오류: ${error.message}` };
+  }
+});
+
 ipcMain.handle("get-s3-upload-url", async (_evt, { fileName, token, contentType, pathHint }) => {
   const fetch = require("node-fetch");
 

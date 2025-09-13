@@ -38,11 +38,23 @@ export default function DocumentButtons({ documentSelection, sessionId, onDocume
 
         if (result.success && result.ipc_data) {
           // IPC를 통해 문서편집창에 문서 전송
-          if (window.electron?.onDocumentOpenFromChat) {
-            window.electron.onDocumentOpenFromChat(result.ipc_data.document);
-            console.log('📄 문서편집창에 문서 전송 완료');
+          console.log('📄 [FRONTEND] IPC 데이터 받음:', result.ipc_data);
+
+          if (window.electron?.openDocumentInEditor) {
+            try {
+              const ipcResult = await window.electron.openDocumentInEditor({ ipc_data: result.ipc_data });
+              console.log('📄 [FRONTEND] IPC 전송 결과:', ipcResult);
+
+              if (ipcResult.success) {
+                console.log('✅ 문서편집창에 문서 전송 완료');
+              } else {
+                console.error('❌ IPC 전송 실패:', ipcResult.message);
+              }
+            } catch (ipcError) {
+              console.error('❌ IPC 호출 오류:', ipcError);
+            }
           } else {
-            console.error('❌ IPC 통신 함수를 찾을 수 없습니다');
+            console.error('❌ IPC 통신 함수(openDocumentInEditor)를 찾을 수 없습니다');
           }
 
           // 콜백 호출 (성공 메시지 표시)
