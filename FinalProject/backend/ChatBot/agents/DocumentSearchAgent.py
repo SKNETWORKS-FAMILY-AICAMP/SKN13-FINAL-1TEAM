@@ -100,13 +100,24 @@ class DocumentSearchAgent:
                             if tool_name == "enhanced_hybrid_search_tool":
                                 documents = result.get('found_documents', [])
                                 if documents:
-                                    # 클릭 가능한 문서 선택지 생성
-                                    document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
-                                    
-                                    # 구조화된 데이터 (프론트엔드용)
-                                    search_results["document_selection"] = document_selection_data["selection_data"]
-                                    search_results["action"] = "show_document_buttons"  # 프론트엔드 액션 플래그
-                                    search_results["search_summary"] = f"{len(documents)}개의 관련 문서를 찾았습니다."
+                                    # "편집창에 띄워줘" 요청인지 확인
+                                    if self._should_auto_open_editor(user_query):
+                                        # 첫 번째 문서를 자동으로 편집창에 열기
+                                        first_doc = documents[0]
+                                        if self._is_editor_supported_file(first_doc):
+                                            search_results.update(self._auto_open_document_in_editor(first_doc, user_query))
+                                        else:
+                                            # 편집창 지원하지 않는 파일이면 다운로드 버튼 표시
+                                            document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
+                                            search_results["document_selection"] = document_selection_data["selection_data"]
+                                            search_results["action"] = "show_document_buttons"
+                                            search_results["search_summary"] = f"편집창에서 지원하지 않는 파일입니다. 다운로드하여 확인해주세요."
+                                    else:
+                                        # 일반 검색 요청 - 문서 버튼 표시
+                                        document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
+                                        search_results["document_selection"] = document_selection_data["selection_data"]
+                                        search_results["action"] = "show_document_buttons"
+                                        search_results["search_summary"] = f"{len(documents)}개의 관련 문서를 찾았습니다."
                             
                             # 다운로드 링크 도구 특별 처리 - 다운로드 버튼 생성
                             elif tool_name == "get_presigned_download_url":
@@ -393,6 +404,92 @@ class DocumentSearchAgent:
     def get_available_tools(self) -> List[str]:
         """사용 가능한 도구 목록 반환"""
         return [tool.name for tool in self.tools]
+    
+    def _should_auto_open_editor(self, user_query: str) -> bool:
+        """사용자 쿼리에서 편집창 자동 열기 요청인지 확인"""
+        import re
+        editor_patterns = [
+            r'.*(문서편집창|편집창|에디터).*(띄워|열어|보여).*줘',
+            r'.*(편집창|에디터).*(띄워|열어|오픈).*',
+            r'.*편집창.*에.*띄워.*',
+            r'.*편집창.*에서.*열.*'
+        ]
+        
+        for pattern in editor_patterns:
+            if re.search(pattern, user_query, re.IGNORECASE):
+                return True
+        return False
+    
+    def _is_editor_supported_file(self, document: Dict[str, Any]) -> bool:
+        """문서편집창에서 지원하는 파일 형식인지 확인"""
+        filename = document.get('filename', '')
+        supported_extensions = ['.md', '.txt', '.html', '.docx']
+        
+        for ext in supported_extensions:
+            if filename.lower().endswith(ext):
+                return True
+        return False
+    
+    def _auto_open_document_in_editor(self, document: Dict[str, Any], user_query: str) -> Dict[str, Any]:
+        """문서를 자동으로 편집창에 열기"""
+        import asyncio
+        import boto3
+        import os
+        from botocore.config import Config
+        
+        try:
+            # S3에서 문서 내용 로드
+            s3_key = document.get('path', '')
+            filename = document.get('filename', '알 수 없는 파일')
+            
+            # S3 클라이언트 설정
+            config = Config(
+                region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
+                retries={'max_attempts': 3, 'mode': 'standard'},
+                s3={'addressing_style': 'virtual'}
+            )
+            
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_REGION', 'ap-northeast-2'),
+                config=config
+            )
+            
+            bucket_name = os.getenv('AWS_S3_BUCKET', 'clickabbbucket')
+            
+            print(f"📄 [DocumentSearchAgent] S3에서 문서 자동 로드: {s3_key}")
+            
+            # S3에서 파일 내용 다운로드
+            response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+            content = response['Body'].read().decode('utf-8')
+            
+            print(f"📄 [DocumentSearchAgent] 문서 자동 로드 성공: {len(content)} 문자")
+            
+            # 편집창에 전송할 문서 데이터 준비
+            document_for_editor = {
+                "filename": filename,
+                "content": content,
+                "filePath": s3_key,
+                "source": "s3"
+            }
+            
+            # 상태 업데이트 - 편집창에 문서 전송
+            return {
+                "send_to_editor": True,
+                "selected_document": document_for_editor,
+                "auto_open_success": True,
+                "search_summary": f"✅ **{filename}** 문서를 편집창에서 열었습니다!"
+            }
+            
+        except Exception as e:
+            print(f"❌ [DocumentSearchAgent] 문서 자동 로드 실패: {e}")
+            # 실패 시 일반 버튼 표시로 폴백
+            return {
+                "auto_open_success": False,
+                "search_summary": f"문서 로드에 실패했습니다. 아래 버튼을 클릭해 주세요."
+            }
 
 
 # Legacy support - 기존 코드와의 호환성
