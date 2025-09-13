@@ -62,6 +62,12 @@ electronAPI.onDocumentOpenFromChat = (cb) => {
   return () => ipcRenderer.removeListener("document:openFromChat", handler);
 };
 
+/* ✅ (추가) 문서편집창에 문서 열기 IPC 호출 */
+electronAPI.openDocumentInEditor = (data) => {
+  console.log('📄 [PRELOAD] openDocumentInEditor 호출:', data);
+  return ipcRenderer.invoke("open-document-in-editor", data);
+};
+
 /* ✅ 로그아웃 전용 브리지 — 기본 스코프 'all' */
 const authAPI = {
   requestLogout: (scope = "all") => ipcRenderer.send("app:logout-request", scope),
