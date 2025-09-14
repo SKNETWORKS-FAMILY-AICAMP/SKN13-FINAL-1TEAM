@@ -156,6 +156,9 @@ def rule_based_intent_analysis(user_input: str) -> Dict[str, Any]:
             r'(어디|어떤).*?(있나|있어)$',
             r'(다운로드|링크).*?(주세요|줘)$',
             r'.*(문서편집창|편집부|편집창|에디터).*(띄워|열어|보여).*줘$',  # "문서편집창에 띄워줘" = 문서 검색 의도
+            r'.*?문서.*?찾아서.*?(종합|정리|보고서).*?(만들어|작성|생성)해?줘$',  # "문서를 찾아서 종합한 보고서 만들어줘"
+            r'.*?기준.*?문서.*?찾아서.*?(종합|정리|보고서).*?(만들어|작성|생성)해?줘$',  # "기준 문서를 찾아서 종합한 보고서"
+            r'\d+\).*?와.*?\d+\).*?문서.*?(종합|정리|보고서).*?(만들어|작성|생성)해?줘$',  # "1)A와 2)B 문서를 종합한 보고서"
         ],
         'draft': [  # 새로운 초안 생성 패턴
             r'(초안|draft).*?(작성|만들어|생성)해?줘$',
@@ -281,11 +284,16 @@ def llm_based_intent_analysis(user_input: str, state: AgentState) -> Dict[str, A
 User input: "{user_input}"
 
 **Classification Options:**
-1. SEARCH - If user wants to find, search, or retrieve documents
-2. DRAFT - If user wants to create a new document draft based on reference documents (especially with year like 2025, or "초안", "만들어줘")
+1. SEARCH - If user wants to find, search, retrieve documents, OR create reports/summaries by combining multiple found documents
+2. DRAFT - If user wants to create a new document draft based on reference documents (especially with year like 2025, or "초안")
 3. EDIT - If user wants to modify, edit, add content to existing documents
 4. MULTI_STEP - If user wants to search first then edit/modify the results
 5. REJECT - If user input is not work-related or cannot be processed
+
+**Important**: 
+- "찾아서 종합한 보고서" = SEARCH (find documents and synthesize them)
+- "1)A와 2)B 문서를 종합한 보고서" = SEARCH (find multiple documents and create synthesis report)
+- "문서를 찾아서 보고서 만들어줘" = SEARCH (search and synthesize)
 
 Respond with only ONE WORD: SEARCH, DRAFT, EDIT, MULTI_STEP, or REJECT"""
 
@@ -424,12 +432,13 @@ def _llm_fallback_route(state: AgentState, user_input: str) -> Literal["document
     system_prompt = """업무 전용 AI 어시스턴트 라우팅. 간결하게 판단하세요.
 
 **분류:**
-- 문서 검색 요청 → "DocumentSearchAgent"
+- 문서 검색 요청 (종합 보고서 포함) → "DocumentSearchAgent"
 - 문서 편집 요청 → "DocumentEditorAgent"  
 - 업무 외 요청 → "BusinessRejection"
 
 **예시:**
 - "엄준식이 작성한 문서 검색해줘" → DocumentSearchAgent
+- "1)대학교 학자금과 2)생활안정자금 문서를 찾아서 종합한 보고서" → DocumentSearchAgent
 - "문서에 내용 추가해줘" → DocumentEditorAgent
 - "안녕하세요" → BusinessRejection
 
