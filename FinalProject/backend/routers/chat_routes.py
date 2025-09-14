@@ -367,9 +367,32 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                             yield f"data: {json_data}\n\n"
                         except Exception as json_error:
                             print(f"❌ [DEBUG] JSON 직렬화 오류 (workflow_tracker): {json_error}")
-                            # 대용량 콘텐츠 처리: 청크 단위로 전송
-                            ipc_data['document']['content'] = f"[문서 로드 오류: {len(document_content)} 문자]"
-                            yield f"data: {json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+                            print(f"🔄 [DEBUG] 청크 전송으로 폴백 처리: {len(document_content)} 문자")
+                            # JSON 오류 시 청크 전송으로 폴백
+                            # 메타데이터 먼저 전송
+                            meta_data = {
+                                "action": "open_document_in_editor_chunked",
+                                "document_meta": {
+                                    "filename": selected_document.get("filename", "문서"),
+                                    "filePath": selected_document.get("filePath", ""),
+                                    "source": selected_document.get("source", "unknown"),
+                                    "total_chunks": (len(document_content) // 4000) + 1,
+                                    "content_length": len(document_content)
+                                }
+                            }
+                            yield f"data: {json.dumps(meta_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+                            
+                            # 콘텐츠를 청크 단위로 전송
+                            chunk_size = 4000
+                            for i in range(0, len(document_content), chunk_size):
+                                chunk = document_content[i:i+chunk_size]
+                                chunk_data = {
+                                    "action": "document_chunk",
+                                    "chunk_index": i // chunk_size,
+                                    "chunk_content": chunk,
+                                    "is_last": i + chunk_size >= len(document_content)
+                                }
+                                yield f"data: {json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
                     print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
                 else:
                     print(f"🔍 [DEBUG] selected_document가 None입니다!")

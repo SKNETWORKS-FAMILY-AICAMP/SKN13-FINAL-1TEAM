@@ -604,7 +604,7 @@ class DocumentSearchAgent:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
-                max_tokens=4000
+                max_tokens=8000  # 토큰 제한 증가
             )
 
             draft_content = response.choices[0].message.content
