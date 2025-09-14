@@ -56,20 +56,37 @@ class GreetingService:
             List[Dict]: 오늘의 일정 목록
         """
         try:
-            # 오늘 날짜 범위 설정 (00:00:00 ~ 23:59:59)
-            today = date.today()
-            today_start = datetime.combine(today, datetime.min.time())
-            today_end = datetime.combine(today, datetime.max.time())
+            # 한국 시간대 기준으로 오늘 날짜 범위 설정 (KST)
+            from datetime import timezone, timedelta
+            
+            # KST = UTC+9
+            kst = timezone(timedelta(hours=9))
+            
+            # 한국 시간 기준 오늘 날짜
+            today_kst = datetime.now(kst).date()
+            
+            # 한국 시간 기준 오늘 00:00:00 ~ 23:59:59 (UTC로 변환)
+            today_start_kst = datetime.combine(today_kst, datetime.min.time()).replace(tzinfo=kst)
+            today_end_kst = datetime.combine(today_kst, datetime.max.time()).replace(tzinfo=kst)
+            
+            # UTC로 변환
+            today_start_utc = today_start_kst.astimezone(timezone.utc).replace(tzinfo=None)
+            today_end_utc = today_end_kst.astimezone(timezone.utc).replace(tzinfo=None)
+            
+            print(f"[GreetingService] 한국 시간 오늘: {today_kst}")
+            print(f"[GreetingService] UTC 범위: {today_start_utc} ~ {today_end_utc}")
             
             # 사용자의 오늘 일정 조회
             events = db.query(Event).join(Calendar).filter(
                 and_(
                     Calendar.user_id == user_id,
-                    Event.start >= today_start,
-                    Event.start <= today_end,
+                    Event.start >= today_start_utc,
+                    Event.start <= today_end_utc,
                     Event.status == "confirmed"  # 확정된 일정만
                 )
             ).order_by(Event.start).all()
+            
+            print(f"[GreetingService] 조회된 일정 수: {len(events)}")
             
             # 일정 정보를 딕셔너리로 변환
             event_list = []
@@ -82,6 +99,7 @@ class GreetingService:
                     "description": event.description
                 }
                 event_list.append(event_info)
+                print(f"[GreetingService] 일정: {event.title}, 시작: {event.start}, 종일: {event.all_day}")
             
             return event_list
             
@@ -115,7 +133,17 @@ class GreetingService:
                 if event["all_day"]:
                     time_str = "종일"
                 else:
-                    time_str = start_time.strftime("%H:%M")
+                    # UTC 시간을 한국 시간으로 변환하여 표시
+                    from datetime import timezone, timedelta
+                    kst = timezone(timedelta(hours=9))
+                    if start_time.tzinfo is None:
+                        # timezone naive datetime을 UTC로 간주
+                        start_time_utc = start_time.replace(tzinfo=timezone.utc)
+                    else:
+                        start_time_utc = start_time
+                    
+                    start_time_kst = start_time_utc.astimezone(kst)
+                    time_str = start_time_kst.strftime("%H:%M")
                 
                 greeting += f"{i}) {title} ({time_str})\n"
             
