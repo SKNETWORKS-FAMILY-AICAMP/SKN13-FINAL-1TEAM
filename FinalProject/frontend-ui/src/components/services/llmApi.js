@@ -123,38 +123,59 @@ export function streamLLM({
               return;
             }
 
-            // Raw 데이터 디버깅 (액션이 포함된 경우만)
-            if (data.includes('open_document_in_editor')) {
-              console.log('🔍 SSE Raw 데이터 (액션 포함):', data);
-            }
+            // Raw 데이터 디버깅 - 모든 데이터를 로깅
+            console.log('🔍 [llmApi] SSE Raw 데이터:', data);
 
             try {
               const parsed = JSON.parse(data);
 
               // 디버깅을 위한 로그 추가 - 더 상세하게
-              console.log('🔍 SSE 데이터 파싱 성공:', Object.keys(parsed), parsed);
+              console.log('🔍 [llmApi] SSE 데이터 파싱 성공:', {
+                keys: Object.keys(parsed),
+                hasAction: !!parsed.action,
+                hasDocument: !!parsed.document,
+                actionType: parsed.action,
+                data: parsed
+              });
 
               // 문서 자동 열기 처리 (백엔드의 IPC 데이터) - 최우선 처리
               if (parsed.action === 'open_document_in_editor' && parsed.document) {
-                console.log('📄 문서 자동 열기 감지!', parsed.document.filename);
+                console.log('📄 [llmApi] 문서 자동 열기 감지!', {
+                  filename: parsed.document.filename,
+                  action: parsed.action,
+                  hasContent: !!parsed.document.content
+                });
 
                 // IPC 데이터 형식 맞추기 (main.js의 핸들러가 기대하는 형식)
                 const ipc_data = {
                   ipc_data: parsed  // main.js가 기대하는 { ipc_data } 형식
                 };
 
-                // ChatWindow의 IPC 처리 로직으로 전달
+                console.log('📄 [llmApi] IPC 데이터 전송 시도:', ipc_data);
+
+                // IPC를 통해 메인 프로세스에 전달
                 if (window.electron?.openDocumentInEditor) {
                   window.electron.openDocumentInEditor(ipc_data)
                     .then(result => {
-                      console.log('✅ 문서 자동 열기 성공:', result);
+                      console.log('✅ [llmApi] 문서 자동 열기 성공:', result);
                     })
                     .catch(error => {
-                      console.error('❌ 문서 자동 열기 실패:', error);
+                      console.error('❌ [llmApi] 문서 자동 열기 실패:', error);
                     });
                 } else {
-                  console.error('❌ IPC 통신 함수를 찾을 수 없습니다');
+                  console.error('❌ [llmApi] window.electron.openDocumentInEditor 함수를 찾을 수 없습니다');
+                  console.log('🔍 [llmApi] 사용 가능한 window 객체:', Object.keys(window));
+                  console.log('🔍 [llmApi] 사용 가능한 window.electron 객체:', window.electron ? Object.keys(window.electron) : 'undefined');
                 }
+
+                // 문서 열기 처리 후 continue 대신 return으로 다른 로직 건너뛰기
+                return;
+              } else if (parsed.action || parsed.document) {
+                console.log('🔍 [llmApi] 다른 액션 또는 문서 데이터:', {
+                  action: parsed.action,
+                  hasDocument: !!parsed.document,
+                  keys: Object.keys(parsed)
+                });
               } else {
                 // 일반적인 SSE payload 처리
                 if (parsed.content) {
