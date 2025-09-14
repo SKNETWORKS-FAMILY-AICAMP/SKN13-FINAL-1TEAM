@@ -97,10 +97,34 @@ class DocumentSearchAgent:
                             # 도구 실행 및 결과 저장
                             result = tool_function.invoke(tool_args)
                             
-                            # 하이브리드 검색 도구들 특별 처리 (enhanced와 기본 hybrid 모두)
-                            if tool_name in ["enhanced_hybrid_search_tool", "hybrid_document_search_tool"]:
-                                documents = result.get('found_documents', [])
-                                print(f"🔍 [DEBUG] {tool_name} 결과: {len(documents)}개 문서 발견")
+                            # 하이브리드 검색 도구들과 RAG 검색 도구 특별 처리
+                            if tool_name in ["enhanced_hybrid_search_tool", "hybrid_document_search_tool", "RAG_search_tool"]:
+                                if tool_name == "RAG_search_tool":
+                                    # RAG_search_tool 결과를 enhanced_hybrid_search_tool 형식으로 변환
+                                    retrieved_docs = result.get('retrieved_docs', [])
+                                    documents = []
+                                    seen_files = set()  # 중복 파일 방지
+                                    
+                                    for doc in retrieved_docs:
+                                        metadata = doc.get('metadata', {})
+                                        filename = metadata.get('source', '알 수 없는 파일')
+                                        
+                                        # 같은 파일에서 나온 청크들은 하나로 통합
+                                        if filename not in seen_files:
+                                            seen_files.add(filename)
+                                            documents.append({
+                                                'filename': filename,
+                                                'path': metadata.get('s3_path', '').replace('s3://clickabbbucket/', '') if metadata.get('s3_path', '').startswith('s3://') else metadata.get('s3_path', ''),
+                                                'extension': '.md',  # RAG에서는 대부분 마크다운
+                                                'source': 's3',
+                                                'content': doc.get('page_content', ''),
+                                                'total_score': 1.0  # RAG 결과는 높은 점수
+                                            })
+                                    print(f"🔍 [DEBUG] RAG_search_tool 결과를 문서 형식으로 변환: {len(documents)}개 (중복 제거됨)")
+                                else:
+                                    documents = result.get('found_documents', [])
+                                    print(f"🔍 [DEBUG] {tool_name} 결과: {len(documents)}개 문서 발견")
+                                
                                 if documents:
                                     print(f"🔍 [DEBUG] 사용자 쿼리: '{user_query}'")
                                     
@@ -199,7 +223,45 @@ class DocumentSearchAgent:
                                     search_results["action"] = "show_document_buttons"
                                     search_results["download_message"] = "다운로드 버튼을 아래에서 확인하세요."
 
-                            search_results.update(result if isinstance(result, dict) else {"result": result})
+                            # RAG_search_tool 결과도 특별 처리 (위의 if문에서 놓친 경우 대비)
+                            elif tool_name == "RAG_search_tool":
+                                print(f"🔍 [DEBUG] RAG_search_tool 단독 처리 시작")
+                                retrieved_docs = result.get('retrieved_docs', [])
+                                documents = []
+                                seen_files = set()
+                                
+                                for doc in retrieved_docs:
+                                    metadata = doc.get('metadata', {})
+                                    filename = metadata.get('source', '알 수 없는 파일')
+                                    
+                                    if filename not in seen_files:
+                                        seen_files.add(filename)
+                                        documents.append({
+                                            'filename': filename,
+                                            'path': metadata.get('s3_path', '').replace('s3://clickabbbucket/', '') if metadata.get('s3_path', '').startswith('s3://') else metadata.get('s3_path', ''),
+                                            'extension': '.md',
+                                            'source': 's3',
+                                            'content': doc.get('page_content', ''),
+                                            'total_score': 1.0
+                                        })
+                                
+                                print(f"🔍 [DEBUG] RAG 단독 처리 - 변환된 문서 수: {len(documents)}")
+                                
+                                if documents and len(documents) > 1:
+                                    should_synthesize = self._should_synthesize_documents(user_query)
+                                    print(f"🔍 [DEBUG] RAG 단독 - 종합 보고서 요청 감지: {should_synthesize}")
+                                    
+                                    if should_synthesize:
+                                        print(f"🔍 [DEBUG] RAG 단독 - {len(documents)}개 문서 종합 보고서 생성 시도...")
+                                        synthesis_result = self._synthesize_documents_to_report(documents, user_query)
+                                        print(f"🔍 [DEBUG] RAG 단독 - 종합 보고서 생성 결과: {synthesis_result}")
+                                        search_results.update(synthesis_result)
+                                    else:
+                                        search_results.update(result if isinstance(result, dict) else {"result": result})
+                                else:
+                                    search_results.update(result if isinstance(result, dict) else {"result": result})
+                            else:
+                                search_results.update(result if isinstance(result, dict) else {"result": result})
                             
                             print(f">> [SEARCH AGENT] Tool '{tool_name}' executed successfully\n")
                             
@@ -949,7 +1011,8 @@ class DocumentSearchAgent:
                 "send_to_editor": True,
                 "selected_document": document_for_editor,
                 "auto_open_success": True,
-                "search_summary": f"✅ **{len(document_contents)}개 문서를 종합한 보고서**를 편집창에서 열었습니다!"
+                "search_summary": f"✅ **{len(document_contents)}개 문서를 종합한 보고서**를 편집창에서 열었어요! 📝",
+                "final_answer": f"✅ **{len(document_contents)}개 문서를 종합한 보고서**를 생성했어요! 문서편집창에서 확인해주세요 📝"
             }
             
         except Exception as e:
