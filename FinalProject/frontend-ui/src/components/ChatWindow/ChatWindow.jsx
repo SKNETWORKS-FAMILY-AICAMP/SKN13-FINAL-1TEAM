@@ -208,7 +208,12 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
     }
 
     // SSE 연결 시작
-    console.log('🚀 ChatWindow에서 streamLLM 호출 시작', documentContent ? '(문서 포함)' : '(문서 없음)');
+    console.log('🚀 [ChatWindow] streamLLM 호출 시작', {
+      sessionId,
+      prompt: prompt.substring(0, 50) + '...',
+      hasDocumentContent: !!documentContent,
+      documentContentLength: documentContent ? documentContent.length : 0
+    });
 
     const cleanupFn = streamLLM({
       sessionId,
@@ -338,11 +343,14 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
         }
       },
       onDone: (full) => {
-        console.log('✅ StreamLLM 완료:', full.substring(0, 100) + '...');
+        console.log('✅ [ChatWindow] StreamLLM 완료:', {
+          fullLength: full ? full.length : 0,
+          preview: full ? full.substring(0, 100) + '...' : 'null'
+        });
         endStream();
       },
       onError: (error) => {
-        console.error('❌ StreamLLM 에러:', error);
+        console.error('❌ [ChatWindow] StreamLLM 에러:', error);
         endStream();
         alert('채팅 중 오류가 발생했습니다: ' + error.message);
       }

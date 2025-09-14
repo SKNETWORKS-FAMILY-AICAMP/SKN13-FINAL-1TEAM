@@ -78,6 +78,7 @@ export function streamLLM({
     }
 
     try {
+      console.log('🚀 [llmApi] SSE 연결 시작:', url);
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -87,6 +88,8 @@ export function streamLLM({
         credentials: 'include',
         signal: controller.signal,
       });
+
+      console.log('📡 [llmApi] SSE 응답 상태:', response.status, response.statusText);
 
       // 401 에러 시 토큰 갱신 후 재시도
       if (response.status === 401 && !useRefreshToken) {
@@ -98,6 +101,7 @@ export function streamLLM({
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
+      console.log('✅ [llmApi] SSE 연결 성공, 스트림 읽기 시작');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
@@ -113,11 +117,17 @@ export function streamLLM({
         const lines = chunk.split('\n');
 
         for (const line of lines) {
+          // 모든 SSE 라인을 로깅
+          if (line.trim()) {
+            console.log('🔍 [llmApi] SSE 원본 라인:', line);
+          }
+
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
 
             // [DONE] 종료 신호
             if (data === '[DONE]') {
+              console.log('🏁 [llmApi] SSE 스트림 종료 ([DONE] 수신)');
               safeClose();
               onDone?.(full);
               return;
@@ -125,6 +135,12 @@ export function streamLLM({
 
             // Raw 데이터 디버깅 - 모든 데이터를 로깅
             console.log('🔍 [llmApi] SSE Raw 데이터:', data);
+
+            // 빈 데이터 체크
+            if (!data.trim()) {
+              console.log('⚠️ [llmApi] 빈 SSE 데이터 수신, 스킵');
+              continue;
+            }
 
             try {
               const parsed = JSON.parse(data);
@@ -214,7 +230,19 @@ export function streamLLM({
 
             } catch (parseError) {
               if (data.trim()) { // 빈 문자열이 아닌 경우만 로그
-                console.error('❌ SSE parse error:', parseError, 'Raw data:', data);
+                console.error('❌ [llmApi] SSE JSON 파싱 오류:', {
+                  error: parseError,
+                  rawData: data,
+                  dataLength: data.length,
+                  dataPreview: data.substring(0, 200) + '...'
+                });
+
+                // 일반 텍스트 응답인 경우 처리
+                if (data.trim() && !data.startsWith('{') && !data.startsWith('[')) {
+                  console.log('📝 [llmApi] 일반 텍스트 응답으로 처리:', data);
+                  full += data;
+                  onDelta?.(data, full);
+                }
               }
             }
           }
