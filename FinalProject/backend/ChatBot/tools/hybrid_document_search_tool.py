@@ -10,26 +10,45 @@ from .local_document_search_tool import hybrid_searcher
 def hybrid_document_search_tool(query: str, max_results: int = 3) -> Dict[str, Any]:
     """
     로컬(클라이언트) + S3(서버) 하이브리드 문서 검색 도구입니다.
-    
+
     이 도구는 사용자가 특정 문서를 찾아달라고 요청할 때 사용됩니다.
     - 로컬 검색: Electron IPC를 통해 클라이언트에서 처리
     - S3 검색: 서버에서 직접 처리
     - 결과 통합: 로컬 우선으로 최대 3개 결과 반환
-    
+
     지원하는 파일 형식: HTML, DOCX, MD, TXT
-    검색 범위: 
+    검색 범위:
     - 로컬: C:\ClickA Documents 및 하위 폴더 전체 (클라이언트)
     - S3: clickabbbucket의 kobaco_data_md/, kobaco_data/, uploads/ 경로 (서버)
-    
+
     Args:
         query: 사용자가 찾고자 하는 문서에 대한 설명 또는 키워드
         max_results: 반환할 최대 결과 수 (기본값: 3)
-    
+
     Returns:
         검색된 문서들의 정보를 포함한 딕셔너리
         각 문서는 filename, path, extension, source, total_score 등의 정보를 포함
     """
     try:
+        # 디버깅: import 상태 확인
+        print(f"[HybridDocumentSearchTool] DEBUG - re module available: {'re' in globals()}")
+        print(f"[HybridDocumentSearchTool] DEBUG - available modules: {list(globals().keys())}")
+
+        # re 모듈이 없다면 직접 import 시도
+        if 're' not in globals():
+            try:
+                import re as re_module
+                globals()['re'] = re_module
+                print(f"[HybridDocumentSearchTool] DEBUG - re module imported successfully")
+            except Exception as import_error:
+                print(f"[HybridDocumentSearchTool] DEBUG - Failed to import re: {import_error}")
+                return {
+                    'found_documents': [],
+                    'total_found': 0,
+                    'search_query': query,
+                    'error': f'Module import error: {import_error}',
+                    'hybrid_search': True
+                }
         print(f"[HybridDocumentSearchTool] 하이브리드 검색 시작: '{query}'")
         
         # S3 검색만 수행 (로컬은 프론트엔드에서 별도 처리)

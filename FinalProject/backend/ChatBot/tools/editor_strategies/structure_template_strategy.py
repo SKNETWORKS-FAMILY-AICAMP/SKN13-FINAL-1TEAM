@@ -3,6 +3,7 @@ Document structure and template strategy
 """
 
 import logging
+import re
 from typing import List, Optional
 from langchain_core.tools import tool
 from bs4 import BeautifulSoup
