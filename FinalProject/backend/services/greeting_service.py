@@ -110,7 +110,7 @@ class GreetingService:
     @staticmethod
     def _build_greeting_message(username: str, events: List[Dict[str, Any]]) -> str:
         """
-        사용자 이름과 일정 목록으로 인사말 메시지 구성
+        사용자 이름과 일정 목록으로 친근한 인사말 메시지 구성
         
         Args:
             username: 사용자 이름
@@ -119,19 +119,26 @@ class GreetingService:
         Returns:
             str: 완성된 인사말 메시지
         """
-        greeting = f"안녕하세요 {username}님.\n"
+        greeting = f"🌞 안녕하세요, {username}님!\n\n오늘도 활기찬 하루 시작하세요 ✨\n\n"
         
         if not events:
-            greeting += "오늘의 일정은 없습니다."
+            greeting += "📌 오늘의 일정\n편안한 휴식의 시간을 가지세요 😌\n\n오늘도 멋진 하루가 되길 응원합니다! 💪"
         else:
-            greeting += "오늘의 일정은,\n"
+            greeting += "📌 오늘의 일정\n"
             
-            for i, event in enumerate(events, 1):
+            # 시간대별 이모지 매핑
+            time_emojis = {
+                "07": "🌅", "08": "🌅", "09": "🕘", "10": "🕙", "11": "🕚",
+                "12": "🕛", "13": "🕐", "14": "🕑", "15": "🕒", "16": "🕓",
+                "17": "🕔", "18": "🕕", "19": "🕖", "20": "🕗", "21": "🌙"
+            }
+            
+            for event in events:
                 title = event["title"]
                 start_time = event["start"]
                 
                 if event["all_day"]:
-                    time_str = "종일"
+                    greeting += f"📅 {title} → 종일\n"
                 else:
                     # UTC 시간을 한국 시간으로 변환하여 표시
                     from datetime import timezone, timedelta
@@ -144,12 +151,16 @@ class GreetingService:
                     
                     start_time_kst = start_time_utc.astimezone(kst)
                     time_str = start_time_kst.strftime("%H:%M")
-                
-                greeting += f"{i}) {title} ({time_str})\n"
+                    hour_str = start_time_kst.strftime("%H")
+                    
+                    # 시간대에 맞는 이모지 선택
+                    emoji = time_emojis.get(hour_str, "🕐")
+                    
+                    greeting += f"{emoji} {title} → {time_str}\n"
             
-            # 마지막 줄바꿈 제거하고 마무리 문구 추가
-            greeting = greeting.rstrip("\n")
-            greeting += f"\n\n위 {len(events)}개의 일정이 있습니다."
+            # 마무리 문구 추가
+            event_count = len(events)
+            greeting += f"\n위 {event_count}가지 중요한 일정이 기다리고 있습니다.\n오늘도 멋진 하루가 되길 응원합니다! 💪"
         
         return greeting
     
