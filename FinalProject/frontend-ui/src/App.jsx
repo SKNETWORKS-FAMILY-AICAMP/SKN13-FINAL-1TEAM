@@ -11,7 +11,7 @@ import ToastProvider from "./components/shared/toast/ToastProvider.jsx";
 import ChatWindow from "./components/ChatWindow/ChatWindow.jsx";
 import Sidebar from "./components/Sidebar/Sidebar.jsx";
 import HeaderBar from "./components/shared/HeaderBar.jsx";
-import { getChatSessions } from "./components/services/chatApi";
+import { getChatSessions, createNewSessionWithGreeting } from "./components/services/chatApi";
 
 import LoginPage from "./components/Login/LoginPage.jsx";
 import FindId from "./components/Login/FindId.jsx";
@@ -196,7 +196,7 @@ export default function App() {
     //     setCurrentPage("chat");
     // };
 
-    const handleLoginSuccess = (userData) => {
+    const handleLoginSuccess = async (userData) => {
         console.log("[App] login success", userData);
         localStorage.setItem("user", JSON.stringify(userData));
         setCurrentUser(userData);
@@ -210,7 +210,35 @@ export default function App() {
             return;
         }
 
-        // 초기비번이 아니면 바로 기존 흐름 유지
+        // 초기비번이 아니면 새 세션 생성 및 인사말 받기
+        try {
+            console.log("[App] 새 세션 생성 시도...");
+            const newSessionData = await createNewSessionWithGreeting();
+            
+            if (newSessionData?.success) {
+                console.log("[App] 새 세션 생성 성공:", newSessionData.session.id);
+                
+                // 새 세션을 현재 세션으로 설정
+                setCurrentSession({
+                    id: newSessionData.session.id,
+                    title: newSessionData.session.title,
+                    isNew: true,
+                    hasGreeting: true,
+                    greetingMessage: newSessionData.greeting_message
+                });
+                
+                console.log("[App] 인사말:", newSessionData.greeting_message.content);
+            } else {
+                console.error("[App] 새 세션 생성 실패");
+                // 실패 시 기존 방식으로 폴백
+                handleNewChat();
+            }
+        } catch (error) {
+            console.error("[App] 새 세션 생성 중 오류:", error);
+            // 오류 시 기존 방식으로 폴백
+            handleNewChat();
+        }
+
         setSidebarOpen(false);
         setCurrentPage("chat");
 
@@ -219,7 +247,7 @@ export default function App() {
             window?.electron?.ipcRenderer?.send("auth:success", userData);
         } catch {}
 
-        // ✅ 로그인 직후: ‘오늘 일정 1회 알림’ 시도
+        // ✅ 로그인 직후: '오늘 일정 1회 알림' 시도
         try { showTodayEventsOnce(userData); } catch {}
     };
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from ..database import get_db, ChatSession, ChatMessage, ToolMessageRecord, User
 from ..routers.auth_routes import get_current_user
+from ..services.greeting_service import GreetingService
 import boto3
 from botocore.config import Config
 from ..ChatBot.agents.RoutingAgent import RoutingAgent, generate_config
@@ -750,6 +751,69 @@ async def download_document(
         return JSONResponse(
             status_code=500,
             content={"error": f"파일 다운로드 중 오류가 발생했습니다: {str(e)}"}
+        )
+
+# 새 세션 생성 및 인사말 전송 엔드포인트
+@router.post("/session/new-with-greeting")
+async def create_new_session_with_greeting(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    로그인 시 새로운 세션을 생성하고 개인화된 인사말을 전송
+    """
+    try:
+        # 새 세션 ID 생성
+        new_session_id = f"session-{uuid.uuid4().hex[:12]}-{int(datetime.now().timestamp())}"
+        
+        # 새 채팅 세션 생성
+        new_session = ChatSession(
+            id=new_session_id,
+            user_id=current_user.id,
+            title="새로운 대화",
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(new_session)
+        db.commit()
+        db.refresh(new_session)
+        
+        # 개인화된 인사말 생성
+        greeting_message = GreetingService.create_initial_chat_message(current_user, db)
+        
+        # 인사말을 채팅 메시지로 저장
+        greeting_chat_message = ChatMessage(
+            session_id=new_session_id,
+            role=greeting_message["role"],
+            content=greeting_message["content"],
+            timestamp=greeting_message["timestamp"]
+        )
+        db.add(greeting_chat_message)
+        db.commit()
+        
+        print(f"🎉 [create_new_session_with_greeting] 새 세션 생성 완료: {new_session_id}")
+        print(f"👋 [create_new_session_with_greeting] 인사말 전송: {current_user.username}")
+        
+        return {
+            "success": True,
+            "session": {
+                "id": new_session_id,
+                "title": new_session.title,
+                "created_at": new_session.created_at.isoformat()
+            },
+            "greeting_message": {
+                "role": greeting_message["role"],
+                "content": greeting_message["content"],
+                "timestamp": greeting_message["timestamp"].isoformat(),
+                "is_greeting": greeting_message.get("is_greeting", True)
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ [create_new_session_with_greeting] 오류: {e}")
+        logger.error(f"새 세션 생성 중 오류 발생: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"새 세션 생성 중 오류가 발생했습니다: {str(e)}"}
         )
 
 # --- 문서 로드 헬퍼 함수들 ---

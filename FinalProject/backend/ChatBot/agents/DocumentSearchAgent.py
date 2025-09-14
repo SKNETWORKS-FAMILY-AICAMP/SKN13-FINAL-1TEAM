@@ -115,22 +115,22 @@ class DocumentSearchAgent:
                                         print(f"🔍 [DEBUG] 초안 생성 결과: {draft_result}")
                                         search_results.update(draft_result)
                                     else:
-                                        # "편집창에 띄워줘" 요청인지 확인
-                                        should_auto_open = self._should_auto_open_editor(user_query)
-                                        print(f"🔍 [DEBUG] 편집창 자동 열기 요청 감지: {should_auto_open}")
+                                        # 종합 보고서 요청인지 먼저 확인
+                                        should_synthesize = self._should_synthesize_documents(user_query)
+                                        print(f"🔍 [DEBUG] 종합 보고서 요청 감지: {should_synthesize}")
+                                        
+                                        if should_synthesize and len(documents) > 1:
+                                            # 여러 문서를 종합한 보고서 생성
+                                            print(f"🔍 [DEBUG] {len(documents)}개 문서를 종합한 보고서 생성 시도...")
+                                            synthesis_result = self._synthesize_documents_to_report(documents, user_query)
+                                            print(f"🔍 [DEBUG] 종합 보고서 생성 결과: {synthesis_result}")
+                                            search_results.update(synthesis_result)
+                                        else:
+                                            # "편집창에 띄워줘" 요청인지 확인
+                                            should_auto_open = self._should_auto_open_editor(user_query)
+                                            print(f"🔍 [DEBUG] 편집창 자동 열기 요청 감지: {should_auto_open}")
 
-                                        if should_auto_open:
-                                            # 종합 보고서 요청인지 확인
-                                            should_synthesize = self._should_synthesize_documents(user_query)
-                                            print(f"🔍 [DEBUG] 종합 보고서 요청 감지: {should_synthesize}")
-                                            
-                                            if should_synthesize and len(documents) > 1:
-                                                # 여러 문서를 종합한 보고서 생성
-                                                print(f"🔍 [DEBUG] {len(documents)}개 문서를 종합한 보고서 생성 시도...")
-                                                synthesis_result = self._synthesize_documents_to_report(documents, user_query)
-                                                print(f"🔍 [DEBUG] 종합 보고서 생성 결과: {synthesis_result}")
-                                                search_results.update(synthesis_result)
-                                            else:
+                                            if should_auto_open:
                                                 # 첫 번째 문서를 자동으로 편집창에 열기
                                                 first_doc = documents[0]
                                                 print(f"🔍 [DEBUG] 첫 번째 문서: {first_doc.get('filename', 'Unknown')}")
@@ -163,13 +163,13 @@ class DocumentSearchAgent:
                                                     search_results["document_selection"] = document_selection_data["selection_data"]
                                                     search_results["action"] = "show_document_buttons"
                                                     search_results["search_summary"] = f"편집창에서 지원하지 않는 파일입니다. 다운로드하여 확인해주세요."
-                                        else:
-                                            print(f"🔍 [DEBUG] 일반 검색 요청 - 문서 버튼 표시")
-                                            # 일반 검색 요청 - 문서 버튼 표시
-                                            document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
-                                            search_results["document_selection"] = document_selection_data["selection_data"]
-                                            search_results["action"] = "show_document_buttons"
-                                            search_results["search_summary"] = f"{len(documents)}개의 관련 문서를 찾았습니다."
+                                            else:
+                                                print(f"🔍 [DEBUG] 일반 검색 요청 - 문서 버튼 표시")
+                                                # 일반 검색 요청 - 문서 버튼 표시
+                                                document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
+                                                search_results["document_selection"] = document_selection_data["selection_data"]
+                                                search_results["action"] = "show_document_buttons"
+                                                search_results["search_summary"] = f"{len(documents)}개의 관련 문서를 찾았습니다."
                             
                             # 다운로드 링크 도구 특별 처리 - 다운로드 버튼 생성
                             elif tool_name == "get_presigned_download_url":

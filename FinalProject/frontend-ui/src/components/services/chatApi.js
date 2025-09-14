@@ -66,3 +66,10 @@ export async function saveMessage({ sessionId, role, content, messageId, userId 
     body: JSON.stringify({ session_id: sessionId, role, content, message_id: messageId, user_id: userId }),
   });
 }
+
+// 새 세션 생성 및 개인화된 인사말 받기
+export async function createNewSessionWithGreeting() {
+  return request(`/session/new-with-greeting`, {
+    method: 'POST'
+  });
+}

@@ -65,10 +65,35 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
   // 세션 변경 시 과거 메시지 로드
   useEffect(() => {
     if (!currentSession?.id) { setMessages([]); return; }
+    
     (async () => {
       try {
+        // 과거 메시지 로드
         const loaded = await getMessages(currentSession.id);
+        
+        // 새 세션이고 인사말이 있는 경우 처리
+        if (currentSession.isNew && currentSession.hasGreeting && currentSession.greetingMessage) {
+          console.log('[ChatWindow] 새 세션 인사말 표시:', currentSession.greetingMessage.content);
+          
+          // 로드된 메시지가 없거나 인사말이 포함되지 않은 경우에만 추가
+          const hasGreeting = loaded?.some(msg => msg.content === currentSession.greetingMessage.content);
+          
+          if (!hasGreeting) {
+            const greetingMsg = {
+              role: 'assistant',
+              content: currentSession.greetingMessage.content,
+              timestamp: currentSession.greetingMessage.timestamp,
+              isGreeting: true
+            };
+            
+            setMessages([greetingMsg, ...(loaded || [])]);
+            return; // 이미 메시지를 설정했으므로 리턴
+          }
+        }
+        
+        // 일반적인 경우 기존 메시지만 설정
         setMessages(loaded || []);
+        
       } catch (err) {
         console.error('[ERROR] 메시지 불러오기 실패:', err);
       }
