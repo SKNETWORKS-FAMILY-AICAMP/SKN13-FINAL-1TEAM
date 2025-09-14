@@ -26,7 +26,7 @@ class DocumentDraftAgent:
 
     def __init__(self):
         """문서 초안 생성 도구 및 LLM 초기화"""
-        self.llm = ChatOpenAI(model_name='gpt-4o', temperature=0.3)
+        self.llm = ChatOpenAI(model_name='gpt-4o', temperature=1.0)
 
         # 문서 초안 생성 관련 도구들
         self.tools = [
@@ -218,29 +218,17 @@ class DocumentDraftAgent:
         messages = list(state.get("messages", []))
 
         context_message = SystemMessage(
-            content=f"""## 문서 초안 생성 지시사항 ##
+            content=f"""사용자가 "{generation_params['target_description']}"를 요청했습니다.
 
-당신은 전문적인 문서 초안 생성 전문가입니다.
+document_draft_generator_tool을 사용하여 로컬 참조 문서들을 기반으로 {generation_params.get('target_year', 2025)}년도 버전의 문서를 생성해주세요.
 
-**주요 임무**:
-1. 사용자의 문서 생성 요청을 분석
-2. 로컬 참조 문서들을 활용하여 새로운 문서 초안 생성
-3. 전문적이고 실무에 활용 가능한 수준의 문서 작성
+요구사항:
+- 참조 문서들의 형식과 구조 유지
+- 전문적이고 실용적인 내용
+- 마크다운 형식으로 작성
+- 실제 내용 생성 (플레이스홀더 금지)
 
-**현재 요청**:
-- 목표 문서: {generation_params['target_description']}
-- 참조 패턴: {generation_params.get('reference_pattern', '없음')}
-- 대상 연도: {generation_params.get('target_year', 2025)}
-
-**중요 원칙**:
-1. 반드시 document_draft_generator_tool을 사용하여 문서를 생성하세요
-2. 플레이스홀더나 임시 텍스트 대신 실제 내용을 생성하세요
-3. 참조 문서들의 패턴을 분석하여 일관성 있는 구조로 작성하세요
-4. 전문적이고 공식적인 톤앤매너를 유지하세요
-5. {generation_params.get('target_year', 2025)}년도에 맞는 최신 내용을 반영하세요
-
-사용자의 요청에 따라 document_draft_generator_tool을 호출하여 문서를 생성해주세요.
-"""
+지금 도구를 사용하여 문서를 생성해주세요."""
         )
 
         # 시스템 메시지가 없으면 추가

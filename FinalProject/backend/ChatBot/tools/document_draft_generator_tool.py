@@ -25,7 +25,7 @@ class DocumentDraftGenerator:
     """
 
     def __init__(self):
-        self.llm = ChatOpenAI(model_name='gpt-4o', temperature=0.3)
+        self.llm = ChatOpenAI(model_name='gpt-4o', temperature=1.0)
 
     def _read_local_file(self, file_path: str) -> str:
         """로컬 파일의 내용을 읽어옵니다."""
@@ -219,14 +219,11 @@ JSON만 응답해주세요.
 
         logger.info(f"Found {len(reference_docs)} reference documents")
 
-        # 2. 문서 패턴 분석
-        pattern_analysis = self._analyze_document_patterns(reference_docs)
-
-        # 3. 새로운 문서 초안 생성
+        # 2. 패턴 분석 생략하고 직접 문서 생성 (ChatGPT 웹과 유사)
         generation_prompt = self._create_generation_prompt(
             target_description,
             reference_docs,
-            pattern_analysis,
+            {},  # 패턴 분석 생략
             target_year
         )
 
@@ -253,43 +250,32 @@ JSON만 응답해주세요.
     ) -> str:
         """문서 생성을 위한 프롬프트를 작성합니다."""
 
-        prompt = f"""
-참조 문서들을 분석한 결과를 바탕으로 "{target_description}"에 대한 {target_year}년도 문서를 작성해주세요.
+        # ChatGPT 웹과 유사한 직접적이고 간단한 프롬프트
+        prompt = f"""다음 참조 문서들을 보고 "{target_description}"를 작성해주세요:
 
-=== 패턴 분석 결과 ===
-{pattern_analysis}
-
-=== 참조 문서 정보 ===
 """
-
-        for i, doc in enumerate(reference_docs[:3], 1):
+        # 참조 문서들을 간결하게 제시
+        for i, doc in enumerate(reference_docs[:4], 1):
             year = self._extract_year_from_filename(doc['filename'])
             year_info = f" ({year}년)" if year else ""
+            
+            prompt += f"""**참조문서 {i}: {doc['filename']}{year_info}**
+{doc['content'][:2000]}{'...' if len(doc['content']) > 2000 else ''}
 
-            prompt += f"""
-참조 문서 {i}: {doc['filename']}{year_info}
-주요 내용:
-{doc['content'][:1500]}{'...' if len(doc['content']) > 1500 else ''}
+---
 
 """
 
-        prompt += f"""
-=== 작성 지침 ===
-1. 위 참조 문서들의 구조와 형식을 따라 {target_year}년도에 맞는 새로운 문서를 작성하세요
-2. 참조 문서들의 공통 패턴과 구조를 유지하면서도 {target_year}년도의 특성을 반영하세요
-3. 실제 기관에서 사용할 수 있는 수준의 전문적이고 구체적인 내용으로 작성하세요
-4. 플레이스홀더나 [내용 작성] 같은 임시 텍스트는 사용하지 말고 실제 내용을 작성하세요
-5. 연도별 진화 추세가 있다면 {target_year}년도에 맞게 발전시켜 반영하세요
+        prompt += f"""위 참조 문서들의 형식과 구조를 참고하여 {target_year}년도 버전으로 "{target_description}"를 작성해주세요. 
 
-=== 출력 형식 ===
-- 마크다운 형식으로 작성하세요
-- 제목은 # (H1) 태그 사용
-- 주요 섹션은 ## (H2) 태그 사용
-- 세부 섹션은 ### (H3) 태그 사용
-- 목록이나 표가 필요한 경우 적절히 사용하세요
+요구사항:
+- 실제 공문서 수준의 정확하고 전문적인 내용
+- 참조 문서들의 구조와 형식 유지
+- {target_year}년도에 맞는 내용으로 업데이트
+- 마크다운 형식으로 작성
+- 구체적이고 실용적인 내용 (플레이스홀더 금지)
 
-지금 "{target_description}"에 대한 {target_year}년도 문서를 작성해주세요.
-"""
+지금 작성해주세요."""
 
         return prompt
 
@@ -330,25 +316,16 @@ JSON만 응답해주세요.
         """참조 문서가 없을 때 기본 문서를 생성합니다."""
         logger.info("Generating basic document without reference documents")
 
-        basic_prompt = f"""
-"{target_description}"에 대한 {target_year}년도 문서를 전문적으로 작성해주세요.
+        basic_prompt = f""""{target_description}"를 작성해주세요.
 
-=== 작성 지침 ===
-1. 공식적이고 전문적인 톤으로 작성
-2. 실무에서 사용할 수 있는 구체적인 내용 포함
-3. {target_year}년도의 최신 동향과 요구사항 반영
-4. 플레이스홀더나 임시 텍스트 사용 금지
+요구사항:
+- {target_year}년도에 맞는 최신 내용
+- 전문적이고 공식적인 문서
+- 마크다운 형식으로 작성
+- 실제 사용 가능한 구체적인 내용
+- 플레이스홀더나 임시 텍스트 금지
 
-=== 출력 형식 ===
-마크다운 형식으로 작성하고, 다음 구조를 포함하세요:
-- 제목 (# 태그)
-- 개요/배경 (## 태그)
-- 주요 내용 (## 태그)
-- 세부 사항 (### 태그)
-- 결론/제언 (## 태그)
-
-지금 작성해주세요.
-"""
+지금 작성해주세요."""
 
         try:
             response = self.llm.invoke([{"role": "user", "content": basic_prompt}])

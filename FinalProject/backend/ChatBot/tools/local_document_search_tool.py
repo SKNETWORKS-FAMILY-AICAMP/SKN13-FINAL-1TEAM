@@ -224,7 +224,7 @@ class HybridDocumentSearcher:
     
     def search_hybrid_documents(self, query: str, max_results: int = 3) -> List[Dict[str, Any]]:
         """로컬 및 S3 문서 통합 검색 수행 (로컬 우선)"""
-        print(f"[HybridDocumentSearcher] Searching for: '{query}' in local and S3")
+        print(f"[HybridDocumentSearcher] Searching for: '{query}' in local and S3 (로컬 우선순위)")
         
         # 로컬 파일 가져오기
         local_files = self._get_all_supported_files()
@@ -233,6 +233,18 @@ class HybridDocumentSearcher:
         # S3 파일 가져오기
         s3_files = self._get_s3_files()
         print(f"[HybridDocumentSearcher] Found {len(s3_files)} S3 files")
+        
+        # 로컬 파일에 우선순위 보너스 적용
+        for file_info in local_files:
+            if 'total_score' in file_info:
+                file_info['total_score'] += 0.1
+                file_info['priority_bonus'] = 0.1
+            else:
+                file_info['priority_bonus'] = 0.1
+        
+        # S3 파일에는 보너스 없음
+        for file_info in s3_files:
+            file_info['priority_bonus'] = 0.0
         
         # 모든 파일 합치기 (로컬 우선)
         all_files = local_files + s3_files
@@ -287,10 +299,11 @@ class HybridDocumentSearcher:
         # 상위 결과 반환
         results = scored_files[:max_results]
         
-        print(f"[HybridDocumentSearcher] Returning {len(results)} results:")
+        print(f"[HybridDocumentSearcher] Returning {len(results)} results (로컬: {len([r for r in results if r.get('source') == 'local'])}개, S3: {len([r for r in results if r.get('source') == 's3'])}개):")
         for i, result in enumerate(results, 1):
             source_label = "📁 로컬" if result['source'] == 'local' else "☁️ S3"
-            print(f"  {i}. {result['filename']} ({source_label}, score: {result['total_score']:.3f})")
+            bonus_info = f" (+{result.get('priority_bonus', 0):.1f})" if result.get('priority_bonus', 0) > 0 else ""
+            print(f"  {i}. {result['filename']} ({source_label}, score: {result['total_score']:.3f}{bonus_info})")
         
         return results
 
@@ -305,7 +318,7 @@ def local_document_search_tool(query: str, max_results: int = 3) -> Dict[str, An
     
     이 도구는 사용자가 특정 문서를 찾아달라고 요청할 때 사용됩니다.
     로컬 파일은 파일명과 내용을 모두 검색하고, S3 파일은 파일명만 검색합니다.
-    로컬 파일이 우선순위를 가집니다.
+    로컬 파일이 항상 우선순위를 가집니다 (보너스 점수 +0.1).
     
     지원하는 파일 형식: HTML, DOCX, MD, TXT
     검색 범위: 

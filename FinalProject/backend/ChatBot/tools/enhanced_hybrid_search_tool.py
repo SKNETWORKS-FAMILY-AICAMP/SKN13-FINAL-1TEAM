@@ -222,27 +222,37 @@ class EnhancedHybridSearcher:
     
     def hybrid_search(self, query: str, max_results: int = 3) -> Dict[str, Any]:
         """
-        하이브리드 검색 실행 (로컬 + S3)
+        하이브리드 검색 실행 (로컬 우선, S3 보조)
         """
-        print(f"[EnhancedHybridSearcher] 하이브리드 검색 시작: '{query}'")
+        print(f"[EnhancedHybridSearcher] 하이브리드 검색 시작: '{query}' (로컬 우선순위)")
         
         # 로컬 및 S3 검색 실행
         local_results = self.search_local_documents(query)
         s3_results = self.search_s3_documents(query)
         
+        # 로컬 파일에 우선순위 보너스 적용 (0.1점 추가)
+        for result in local_results:
+            result['total_score'] += 0.1
+            result['priority_bonus'] = 0.1
+        
+        # S3 파일에는 보너스 없음
+        for result in s3_results:
+            result['priority_bonus'] = 0.0
+        
         # 결과 통합
         all_results = local_results + s3_results
         
-        # 점수순 정렬
+        # 점수순 정렬 (로컬 파일이 보너스로 인해 우선순위 높아짐)
         all_results.sort(key=lambda x: x['total_score'], reverse=True)
         
         # 상위 N개 선택
         top_results = all_results[:max_results]
         
-        print(f"[EnhancedHybridSearcher] 최종 결과: {len(top_results)}개")
+        print(f"[EnhancedHybridSearcher] 최종 결과: {len(top_results)}개 (로컬: {len([r for r in top_results if r['source'] == 'local'])}개, S3: {len([r for r in top_results if r['source'] == 's3'])}개)")
         for i, result in enumerate(top_results, 1):
             source_icon = "📂" if result['source'] == 'local' else "☁️"
-            print(f"  {i}. {result['filename']} ({source_icon} {result['source'].upper()}, score: {result['total_score']:.3f})")
+            bonus_info = f" (+{result.get('priority_bonus', 0):.1f})" if result.get('priority_bonus', 0) > 0 else ""
+            print(f"  {i}. {result['filename']} ({source_icon} {result['source'].upper()}, score: {result['total_score']:.3f}{bonus_info})")
         
         return {
             'found_documents': top_results,
@@ -266,6 +276,7 @@ def enhanced_hybrid_search_tool(query: str, max_results: int = 3) -> Dict[str, A
     
     로컬(C:\ClickA Documents)과 S3(kobaco_data_md/, kobaco_data/, uploads/)에서 
     파일명과 내용을 모두 고려하여 유사도 기반 문서 검색을 수행합니다.
+    로컬 파일이 항상 우선순위를 가집니다 (보너스 점수 +0.1).
     
     사용자가 "xxx문서를 찾아서 띄워줘" 같은 요청을 할 때 사용됩니다.
     
