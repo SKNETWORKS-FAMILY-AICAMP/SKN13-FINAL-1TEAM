@@ -14,6 +14,7 @@ from ..core.AgentState import AgentState, WorkflowStep
 from .GeneralChatAgent import GeneralChatAgent  # 주석처리 예정
 from .DocumentSearchAgent import DocumentSearchAgent
 from .DocumentEditorAgent import DocumentEditorAgent
+from .DocumentDraftAgent import DocumentDraftAgent  # 새로운 문서 초안 생성 에이전트
 # from .DocumentSelectionAgent import DocumentSelectionAgent  # 클릭 방식으로 변경되어 불필요
 from .BusinessRejectionAgent import BusinessRejectionAgent
 
@@ -156,19 +157,23 @@ def rule_based_intent_analysis(user_input: str) -> Dict[str, Any]:
             r'(다운로드|링크).*?(주세요|줘)$',
             r'.*(문서편집창|편집부|편집창|에디터).*(띄워|열어|보여).*줘$',  # "문서편집창에 띄워줘" = 문서 검색 의도
         ],
+        'draft': [  # 새로운 초안 생성 패턴
+            r'(초안|draft).*?작성해?줘$',
+            r'20\d{2}.*?(작성|만들어|생성)해?줘$',  # 특정 년도 + 작성 패턴
+            r'(문서|보고서).*?초안.*?작성해?줘$',  # 문서 초안 작성 패턴
+            r'미디어다양성.*?조사.*?용역.*?(작성|만들어|생성)해?줘$',  # 특정 문서 유형 생성
+            r'공고문.*?미디어다양성.*?작성해?줘$',
+            r'.*(참조|기반).*?초안.*?작성해?줘$',  # 참조 기반 초안 작성
+            r'.*(읽고|분석).*?작성해?줘$'  # 분석해서 작성
+        ],
         'edit': [
             r'(수정|편집|바꿔|변경|추가|삭제|넣어|제거)해?줘$',
-            r'^(?!.*검색).*?(작성|써|입력)해?줘$',  # "검색"이 없는 경우만 작성 의도
-            r'(만들어|생성해?)줘$',
-            r'(초안|draft).*?작성해?줘',  # 초안 작성 패턴
-            r'20\d{2}.*?(작성|만들어|생성)해?줘',  # 특정 년도 + 작성 패턴
-            r'(문서|보고서).*?초안.*?작성해?줘'  # 문서 초안 작성 패턴
+            r'^(?!.*검색)(?!.*초안)(?!.*20\d{2}).*?(작성|써|입력)해?줘$',  # 초안이나 연도가 없는 단순 작성
+            r'(만들어|생성해?)줘$'
         ],
         'multi_step': [
             r'찾아서.*?(추가|넣어|작성).*?줘$',
-            r'검색해서.*?(편집|수정).*?줘$',
-            r'.*?(참조|기반).*?초안.*?작성해?줘',  # 참조/기반으로 초안 작성
-            r'.*?(읽고|분석).*?작성해?줘'  # 분석해서 작성
+            r'검색해서.*?(편집|수정).*?줘$'
         ]
     }
     
@@ -181,6 +186,12 @@ def rule_based_intent_analysis(user_input: str) -> Dict[str, Any]:
                     return {
                         "agents": ["document_search"],
                         "next_step": WorkflowStep.SEARCH_REQUESTED,
+                        "confidence": confidence
+                    }
+                elif intent == 'draft':  # 새로운 초안 생성 의도
+                    return {
+                        "agents": ["document_draft"],
+                        "next_step": WorkflowStep.EDIT_REQUESTED,
                         "confidence": confidence
                     }
                 elif intent == 'edit':
@@ -260,20 +271,21 @@ def pattern_based_intent_analysis(user_input: str, state: AgentState) -> Dict[st
 
 def llm_based_intent_analysis(user_input: str, state: AgentState) -> Dict[str, Any]:
     """LLM-based fallback for complex intent analysis."""
-    
+
     llm = ChatOpenAI(model_name='gpt-4o-mini', temperature=0)
-    
+
     prompt = f"""Classify user intent based on the user input and respond with the classification only.
 
 User input: "{user_input}"
 
 **Classification Options:**
 1. SEARCH - If user wants to find, search, or retrieve documents
-2. EDIT - If user wants to modify, edit, add content, or create documents
-3. MULTI_STEP - If user wants to search first then edit/modify the results
-4. REJECT - If user input is not work-related or cannot be processed
+2. DRAFT - If user wants to create a new document draft based on reference documents (especially with year like 2025, or "초안", "만들어줘")
+3. EDIT - If user wants to modify, edit, add content to existing documents
+4. MULTI_STEP - If user wants to search first then edit/modify the results
+5. REJECT - If user input is not work-related or cannot be processed
 
-Respond with only ONE WORD: SEARCH, EDIT, MULTI_STEP, or REJECT"""
+Respond with only ONE WORD: SEARCH, DRAFT, EDIT, MULTI_STEP, or REJECT"""
 
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
@@ -283,6 +295,12 @@ Respond with only ONE WORD: SEARCH, EDIT, MULTI_STEP, or REJECT"""
             return {
                 "agents": ["document_search"],
                 "next_step": WorkflowStep.SEARCH_REQUESTED,
+                "confidence": 0.8
+            }
+        elif "DRAFT" in classification:
+            return {
+                "agents": ["document_draft"],
+                "next_step": WorkflowStep.EDIT_REQUESTED,
                 "confidence": 0.8
             }
         elif "EDIT" in classification:
@@ -446,8 +464,9 @@ def RoutingAgent(workflow_type: str = "multi_step"):
     agents_registry = {
         # "general_chat": GeneralChatAgent(),  # 업무 전용으로 비활성화
         "business_rejection": BusinessRejectionAgent(),  # 업무 외 요청 거부
-        "document_search": DocumentSearchAgent(), 
-        "document_edit": DocumentEditorAgent()
+        "document_search": DocumentSearchAgent(),
+        "document_edit": DocumentEditorAgent(),
+        "document_draft": DocumentDraftAgent()  # 새로운 문서 초안 생성 에이전트
         # "document_selection": DocumentSelectionAgent()  # 클릭 방식으로 변경되어 불필요
     }
     

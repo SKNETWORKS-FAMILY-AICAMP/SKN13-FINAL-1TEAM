@@ -149,6 +149,7 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
     "format_text_block",  # 텍스트 블록 포맷팅
     "apply_document_styling",  # 스타일 적용
     "enhance_document_readability",  # 가독성 향상
+    "document_draft_generator_tool",  # 문서 초안 생성 도구
     }
     # 문서 업데이트 도구인 경우, 프론트엔드에 문서 업데이트 신호 전송
     if tool_name in DOCUMENT_UPDATE_TOOLS:

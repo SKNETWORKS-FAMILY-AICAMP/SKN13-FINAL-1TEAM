@@ -67,7 +67,8 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         
         # Add specialized agent nodes (using new class-based agents)
         workflow.add_node("document_search", self._document_search_node)
-        workflow.add_node("document_edit", self._document_edit_node) 
+        workflow.add_node("document_edit", self._document_edit_node)
+        workflow.add_node("document_draft", self._document_draft_node)  # 새로운 문서 초안 생성 노드
         # workflow.add_node("document_selection", self._document_selection_node)  # 클릭 방식으로 변경되어 불필요
         # workflow.add_node("general_chat", self._general_chat_node)  # 업무 전용으로 비활성화
         workflow.add_node("business_rejection", self._business_rejection_node)
@@ -87,8 +88,9 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
                 "request_document": "request_document",
                 
                 # Agent routing
-                "document_search": "document_search", 
+                "document_search": "document_search",
                 "document_edit": "document_edit",
+                "document_draft": "document_draft",  # 새로운 문서 초안 생성 라우팅
                 # "document_selection": "document_selection",  # 클릭 방식으로 변경되어 불필요
                 "general_chat": "business_rejection",
                 "business_rejection": "business_rejection",
@@ -142,6 +144,14 @@ class MultiStepWorkflowGraph(BaseWorkflowGraph):
         if edit_agent:
             return edit_agent.process(state)
         return {"workflow_error": "DocumentEditorAgent not found"}
+
+    def _document_draft_node(self, state: AgentState) -> Dict[str, Any]:
+        """Document draft generation processing node."""
+        print("--- EXECUTING NODE: document_draft ---")
+        draft_agent = self.agents_registry.get("document_draft")
+        if draft_agent:
+            return draft_agent.process(state)
+        return {"workflow_error": "DocumentDraftAgent not found"}
     
     # def _document_selection_node(self, state: AgentState) -> Dict[str, Any]:
     #     """Document selection processing node."""
