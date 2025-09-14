@@ -138,29 +138,31 @@ class DocumentSearchAgent:
                                                 is_supported = self._is_editor_supported_file(first_doc)
                                                 print(f"🔍 [DEBUG] 편집창 지원 파일 여부: {is_supported}")
 
+                                                auto_result = {"auto_open_success": False}  # 기본값 설정
+                                                
                                                 if is_supported:
                                                     print(f"🔍 [DEBUG] 자동으로 편집창에 문서 열기 시도...")
                                                     auto_result = self._auto_open_document_in_editor(first_doc, user_query)
                                                     print(f"🔍 [DEBUG] 자동 열기 결과: {auto_result}")
                                                     search_results.update(auto_result)
 
-                                                # 자동 열기 실패한 경우에만 버튼 표시 로직 진행
-                                                if not auto_result.get("auto_open_success", False):
-                                                    print(f"🔍 [DEBUG] 자동 열기 실패 - 다운로드 버튼 표시")
-                                                    # 편집창 지원하지만 자동 열기 실패한 경우 다운로드 버튼 표시
+                                                    # 자동 열기 실패한 경우에만 버튼 표시 로직 진행
+                                                    if not auto_result.get("auto_open_success", False):
+                                                        print(f"🔍 [DEBUG] 자동 열기 실패 - 다운로드 버튼 표시")
+                                                        # 편집창 지원하지만 자동 열기 실패한 경우 다운로드 버튼 표시
+                                                        document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
+                                                        search_results["document_selection"] = document_selection_data["selection_data"]
+                                                        search_results["action"] = "show_document_buttons"
+                                                        search_results["search_summary"] = f"문서 로드에 실패했습니다. 아래 버튼을 클릭해 주세요."
+                                                    else:
+                                                        print(f"🔍 [DEBUG] 자동 열기 성공 - 버튼 표시 생략")
+                                                else:
+                                                    print(f"🔍 [DEBUG] 지원하지 않는 파일 - 다운로드 버튼 표시")
+                                                    # 편집창 지원하지 않는 파일이면 다운로드 버튼 표시
                                                     document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
                                                     search_results["document_selection"] = document_selection_data["selection_data"]
                                                     search_results["action"] = "show_document_buttons"
-                                                    search_results["search_summary"] = f"문서 로드에 실패했습니다. 아래 버튼을 클릭해 주세요."
-                                                else:
-                                                    print(f"🔍 [DEBUG] 자동 열기 성공 - 버튼 표시 생략")
-                                            else:
-                                                print(f"🔍 [DEBUG] 지원하지 않는 파일 - 다운로드 버튼 표시")
-                                                # 편집창 지원하지 않는 파일이면 다운로드 버튼 표시
-                                                document_selection_data = self._create_document_selection_data(documents, result.get('search_query', ''))
-                                                search_results["document_selection"] = document_selection_data["selection_data"]
-                                                search_results["action"] = "show_document_buttons"
-                                                search_results["search_summary"] = f"편집창에서 지원하지 않는 파일입니다. 다운로드하여 확인해주세요."
+                                                    search_results["search_summary"] = f"편집창에서 지원하지 않는 파일입니다. 다운로드하여 확인해주세요."
                                         else:
                                             print(f"🔍 [DEBUG] 일반 검색 요청 - 문서 버튼 표시")
                                             # 일반 검색 요청 - 문서 버튼 표시
