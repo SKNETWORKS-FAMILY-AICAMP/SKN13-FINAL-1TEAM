@@ -138,7 +138,7 @@ export function startUpcomingWatcher() {
           const hh    = String(d.getHours()).padStart(2, "0");
           const mm    = String(d.getMinutes()).padStart(2, "0");
           const label = (ev.type || colorToType?.(ev.color)) === "deadline" ? "마감" : "시작";
-          const until = `${label}까지 약 ${ev.__minsLeft}분 남음 (≤${ev.__bucket}분)`;
+          const until = `${label}까지 약 ${ev.__minsLeft}분 남음`;
           return `• ${title}${desc ? ` — ${desc}` : ""}\n  ${until}`;
         }).join("\n\n");
 

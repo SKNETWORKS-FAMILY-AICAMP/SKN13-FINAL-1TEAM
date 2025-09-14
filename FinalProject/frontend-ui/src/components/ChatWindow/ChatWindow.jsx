@@ -406,7 +406,7 @@ export default function ChatWindow({ currentSession, onSessionUpdated, isMaximiz
   return (
     <div className="flex flex-col h-full w-full overflow-hidden min-w-0">
       <div
-        className="flex-1 min_h-0 overflow-y-auto overflow-x-hidden px-4 py-6 max-w-full"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-6 max-w-full"
         style={{ scrollbarGutter: 'stable both-edges', overscrollBehavior: 'contain' }}
       >
         {displayMessages.length === 0 ? (
