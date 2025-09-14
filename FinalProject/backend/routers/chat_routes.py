@@ -326,16 +326,48 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                     }
 
                     print(f"🔍 [DEBUG] IPC 데이터 전송: {ipc_data['document']['filename']}")
-                    # IPC 메시지를 스트림으로 전송 (프론트엔드에서 처리)
-                    try:
-                        json_data = json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))
-                        yield f"data: {json_data}\n\n"
-                    except Exception as json_error:
-                        print(f"❌ [DEBUG] JSON 직렬화 오류 (workflow_tracker): {json_error}")
-                        # 대용량 콘텐츠 처리: 청크 단위로 전송
-                        document_content = ipc_data['document']['content']
-                        ipc_data['document']['content'] = f"[대용량 문서: {len(document_content)} 문자]"
-                        yield f"data: {json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+                    # 대용량 문서 처리: 청크 전송 방식 사용
+                    document_content = ipc_data['document']['content']
+                    content_length = len(document_content)
+
+                    if content_length > 5000:  # 5KB 이상인 경우 청크 전송
+                        print(f"🔍 [DEBUG] 대용량 문서 감지 ({content_length} 문자), 청크 전송 시작")
+
+                        # 메타데이터 먼저 전송
+                        meta_data = {
+                            "action": "open_document_in_editor_chunked",
+                            "document_meta": {
+                                "filename": ipc_data['document']['filename'],
+                                "filePath": ipc_data['document']['filePath'],
+                                "source": ipc_data['document']['source'],
+                                "total_chunks": (content_length // 4000) + 1,
+                                "content_length": content_length
+                            }
+                        }
+                        yield f"data: {json.dumps(meta_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+                        # 콘텐츠를 청크 단위로 전송
+                        chunk_size = 4000
+                        for i in range(0, content_length, chunk_size):
+                            chunk = document_content[i:i+chunk_size]
+                            chunk_data = {
+                                "action": "document_chunk",
+                                "chunk_index": i // chunk_size,
+                                "chunk_content": chunk,
+                                "is_last": i + chunk_size >= content_length
+                            }
+                            yield f"data: {json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+                    else:
+                        # 작은 문서는 기존 방식으로 전송
+                        try:
+                            json_data = json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))
+                            yield f"data: {json_data}\n\n"
+                        except Exception as json_error:
+                            print(f"❌ [DEBUG] JSON 직렬화 오류 (workflow_tracker): {json_error}")
+                            # 대용량 콘텐츠 처리: 청크 단위로 전송
+                            ipc_data['document']['content'] = f"[문서 로드 오류: {len(document_content)} 문자]"
+                            yield f"data: {json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
                     print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
                 else:
                     print(f"🔍 [DEBUG] selected_document가 None입니다!")
@@ -388,16 +420,48 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                     }
 
                     print(f"🔍 [DEBUG] IPC 데이터 전송: {ipc_data['document']['filename']}")
-                    # IPC 메시지를 스트림으로 전송 (프론트엔드에서 처리)
-                    try:
-                        json_data = json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))
-                        yield f"data: {json_data}\n\n"
-                    except Exception as json_error:
-                        print(f"❌ [DEBUG] JSON 직렬화 오류 (on_end): {json_error}")
-                        # 대용량 콘텐츠 처리: 청크 단위로 전송
-                        document_content = ipc_data['document']['content']
-                        ipc_data['document']['content'] = f"[대용량 문서: {len(document_content)} 문자]"
-                        yield f"data: {json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+                    # 대용량 문서 처리: 청크 전송 방식 사용
+                    document_content = ipc_data['document']['content']
+                    content_length = len(document_content)
+
+                    if content_length > 5000:  # 5KB 이상인 경우 청크 전송
+                        print(f"🔍 [DEBUG] 대용량 문서 감지 ({content_length} 문자), 청크 전송 시작")
+
+                        # 메타데이터 먼저 전송
+                        meta_data = {
+                            "action": "open_document_in_editor_chunked",
+                            "document_meta": {
+                                "filename": ipc_data['document']['filename'],
+                                "filePath": ipc_data['document']['filePath'],
+                                "source": ipc_data['document']['source'],
+                                "total_chunks": (content_length // 4000) + 1,
+                                "content_length": content_length
+                            }
+                        }
+                        yield f"data: {json.dumps(meta_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+                        # 콘텐츠를 청크 단위로 전송
+                        chunk_size = 4000
+                        for i in range(0, content_length, chunk_size):
+                            chunk = document_content[i:i+chunk_size]
+                            chunk_data = {
+                                "action": "document_chunk",
+                                "chunk_index": i // chunk_size,
+                                "chunk_content": chunk,
+                                "is_last": i + chunk_size >= content_length
+                            }
+                            yield f"data: {json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+                    else:
+                        # 작은 문서는 기존 방식으로 전송
+                        try:
+                            json_data = json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))
+                            yield f"data: {json_data}\n\n"
+                        except Exception as json_error:
+                            print(f"❌ [DEBUG] JSON 직렬화 오류 (on_end): {json_error}")
+                            # 대용량 콘텐츠 처리: 청크 단위로 전송
+                            ipc_data['document']['content'] = f"[문서 로드 오류: {len(document_content)} 문자]"
+                            yield f"data: {json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
                     print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
                 else:
                     print(f"🔍 [DEBUG] selected_document가 None입니다!")

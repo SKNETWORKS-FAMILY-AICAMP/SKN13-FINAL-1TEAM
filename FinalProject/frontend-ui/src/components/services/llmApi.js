@@ -33,6 +33,14 @@ export function streamLLM({
   let controller = new AbortController();
   let closed = false;
 
+  // 청크된 문서 처리를 위한 상태
+  let chunkBuffer = {
+    isReceiving: false,
+    metadata: null,
+    chunks: [],
+    totalChunks: 0
+  };
+
   function safeClose() {
     if (!closed) {
       closed = true;
@@ -154,9 +162,80 @@ export function streamLLM({
                 data: parsed
               });
 
-              // 문서 자동 열기 처리 (백엔드의 IPC 데이터) - 최우선 처리
+              // 청크된 문서 메타데이터 처리
+              if (parsed.action === 'open_document_in_editor_chunked' && parsed.document_meta) {
+                console.log('📄 [llmApi] 청크된 문서 메타데이터 수신:', parsed.document_meta);
+
+                chunkBuffer.isReceiving = true;
+                chunkBuffer.metadata = parsed.document_meta;
+                chunkBuffer.chunks = new Array(parsed.document_meta.total_chunks).fill(null);
+                chunkBuffer.totalChunks = parsed.document_meta.total_chunks;
+
+                continue;
+              }
+
+              // 문서 청크 처리
+              if (parsed.action === 'document_chunk' && chunkBuffer.isReceiving) {
+                console.log(`📄 [llmApi] 문서 청크 수신: ${parsed.chunk_index}/${chunkBuffer.totalChunks}`);
+
+                chunkBuffer.chunks[parsed.chunk_index] = parsed.chunk_content;
+
+                // 마지막 청크이거나 모든 청크를 받았는지 확인
+                if (parsed.is_last || chunkBuffer.chunks.every(chunk => chunk !== null)) {
+                  console.log('📄 [llmApi] 모든 청크 수신 완료, 문서 재조립 중...');
+
+                  // 청크들을 하나의 문서로 재조립
+                  const fullContent = chunkBuffer.chunks.join('');
+
+                  const reconstructedDoc = {
+                    action: 'open_document_in_editor',
+                    document: {
+                      filename: chunkBuffer.metadata.filename,
+                      content: fullContent,
+                      filePath: chunkBuffer.metadata.filePath,
+                      source: chunkBuffer.metadata.source
+                    }
+                  };
+
+                  console.log('📄 [llmApi] 문서 재조립 완료!', {
+                    filename: reconstructedDoc.document.filename,
+                    contentLength: fullContent.length,
+                    expectedLength: chunkBuffer.metadata.content_length
+                  });
+
+                  // IPC 데이터 형식 맞추기 (main.js의 핸들러가 기대하는 형식)
+                  const ipc_data = {
+                    ipc_data: reconstructedDoc
+                  };
+
+                  // IPC를 통해 메인 프로세스에 전달
+                  if (window.electron?.openDocumentInEditor) {
+                    window.electron.openDocumentInEditor(ipc_data)
+                      .then(result => {
+                        console.log('✅ [llmApi] 청크된 문서 자동 열기 성공:', result);
+                      })
+                      .catch(error => {
+                        console.error('❌ [llmApi] 청크된 문서 자동 열기 실패:', error);
+                      });
+                  } else {
+                    console.error('❌ [llmApi] window.electron.openDocumentInEditor 함수를 찾을 수 없습니다');
+                  }
+
+                  // 청크 버퍼 초기화
+                  chunkBuffer = {
+                    isReceiving: false,
+                    metadata: null,
+                    chunks: [],
+                    totalChunks: 0
+                  };
+                }
+
+                continue;
+              }
+
+              // 문서 자동 열기 처리 (기존 방식, 작은 문서용) - 최우선 처리
               if (parsed.action === 'open_document_in_editor' && parsed.document) {
-                console.log('📄 [llmApi] 문서 자동 열기 감지!', {
+                console.log('📄 [llmApi] 작은 문서 자동 열기 감지!', {
                   filename: parsed.document.filename,
                   action: parsed.action,
                   hasContent: !!parsed.document.content
