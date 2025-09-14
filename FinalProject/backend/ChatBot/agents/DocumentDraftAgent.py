@@ -127,15 +127,18 @@ class DocumentDraftAgent:
 
                 logger.info(f"--- DocumentDraftAgent: Draft generation completed ({len(generated_content)} chars) ---")
 
+                # 더 명확한 파일명 생성
+                filename = self._generate_filename(generation_params)
+                
                 return {
                     "messages": messages,
                     "document_content": generated_content,
                     "workflow_step": WorkflowStep.EDIT_COMPLETED,
                     "send_to_editor": True,  # 편집창으로 전송 플래그
                     "selected_document": {  # 편집창으로 보낼 문서 정보
-                        "filename": f"{generation_params['target_description'][:50]}.html",
+                        "filename": filename,
                         "content": generated_content,
-                        "filePath": "generated_document.html",
+                        "filePath": f"generated_{filename}",
                         "source": "generated"
                     }
                 }
@@ -159,20 +162,21 @@ class DocumentDraftAgent:
         if year_match:
             params["target_year"] = int(f"20{year_match.group(1)}")
 
-        # 참조 문서 패턴 추출
-        if "미디어다양성" in user_query:
-            params["reference_pattern"] = "미디어다양성조사"
+        # 참조 문서 패턴 추출 (우선순위 순으로 매칭)
+        if "미디어다양성" in user_query and "조사" in user_query:
+            params["reference_pattern"] = "미디어다양성 조사용역"
+        elif "미디어다양성" in user_query:
+            params["reference_pattern"] = "미디어다양성"
+        elif "공고문" in user_query:
+            params["reference_pattern"] = "공고문"
         elif "광고" in user_query:
             params["reference_pattern"] = "광고"
         elif "보고서" in user_query:
             params["reference_pattern"] = "보고서"
-        elif "공고문" in user_query:
-            params["reference_pattern"] = "공고문"
 
         # 키워드에서 패턴 추출
         if not params["reference_pattern"]:
             # 일반적인 키워드들 제거하고 의미있는 키워드 추출
-            import re
             keywords = re.findall(r'[\w가-힣]+', user_query)
             exclude_words = {
                 '년', '연도', '문서', '작성', '생성', '만들어', '줘', '주세요',
@@ -184,6 +188,30 @@ class DocumentDraftAgent:
 
         logger.info(f"Extracted generation params: {params}")
         return params
+
+    def _generate_filename(self, generation_params: Dict[str, Any]) -> str:
+        """생성된 문서의 파일명을 생성합니다."""
+        target_year = generation_params.get("target_year", 2025)
+        reference_pattern = generation_params.get("reference_pattern", "문서")
+        
+        # 특별 패턴에 따른 파일명 생성
+        if "미디어다양성" in reference_pattern:
+            filename = f"공고문_{target_year}년_미디어다양성조사용역.html"
+        elif "공고문" in reference_pattern:
+            filename = f"공고문_{target_year}년_{reference_pattern.replace('공고문', '').strip()}.html"
+        elif "보고서" in reference_pattern:
+            filename = f"{target_year}년_{reference_pattern}_보고서.html"
+        else:
+            # 기본 형식
+            clean_pattern = reference_pattern.replace(" ", "_")[:20]
+            filename = f"{target_year}년_{clean_pattern}_초안.html"
+        
+        # 파일명에서 사용할 수 없는 문자 제거
+        import string
+        valid_chars = f"-_.() {string.ascii_letters}{string.digits}가-힣"
+        filename = ''.join(c for c in filename if c in valid_chars)
+        
+        return filename
 
     def _prepare_draft_context(self, state: AgentState, generation_params: Dict[str, Any]) -> List[BaseMessage]:
         """문서 초안 생성을 위한 컨텍스트 준비"""
