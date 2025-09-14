@@ -100,6 +100,10 @@ class DocumentDraftGenerator:
             ))
 
             logger.info(f"Found {len(found_files)} reference documents for pattern: {search_pattern}")
+            if found_files:
+                logger.info("Reference documents found:")
+                for i, doc in enumerate(found_files, 1):
+                    logger.info(f"  {i}. {doc['filename']} ({doc['content_length']} chars)")
             return found_files
 
         except Exception as e:
@@ -251,10 +255,11 @@ JSON만 응답해주세요.
         """문서 생성을 위한 프롬프트를 작성합니다."""
 
         # ChatGPT 웹과 유사한 직접적이고 간단한 프롬프트
-        prompt = f"""다음 참조 문서들을 보고 "{target_description}"를 작성해주세요:
+        doc_count = len(reference_docs)
+        prompt = f"""다음 {doc_count}개의 참조 문서들을 보고 "{target_description}"를 작성해주세요:
 
 """
-        # 참조 문서들을 간결하게 제시
+        # 참조 문서들을 간결하게 제시 (최대 4개)
         for i, doc in enumerate(reference_docs[:4], 1):
             year = self._extract_year_from_filename(doc['filename'])
             year_info = f" ({year}년)" if year else ""
@@ -266,11 +271,11 @@ JSON만 응답해주세요.
 
 """
 
-        prompt += f"""위 참조 문서들의 형식과 구조를 참고하여 {target_year}년도 버전으로 "{target_description}"를 작성해주세요. 
+        prompt += f"""위 {min(doc_count, 4)}개 참조 문서들의 형식과 구조를 참고하여 {target_year}년도 버전으로 "{target_description}"를 작성해주세요. 
 
 요구사항:
 - 실제 공문서 수준의 정확하고 전문적인 내용
-- 참조 문서들의 구조와 형식 유지
+- 참조 문서들의 구조와 형식 유지  
 - {target_year}년도에 맞는 내용으로 업데이트
 - 마크다운 형식으로 작성
 - 구체적이고 실용적인 내용 (플레이스홀더 금지)
