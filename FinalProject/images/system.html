@@ -1,0 +1,731 @@
+<!DOCTYPE html><html><head>
+      <title>system</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      
+      <link rel="stylesheet" href="file:///c:\Users\Playdata\.cursor\extensions\shd101wyy.markdown-preview-enhanced-0.8.19-universal\crossnote\dependencies\katex\katex.min.css">
+      
+      
+      <script type="text/javascript" src="file:///c:\Users\Playdata\.cursor\extensions\shd101wyy.markdown-preview-enhanced-0.8.19-universal\crossnote\dependencies\mermaid\mermaid.min.js" charset="UTF-8"></script>
+      
+      
+      <style>
+      code[class*=language-],pre[class*=language-]{color:#333;background:0 0;font-family:Consolas,"Liberation Mono",Menlo,Courier,monospace;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.4;-moz-tab-size:8;-o-tab-size:8;tab-size:8;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:.8em;overflow:auto;border-radius:3px;background:#f5f5f5}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal;background:#f5f5f5}.token.blockquote,.token.comment{color:#969896}.token.cdata{color:#183691}.token.doctype,.token.macro.property,.token.punctuation,.token.variable{color:#333}.token.builtin,.token.important,.token.keyword,.token.operator,.token.rule{color:#a71d5d}.token.attr-value,.token.regex,.token.string,.token.url{color:#183691}.token.atrule,.token.boolean,.token.code,.token.command,.token.constant,.token.entity,.token.number,.token.property,.token.symbol{color:#0086b3}.token.prolog,.token.selector,.token.tag{color:#63a35c}.token.attr-name,.token.class,.token.class-name,.token.function,.token.id,.token.namespace,.token.pseudo-class,.token.pseudo-element,.token.url-reference .token.variable{color:#795da3}.token.entity{cursor:help}.token.title,.token.title .token.punctuation{font-weight:700;color:#1d3e81}.token.list{color:#ed6a43}.token.inserted{background-color:#eaffea;color:#55a532}.token.deleted{background-color:#ffecec;color:#bd2c00}.token.bold{font-weight:700}.token.italic{font-style:italic}.language-json .token.property{color:#183691}.language-markup .token.tag .token.punctuation{color:#333}.language-css .token.function,code.language-css{color:#0086b3}.language-yaml .token.atrule{color:#63a35c}code.language-yaml{color:#183691}.language-ruby .token.function{color:#333}.language-markdown .token.url{color:#795da3}.language-makefile .token.symbol{color:#795da3}.language-makefile .token.variable{color:#183691}.language-makefile .token.builtin{color:#0086b3}.language-bash .token.keyword{color:#0086b3}pre[data-line]{position:relative;padding:1em 0 1em 3em}pre[data-line] .line-highlight-wrapper{position:absolute;top:0;left:0;background-color:transparent;display:block;width:100%}pre[data-line] .line-highlight{position:absolute;left:0;right:0;padding:inherit 0;margin-top:1em;background:hsla(24,20%,50%,.08);background:linear-gradient(to right,hsla(24,20%,50%,.1) 70%,hsla(24,20%,50%,0));pointer-events:none;line-height:inherit;white-space:pre}pre[data-line] .line-highlight:before,pre[data-line] .line-highlight[data-end]:after{content:attr(data-start);position:absolute;top:.4em;left:.6em;min-width:1em;padding:0 .5em;background-color:hsla(24,20%,50%,.4);color:#f4f1ef;font:bold 65%/1.5 sans-serif;text-align:center;vertical-align:.3em;border-radius:999px;text-shadow:none;box-shadow:0 1px #fff}pre[data-line] .line-highlight[data-end]:after{content:attr(data-end);top:auto;bottom:.4em}html body{font-family:'Helvetica Neue',Helvetica,'Segoe UI',Arial,freesans,sans-serif;font-size:16px;line-height:1.6;color:#333;background-color:#fff;overflow:initial;box-sizing:border-box;word-wrap:break-word}html body>:first-child{margin-top:0}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{line-height:1.2;margin-top:1em;margin-bottom:16px;color:#000}html body h1{font-size:2.25em;font-weight:300;padding-bottom:.3em}html body h2{font-size:1.75em;font-weight:400;padding-bottom:.3em}html body h3{font-size:1.5em;font-weight:500}html body h4{font-size:1.25em;font-weight:600}html body h5{font-size:1.1em;font-weight:600}html body h6{font-size:1em;font-weight:600}html body h1,html body h2,html body h3,html body h4,html body h5{font-weight:600}html body h5{font-size:1em}html body h6{color:#5c5c5c}html body strong{color:#000}html body del{color:#5c5c5c}html body a:not([href]){color:inherit;text-decoration:none}html body a{color:#08c;text-decoration:none}html body a:hover{color:#00a3f5;text-decoration:none}html body img{max-width:100%}html body>p{margin-top:0;margin-bottom:16px;word-wrap:break-word}html body>ol,html body>ul{margin-bottom:16px}html body ol,html body ul{padding-left:2em}html body ol.no-list,html body ul.no-list{padding:0;list-style-type:none}html body ol ol,html body ol ul,html body ul ol,html body ul ul{margin-top:0;margin-bottom:0}html body li{margin-bottom:0}html body li.task-list-item{list-style:none}html body li>p{margin-top:0;margin-bottom:0}html body .task-list-item-checkbox{margin:0 .2em .25em -1.8em;vertical-align:middle}html body .task-list-item-checkbox:hover{cursor:pointer}html body blockquote{margin:16px 0;font-size:inherit;padding:0 15px;color:#5c5c5c;background-color:#f0f0f0;border-left:4px solid #d6d6d6}html body blockquote>:first-child{margin-top:0}html body blockquote>:last-child{margin-bottom:0}html body hr{height:4px;margin:32px 0;background-color:#d6d6d6;border:0 none}html body table{margin:10px 0 15px 0;border-collapse:collapse;border-spacing:0;display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all}html body table th{font-weight:700;color:#000}html body table td,html body table th{border:1px solid #d6d6d6;padding:6px 13px}html body dl{padding:0}html body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:700}html body dl dd{padding:0 16px;margin-bottom:16px}html body code{font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:.85em;color:#000;background-color:#f0f0f0;border-radius:3px;padding:.2em 0}html body code::after,html body code::before{letter-spacing:-.2em;content:'\00a0'}html body pre>code{padding:0;margin:0;word-break:normal;white-space:pre;background:0 0;border:0}html body .highlight{margin-bottom:16px}html body .highlight pre,html body pre{padding:1em;overflow:auto;line-height:1.45;border:#d6d6d6;border-radius:3px}html body .highlight pre{margin-bottom:0;word-break:normal}html body pre code,html body pre tt{display:inline;max-width:initial;padding:0;margin:0;overflow:initial;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}html body pre code:after,html body pre code:before,html body pre tt:after,html body pre tt:before{content:normal}html body blockquote,html body dl,html body ol,html body p,html body pre,html body ul{margin-top:0;margin-bottom:16px}html body kbd{color:#000;border:1px solid #d6d6d6;border-bottom:2px solid #c7c7c7;padding:2px 4px;background-color:#f0f0f0;border-radius:3px}@media print{html body{background-color:#fff}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{color:#000;page-break-after:avoid}html body blockquote{color:#5c5c5c}html body pre{page-break-inside:avoid}html body table{display:table}html body img{display:block;max-width:100%;max-height:100%}html body code,html body pre{word-wrap:break-word;white-space:pre}}.markdown-preview{width:100%;height:100%;box-sizing:border-box}.markdown-preview ul{list-style:disc}.markdown-preview ul ul{list-style:circle}.markdown-preview ul ul ul{list-style:square}.markdown-preview ol{list-style:decimal}.markdown-preview ol ol,.markdown-preview ul ol{list-style-type:lower-roman}.markdown-preview ol ol ol,.markdown-preview ol ul ol,.markdown-preview ul ol ol,.markdown-preview ul ul ol{list-style-type:lower-alpha}.markdown-preview .newpage,.markdown-preview .pagebreak{page-break-before:always}.markdown-preview pre.line-numbers{position:relative;padding-left:3.8em;counter-reset:linenumber}.markdown-preview pre.line-numbers>code{position:relative}.markdown-preview pre.line-numbers .line-numbers-rows{position:absolute;pointer-events:none;top:1em;font-size:100%;left:0;width:3em;letter-spacing:-1px;border-right:1px solid #999;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}.markdown-preview pre.line-numbers .line-numbers-rows>span{pointer-events:none;display:block;counter-increment:linenumber}.markdown-preview pre.line-numbers .line-numbers-rows>span:before{content:counter(linenumber);color:#999;display:block;padding-right:.8em;text-align:right}.markdown-preview .mathjax-exps .MathJax_Display{text-align:center!important}.markdown-preview:not([data-for=preview]) .code-chunk .code-chunk-btn-group{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .status{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .output-div{margin-bottom:16px}.markdown-preview .md-toc{padding:0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link div,.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}.markdown-preview .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}.scrollbar-style::-webkit-scrollbar{width:8px}.scrollbar-style::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}.scrollbar-style::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode]){position:relative;width:100%;height:100%;top:0;left:0;margin:0;padding:0;overflow:auto}html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{position:relative;top:0;min-height:100vh}@media screen and (min-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em calc(50% - 457px + 2em)}}@media screen and (max-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{font-size:14px!important;padding:1em}}@media print{html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{display:none}}html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{position:fixed;bottom:8px;left:8px;font-size:28px;cursor:pointer;color:inherit;z-index:99;width:32px;text-align:center;opacity:.4}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] #sidebar-toc-btn{opacity:1}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc{position:fixed;top:0;left:0;width:300px;height:100%;padding:32px 0 48px 0;font-size:14px;box-shadow:0 0 4px rgba(150,150,150,.33);box-sizing:border-box;overflow:auto;background-color:inherit}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar{width:8px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc a{text-decoration:none}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc{padding:0 16px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link div,html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{left:300px;width:calc(100% - 300px);padding:2em calc(50% - 457px - 300px / 2);margin:0;box-sizing:border-box}@media screen and (max-width:1274px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{width:100%}}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .markdown-preview{left:50%;transform:translateX(-50%)}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .md-sidebar-toc{display:none}
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+      </style>
+      <!-- The content below will be included at the end of the <head> element. --><script type="text/javascript">
+  document.addEventListener("DOMContentLoaded", function () {
+    // your code here
+  });
+</script></head><body for="html-export">
+    
+    
+      <div class="crossnote markdown-preview  ">
+      
+<h1 id="clikca-시스템-아키텍처">CLIKCA 시스템 아키텍처 </h1>
+<h2 id="-개요">📋 개요 </h2>
+<p>본 문서는 CLIKCA 시스템의 전체 아키텍처, 새로 도입된 <strong>다단계 AI 워크플로우(Multi-Step AI Workflow)</strong>, 각 구성 요소 간의 상호작용, 데이터 흐름, 그리고 기술 스택을 상세히 기술한 시스템 구성도입니다. 주요 목표는 복잡한 사용자 요청을 지능적으로 분석하고, 여러 AI 에이전트를 체계적으로 오케스트레이션하여 <code>검색 → 분석 → 편집</code>과 같은 다단계 작업을 자동으로 처리하는 것입니다.</p>
+<hr>
+<h2 id="️-전체-시스템-아키텍처">🏗️ 전체 시스템 아키텍처 </h2>
+<h3 id="1-시스템-구성도">1. 시스템 구성도 </h3>
+<div class="mermaid">graph TB
+    %% CLIENT LAYER
+    subgraph "CLIENT LAYER"
+        DESKTOP["Desktop App&lt;br/&gt;Electron + React&lt;br/&gt;설치형 배포"]
+    end
+
+    %% GATEWAY LAYER
+    subgraph "GATEWAY LAYER"
+        NGINX["Nginx&lt;br/&gt;Reverse Proxy"]
+    end
+
+    %% APPLICATION LAYER
+    subgraph "APPLICATION LAYER"
+        subgraph "FastAPI Backend"
+            DOC_API["Document Routes&lt;br/&gt;/api/v1/files/*"]
+            CHAT_API["Chat Routes&lt;br/&gt;/api/v1/chat/*"]
+            AUTH_API["Auth Routes&lt;br/&gt;/api/v1/auth/*"]
+            CAL_API["Calendar Routes&lt;br/&gt;/api/v1/calendar/*"]
+            USER_API["User Routes&lt;br/&gt;/api/v1/users/*"]
+        end
+        
+        subgraph "AI Agent Workflow (LangGraph)"
+            WORKFLOW["Workflow orchestration&lt;br/&gt;LangGraph 기반&lt;br/&gt;작업 오케스트레이션"]
+        end
+    end
+
+    %% DATA PROCESSING LAYER
+    subgraph "DATA PROCESSING LAYER"
+        DATA_SERVICE["Data Processing Service&lt;br/&gt;PDF/HWP → Markdown"]
+        VECTOR_EMB["Vector Embedder&lt;br/&gt;OpenAI text-embedding-3-large"]
+    end
+
+    %% DATABASE &amp; STORAGE LAYER
+    subgraph "DATABASE &amp; STORAGE LAYER"
+        subgraph "AWS S3"
+            S3_RAW["Raw Files&lt;br/&gt;/uploads/&lt;br/&gt;PDF, HWP"]
+            S3_PROCESSED["Processed Files&lt;br/&gt;/processed/&lt;br/&gt;Markdown"]
+        end
+
+        MYSQL["(MySQL 8.0&lt;br/&gt;Primary DB&lt;br/&gt;- 사용자 정보, 채팅 기록&lt;br/&gt;- 파일 메타데이터, 일정)"]
+        
+        CHROMADB["(ChromaDB 0.5+&lt;br/&gt;Vector DB&lt;br/&gt;- 문서 벡터, 메타데이터)"]
+    end
+
+    %% Flow
+    DESKTOP --&gt; NGINX
+    NGINX --&gt; DOC_API
+    NGINX --&gt; CHAT_API
+    NGINX --&gt; AUTH_API
+    NGINX --&gt; CAL_API
+    NGINX --&gt; USER_API
+
+    CHAT_API --&gt; WORKFLOW
+
+    DOC_API --&gt; DATA_SERVICE
+    DATA_SERVICE --&gt; S3_PROCESSED
+    DATA_SERVICE --&gt; VECTOR_EMB
+    VECTOR_EMB --&gt; CHROMADB
+
+    AUTH_API &amp; CHAT_API &amp; DOC_API &amp; CAL_API &amp; USER_API --&gt; MYSQL
+    DOC_API --&gt; S3_RAW
+    WORKFLOW --&gt; CHROMADB
+    WORKFLOW --&gt; MYSQL
+    WORKFLOW --&gt; S3_PROCESSED
+
+    %% Styling
+    classDef client fill:#e1f5fe,stroke:#333,stroke-width:2px
+    classDef gateway fill:#f3e5f5,stroke:#333,stroke-width:2px
+    classDef app fill:#e8f5e9,stroke:#333,stroke-width:2px
+    classDef workflow fill:#fff9c4,stroke:#333,stroke-width:2px
+    classDef data fill:#fff3e0,stroke:#333,stroke-width:2px
+    classDef db fill:#f1f8e9,stroke:#333,stroke-width:2px
+
+    class DESKTOP client
+    class NGINX gateway
+    class DOC_API app
+    class CHAT_API app
+    class AUTH_API app
+    class CAL_API app
+    class USER_API app
+    class WORKFLOW workflow
+    class DATA_SERVICE data
+    class VECTOR_EMB data
+    class S3_RAW db
+    class S3_PROCESSED db
+    class MYSQL db
+    class CHROMADB db
+</div><h3 id="2-기술-스택-및-버전-현재-구현">2. 기술 스택 및 버전 (현재 구현) </h3>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>기술</th>
+<th>버전</th>
+<th>목적</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Frontend</strong></td>
+<td>React</td>
+<td>18.2.0</td>
+<td>UI/UX 구축</td>
+</tr>
+<tr>
+<td></td>
+<td>Electron</td>
+<td>31.0.2</td>
+<td>데스크톱 앱 패키징</td>
+</tr>
+<tr>
+<td></td>
+<td>Vite</td>
+<td>5.0+</td>
+<td>개발 서버 및 빌드 도구</td>
+</tr>
+<tr>
+<td><strong>Backend</strong></td>
+<td>FastAPI</td>
+<td>0.111.0+</td>
+<td>API 서버 구축</td>
+</tr>
+<tr>
+<td></td>
+<td>Python</td>
+<td>3.11+</td>
+<td>주력 개발 언어</td>
+</tr>
+<tr>
+<td></td>
+<td>Uvicorn</td>
+<td>-</td>
+<td>ASGI 서버</td>
+</tr>
+<tr>
+<td><strong>AI/LLM</strong></td>
+<td>LangChain</td>
+<td>0.2.5+</td>
+<td>AI 에이전트 및 도구 개발</td>
+</tr>
+<tr>
+<td></td>
+<td>LangGraph</td>
+<td>0.0.65+</td>
+<td>다단계 워크플로우 관리</td>
+</tr>
+<tr>
+<td></td>
+<td>OpenAI API</td>
+<td>GPT-4o</td>
+<td>핵심 LLM 모델</td>
+</tr>
+<tr>
+<td></td>
+<td>text-embedding-3-large</td>
+<td>-</td>
+<td>문서 벡터 임베딩</td>
+</tr>
+<tr>
+<td><strong>Database</strong></td>
+<td>MySQL</td>
+<td>8.0</td>
+<td>RDB (사용자, 채팅, 메타데이터)</td>
+</tr>
+<tr>
+<td></td>
+<td>ChromaDB</td>
+<td>0.5.0+</td>
+<td>Vector DB (문서 임베딩 저장)</td>
+</tr>
+<tr>
+<td></td>
+<td>SQLAlchemy</td>
+<td>2.0+</td>
+<td>Python ORM</td>
+</tr>
+<tr>
+<td><strong>Storage</strong></td>
+<td>AWS S3</td>
+<td>-</td>
+<td>파일 스토리지 (원본, 처리 데이터)</td>
+</tr>
+<tr>
+<td></td>
+<td>boto3</td>
+<td>1.34+</td>
+<td>AWS SDK for Python</td>
+</tr>
+<tr>
+<td><strong>Communication</strong></td>
+<td>Server-Sent Events (SSE)</td>
+<td>-</td>
+<td>실시간 스트리밍</td>
+</tr>
+<tr>
+<td></td>
+<td>IPC (Inter-Process Communication)</td>
+<td>-</td>
+<td>Electron 메인-렌더러 통신</td>
+</tr>
+<tr>
+<td><strong>Security</strong></td>
+<td>JWT</td>
+<td>-</td>
+<td>사용자 인증 토큰</td>
+</tr>
+<tr>
+<td></td>
+<td>bcrypt</td>
+<td>-</td>
+<td>패스워드 해싱</td>
+</tr>
+<tr>
+<td><strong>Development</strong></td>
+<td>Docker</td>
+<td>26.1.3+</td>
+<td>컨테이너화 및 배포</td>
+</tr>
+<tr>
+<td></td>
+<td>Nginx</td>
+<td>1.25.3+</td>
+<td>리버스 프록시 (운영 환경)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="-ai-에이전트-워크플로우-상세">🤖 AI 에이전트 워크플로우 상세 </h2>
+<h3 id="1-multi-step-workflow-아키텍처-langgraph-기반">1. Multi-Step Workflow 아키텍처 (LangGraph 기반) </h3>
+<p>새로운 아키텍처는 <strong><code>MultiStepWorkflowGraph</code></strong> 를 중심으로 구성됩니다. 이 그래프는 단순한 의도 분류를 넘어, 여러 AI 에이전트를 순차적 또는 조건부로 실행하여 복잡한 작업을 해결합니다.</p>
+<div class="mermaid">graph TD
+    subgraph "API LAYER"
+        CHAT_ROUTER["Chat Routes&lt;br/&gt;/api/v1/chat/*"]
+    end
+
+    subgraph "WORKFLOW ORCHESTRATION (LangGraph)"
+        ORCHESTRATOR["Workflow Orchestrator&lt;br/&gt;중앙 허브, 다음 단계 결정&lt;br/&gt;(RoutingAgent)"]
+        WORKFLOW_TRACKER["Workflow Tracker&lt;br/&gt;에이전트 실행 후 상태 추적&lt;br/&gt;(Continue/Complete)"]
+    end
+
+    subgraph "SPECIALIZED AGENT LAYER"
+        DOC_SEARCH["DocumentSearchAgent&lt;br/&gt;RAG 기반 문서 검색 및 요약"]
+        DOC_EDIT["DocumentEditorAgent&lt;br/&gt;TipTap 호환 문서 편집"]
+        BIZ_REJECT["BusinessRejectionAgent&lt;br/&gt;업무 외 요청 거부"]
+    end
+
+    subgraph "TOOLS LAYER (LangChain Tools)"
+        SEARCH_TOOLS["Enhanced Search Tools&lt;br/&gt;하이브리드 검색, 쿼리 확장, 요약"]
+        EDITOR_TOOLS["Comprehensive Editor Tools&lt;br/&gt;HTML 편집, 템플릿, 스타일링"]
+    end
+
+    subgraph "DATA &amp; STORAGE LAYER"
+        CHROMADB["(ChromaDB)"]
+        MYSQL["(MySQL)"]
+        S3["(AWS S3)"]
+    end
+
+    %% Connections
+    CHAT_ROUTER --&gt; ORCHESTRATOR
+
+    ORCHESTRATOR -- "다음 에이전트 실행" --&gt; DOC_SEARCH
+    ORCHESTRATOR -- "다음 에이전트 실행" --&gt; DOC_EDIT
+    ORCHESTRATOR -- "업무 외" --&gt; BIZ_REJECT
+    ORCHESTRATOR -- "워크플로우 관리" --&gt; WORKFLOW_TRACKER
+
+    DOC_SEARCH --&gt; WORKFLOW_TRACKER
+    DOC_EDIT --&gt; WORKFLOW_TRACKER
+    BIZ_REJECT --&gt; WORKFLOW_TRACKER
+
+    WORKFLOW_TRACKER -- "작업 계속" --&gt; ORCHESTRATOR
+    WORKFLOW_TRACKER -- "작업 완료" --&gt; END
+
+    DOC_SEARCH --&gt; SEARCH_TOOLS
+    DOC_EDIT --&gt; EDITOR_TOOLS
+
+    SEARCH_TOOLS --&gt; CHROMADB
+    SEARCH_TOOLS --&gt; S3
+    EDITOR_TOOLS --&gt; S3
+
+    DOC_SEARCH &amp; DOC_EDIT &amp; BIZ_REJECT --&gt; MYSQL
+
+    %% Styling
+    classDef api fill:#e8f5e9,stroke:#333
+    classDef orchestrator fill:#fff9c4,stroke:#333
+    classDef agent fill:#f3e5f5,stroke:#333
+    classDef tool fill:#fff3e0,stroke:#333
+    classDef data fill:#f1f8e9,stroke:#333
+
+    class CHAT_ROUTER api
+    class ORCHESTRATOR orchestrator
+    class WORKFLOW_TRACKER orchestrator
+    class DOC_SEARCH agent
+    class DOC_EDIT agent
+    class BIZ_REJECT agent
+    class SEARCH_TOOLS tool
+    class EDITOR_TOOLS tool
+    class CHROMADB data
+    class MYSQL data
+    class S3 data
+</div><h3 id="2-sequence-diagram">2. Sequence Diagram </h3>
+<h4 id="21-문서-처리-및-인증">2.1. 문서 처리 및 인증 </h4>
+<div class="mermaid">sequenceDiagram
+    participant C as Desktop App&lt;br/&gt;(Electron)
+    participant N as Nginx
+    participant API as FastAPI
+    participant DB as MySQL
+    participant V as ChromaDB
+    participant S3 as AWS S3
+
+    Note over C,S3: 📄 문서 업로드 및 처리 플로우
+    
+    C-&gt;&gt;+N: 1. 업로드 URL 요청
+    N-&gt;&gt;+API: 2. 요청 전달 (/api/v1/files/upload-url)
+    API-&gt;&gt;+S3: 3. Presigned URL 생성
+    S3--&gt;&gt;-API: 4. 업로드 URL 반환
+    API--&gt;&gt;-N: 5. 업로드 URL 응답
+    N--&gt;&gt;-C: 6. URL 전달
+    
+    C-&gt;&gt;+S3: 7. 파일 직접 업로드
+    S3--&gt;&gt;-C: 8. 업로드 완료
+    
+    C-&gt;&gt;+N: 9. 파일 메타데이터 저장
+    N-&gt;&gt;+API: 10. 요청 전달 (/api/v1/files)
+    API-&gt;&gt;+DB: 11. 파일 정보 저장
+    DB--&gt;&gt;-API: 12. 저장 완료
+    API--&gt;&gt;-N: 13. 처리 완료 응답
+    N--&gt;&gt;-C: 14. 완료 알림
+    
+    Note over API,S3: 📊 백그라운드 문서 처리 (PDF/HWP → MD → Vector)
+    API-&gt;&gt;+S3: 15. 원본 파일 다운로드
+    S3--&gt;&gt;-API: 16. 파일 데이터
+    API-&gt;&gt;API: 17. Markdown 변환
+    API-&gt;&gt;+S3: 18. 처리된 MD 파일 업로드
+    S3--&gt;&gt;-API: 19. 업로드 완료
+    API-&gt;&gt;API: 20. 텍스트 임베딩 생성 (OpenAI)
+    API-&gt;&gt;+V: 21. 벡터 데이터 저장
+    V--&gt;&gt;-API: 22. 인덱싱 완료
+
+    Note over C,DB: 🔐 사용자 인증 플로우
+    
+    C-&gt;&gt;+N: 23. 로그인 요청
+    N-&gt;&gt;+API: 24. 요청 전달 (/api/v1/auth/login)
+    API-&gt;&gt;+DB: 25. 사용자 인증 확인
+    DB--&gt;&gt;-API: 26. 인증 결과
+    API-&gt;&gt;API: 27. JWT 토큰 생성
+    API--&gt;&gt;-N: 28. 토큰 응답
+    N--&gt;&gt;-C: 29. 토큰 전달
+</div><h4 id="22-ai-채팅-문서-검색-예시">2.2. AI 채팅 (문서 검색 예시) </h4>
+<div class="mermaid">sequenceDiagram
+    participant C as Desktop App
+    participant N as Nginx
+    participant API as FastAPI
+    participant Orch as Workflow Orchestrator
+    participant Agent as Specialized Agent
+    participant Tracker as Workflow Tracker
+    participant DB as MySQL
+    participant V as ChromaDB
+
+    Note over C,V: 💬 AI 채팅 워크플로우 (문서 검색 예시)
+
+    C-&gt;&gt;+N: 1. 채팅 메시지 전송
+    N-&gt;&gt;+API: 2. 요청 전달 (/api/v1/chat)
+    
+    API-&gt;&gt;+DB: 3. 사용자 메시지 저장
+    DB--&gt;&gt;-API: 4. 저장 완료
+    
+    API-&gt;&gt;+Orch: 5. 워크플로우 시작
+    Orch-&gt;&gt;Orch: 6. 의도 분석 (→ 'document_search')
+    
+    Orch-&gt;&gt;+Agent: 7. DocumentSearchAgent 실행
+    Agent-&gt;&gt;+V: 8. 관련 문서 벡터 검색
+    V--&gt;&gt;-Agent: 9. 검색 결과 반환
+    Agent-&gt;&gt;Agent: 10. 결과 요약 및 답변 생성 (RAG)
+    Agent--&gt;&gt;-Tracker: 11. 작업 완료 보고
+
+    Tracker-&gt;&gt;+Orch: 12. 다음 단계 확인
+    Orch-&gt;&gt;Orch: 13. 추가 작업 없음 확인
+    Orch--&gt;&gt;-API: 14. 최종 답변 반환
+
+    API-&gt;&gt;+DB: 15. AI 응답 저장
+    DB--&gt;&gt;-API: 16. 저장 완료
+
+    API--&gt;&gt;-N: 17. 스트리밍 응답
+    N--&gt;&gt;-C: 18. 실시간 응답 전송
+</div><h4 id="23-ai-채팅-문서-편집-예시">2.3. AI 채팅 (문서 편집 예시) </h4>
+<div class="mermaid">sequenceDiagram
+    participant C as Desktop App&lt;br/&gt;(Electron)
+    participant N as Nginx
+    participant API as FastAPI
+    participant Orch as Workflow Orchestrator&lt;br/&gt;(RoutingAgent)
+    participant Agent as DocumentEditorAgent
+    participant Tracker as Workflow Tracker
+    participant DB as MySQL
+    participant S3 as AWS S3
+
+    Note over C,S3: ✍️ AI 채팅 워크플로우 (문서 편집 - 청크 전송)
+
+    C-&gt;&gt;+N: 1. 편집 요청 ("우편번호를 전화번호로 바꿔줘")
+    N-&gt;&gt;+API: 2. 요청 전달 (/api/v1/chat/stream)
+
+    API-&gt;&gt;+DB: 3. 사용자 메시지 저장
+    DB--&gt;&gt;-API: 4. 저장 완료
+
+    API-&gt;&gt;+Orch: 5. 워크플로우 시작 (LangGraph)
+    Orch-&gt;&gt;Orch: 6. 의도 분석 (→ WorkflowStep.EDIT_REQUESTED)
+
+    Orch-&gt;&gt;+Agent: 7. DocumentEditorAgent 실행
+
+    alt 간단한 텍스트 교체
+        Agent-&gt;&gt;Agent: 8a. 패턴 매칭 ("A를 B로 바꿔")
+        Agent-&gt;&gt;Agent: 8b. 직접 텍스트 교체 (LLM 호출 없음)
+    else 복잡한 편집 또는 초안 작성
+        Agent-&gt;&gt;+S3: 8c. 참조 문서 검색 (초안 작성시)
+        S3--&gt;&gt;-Agent: 8d. 문서 데이터 반환
+        Agent-&gt;&gt;Agent: 8e. LLM + Tools 사용한 편집
+    end
+
+    Agent--&gt;&gt;-Tracker: 9. 작업 완료 보고 + 편집된 문서
+
+    Tracker-&gt;&gt;Tracker: 10. 대용량 문서 확인 (&gt;5KB)
+
+    alt 대용량 문서 (청크 전송)
+        Tracker--&gt;&gt;API: 11a. 메타데이터 전송 (open_document_in_editor_chunked)
+        API--&gt;&gt;N: 11b. SSE 스트리밍
+        N--&gt;&gt;C: 11c. 메타데이터 수신
+
+        loop 청크 전송
+            Tracker--&gt;&gt;API: 12a. 문서 청크 전송 (4KB 단위)
+            API--&gt;&gt;N: 12b. SSE 스트리밍
+            N--&gt;&gt;C: 12c. 청크 수신 &amp; 재조립
+        end
+
+        C-&gt;&gt;C: 13. 문서 완전 재조립
+    else 소용량 문서
+        Tracker--&gt;&gt;API: 11d. 일반 전송 (open_document_in_editor)
+        API--&gt;&gt;N: 11e. SSE 스트리밍
+        N--&gt;&gt;C: 11f. 문서 직접 수신
+    end
+
+    C-&gt;&gt;C: 14. IPC 통신으로 문서편집창 자동 열기
+
+    API-&gt;&gt;+DB: 15. AI 응답 저장
+    DB--&gt;&gt;-API: 16. 저장 완료
+
+    API--&gt;&gt;-N: 17. [DONE] 신호
+    N--&gt;&gt;-C: 18. 스트림 종료
+</div><h3 id="3-새로운-워크플로우-구조">3. 새로운 워크플로우 구조 </h3>
+<h4 id="3-1-워크플로우-오케스트레이터">3-1. 워크플로우 오케스트레이터 </h4>
+<div class="mermaid">graph TD
+    A[사용자 요청 수신] --&gt; B[Workflow Orchestrator&lt;br/&gt;워크플로우 시작]
+    B --&gt; C[Intent Analyzer&lt;br/&gt;3-tier 의도 분석]
+    C --&gt; D{의도 분석 결과}
+    
+    D --&gt;|업무 외 요청| E[Business Rejection Agent&lt;br/&gt;친근한 거부 메시지]
+    D --&gt;|문서 검색| F[Document Search Agent&lt;br/&gt;검색 프로세스]
+    D --&gt;|문서 편집| G[Document Editor Agent&lt;br/&gt;편집 프로세스]
+    D --&gt;|다단계 작업| H[Multi-Step Workflow&lt;br/&gt;검색 → 편집]
+    
+    E --&gt; I[Workflow Tracker&lt;br/&gt;완료 확인]
+    F --&gt; I
+    G --&gt; I
+    H --&gt; I
+    
+    I --&gt; J{워크플로우 완료?}
+    J --&gt;|아니오| B
+    J --&gt;|예| K[최종 응답 반환]
+
+    classDef orchestrationProcess fill:#fff9c4
+    classDef agentProcess fill:#f3e5f5
+    classDef decisionProcess fill:#ffeaa7
+
+    class A,B,C,I,J,K orchestrationProcess
+    class E,F,G,H agentProcess
+    class D decisionProcess
+</div><h4 id="3-2-documentsearchagent">3-2. DocumentSearchAgent </h4>
+<div class="mermaid">graph TD
+    A[검색 요청 수신] --&gt; B{문서 필요 여부}
+    B --&gt;|필요| C[Document Requester&lt;br/&gt;프론트엔드 문서 요청]
+    B --&gt;|불필요| D[Route Query Tool&lt;br/&gt;후속/신규 질문 판단]
+    
+    C --&gt; D
+    D --&gt; E[Enhanced Hybrid Search&lt;br/&gt;우선순위 검색 도구]
+    E --&gt; F[Query Expansion&lt;br/&gt;검색어 확장]
+    F --&gt; G[ChromaDB 벡터 검색]
+    G --&gt; H[검색 결과 획득]
+    H --&gt; I[Summarization Tool&lt;br/&gt;결과 요약 및 답변 생성]
+    I --&gt; J{다운로드 요청?}
+    J --&gt;|Yes| K[Presigned URL Tool&lt;br/&gt;S3 다운로드 링크]
+    J --&gt;|No| L[Handle Follow Up&lt;br/&gt;후속 질문 처리]
+    K --&gt; L
+    L --&gt; M[최종 답변 반환]
+
+    classDef searchProcess fill:#e3f2fd
+    classDef toolProcess fill:#fff9c4
+    classDef dataProcess fill:#fce4ec
+
+    class A,H,M searchProcess
+    class B,C,D,E,F,I,J,K,L toolProcess
+    class G dataProcess
+</div><h4 id="3-3-documenteditoragent">3-3. DocumentEditorAgent </h4>
+<div class="mermaid">graph TD
+    A[편집 요청 수신] --&gt; B{초안 작성 요청?}
+    B --&gt;|Yes| C[Draft Creation Workflow&lt;br/&gt;참조 문서 분석 → 2025 문서 생성]
+    B --&gt;|No| D{간단한 텍스트 교체?}
+
+    D --&gt;|Yes| E[Simple Text Replacement&lt;br/&gt;A를 B로 바꿔 패턴 매칭&lt;br/&gt;LLM 호출 없이 즉시 처리]
+    D --&gt;|No| F[복잡한 편집 요청&lt;br/&gt;LLM + Tools 사용]
+
+    C --&gt; G[Reference Documents Analysis&lt;br/&gt;S3에서 문서 검색/분석]
+    G --&gt; H[2025 Document Generation&lt;br/&gt;분석 결과 기반 새 문서 생성]
+
+    F --&gt; I{편집 도구 선택}
+    I --&gt;|구조적 편집| J[run_document_edit&lt;br/&gt;메인 편집 도구]
+    I --&gt;|텍스트 교체| K[replace_text_in_document&lt;br/&gt;단순 텍스트 치환]
+    I --&gt;|템플릿 생성| L[Document Templates&lt;br/&gt;보고서/회의록/구조]
+    I --&gt;|스타일링| M[Advanced Tools&lt;br/&gt;리스트/테이블/인용문/스타일]
+
+    E --&gt; N[편집 완료]
+    H --&gt; O[청크 전송&lt;br/&gt;대용량 문서 분할 전송]
+    J --&gt; N
+    K --&gt; N
+    L --&gt; N
+    M --&gt; N
+
+    O --&gt; P[문서편집창 자동 열기&lt;br/&gt;IPC 통신]
+    N --&gt; Q[문서 업데이트&lt;br/&gt;SSE 스트리밍]
+    P --&gt; R[최종 완료]
+    Q --&gt; R
+
+    classDef editProcess fill:#e8f5e8
+    classDef toolProcess fill:#fff9c4
+    classDef optimizedProcess fill:#e1f5fe
+    classDef draftProcess fill:#fff3e0
+
+    class A,B,D,N,Q,R editProcess
+    class I,J,K,L,M toolProcess
+    class E optimizedProcess
+    class C,G,H,O,P draftProcess
+</div><hr>
+<h3 id="4-주요-변경사항-및-특징-2025년-현재-구현">4. 주요 변경사항 및 특징 (2025년 현재 구현) </h3>
+<ul>
+<li>
+<p><strong>비활성화된 에이전트</strong>:</p>
+<ul>
+<li><code>GeneralChatAgent</code>: 업무와 무관한 대화는 <code>BusinessRejectionAgent</code>가 처리하도록 통합하여 시스템의 전문성을 강화했습니다.</li>
+<li><code>DocumentSelectionAgent</code>: 프론트엔드에서 사용자가 직접 문서를 선택하는 방식으로 UX가 변경됨에 따라, 백엔드에서의 선택 에이전트는 불필요해졌습니다.</li>
+</ul>
+</li>
+<li>
+<p><strong>핵심 컴포넌트</strong>:</p>
+<ul>
+<li><strong>Workflow Orchestrator</strong>: <code>RoutingAgent</code>를 기반으로 하며, 전체 워크플로우의 두뇌 역할을 합니다. 사용자 요청을 분석하여 필요한 에이전트들의 실행 순서를 결정하고, <code>Workflow Tracker</code>와 상호작용하며 작업 흐름을 제어합니다.</li>
+<li><strong>Workflow Tracker</strong>: 각 에이전트의 실행이 끝난 후, 워크플로우가 계속 진행되어야 하는지(<code>continue</code>), 아니면 모든 작업이 완료되었는지(<code>complete</code>)를 판단하여 오케스트레이터에게 피드백을 제공합니다.</li>
+</ul>
+</li>
+<li>
+<p><strong>최적화된 DocumentEditorAgent</strong>:</p>
+<ul>
+<li><strong>간단한 텍스트 교체 최적화</strong>: "A를 B로 바꿔줘" 패턴을 regex로 감지하여 LLM 호출 없이 즉시 처리</li>
+<li><strong>초안 작성 기능</strong>: S3의 참조 문서들을 분석하여 새로운 연도 문서 자동 생성</li>
+<li><strong>Strategy Pattern 도구 구조</strong>: 1061줄 스파게티 코드를 전략 패턴으로 리팩토링하여 유지보수성 향상</li>
+</ul>
+</li>
+<li>
+<p><strong>대용량 문서 전송 시스템</strong>:</p>
+<ul>
+<li><strong>청크 기반 SSE 전송</strong>: 5KB 이상 문서를 4KB 단위로 분할하여 안전한 전송</li>
+<li><strong>JSON 파싱 오류 해결</strong>: 대용량 JSON 데이터의 SSE 전송 시 발생하는 파싱 오류 완전 해결</li>
+<li><strong>문서 자동 재조립</strong>: 프론트엔드에서 청크들을 자동으로 재조립하여 완전한 문서 복원</li>
+</ul>
+</li>
+<li>
+<p><strong>IPC 통신 강화</strong>:</p>
+<ul>
+<li><strong>문서편집창 자동 열기</strong>: 백엔드에서 편집 완료 시 Electron IPC를 통해 자동으로 문서편집창 열기</li>
+<li><strong>실시간 문서 업데이트</strong>: SSE를 통한 실시간 문서 내용 업데이트 및 동기화</li>
+</ul>
+</li>
+<li>
+<p><strong>상태 관리 (<code>AgentState</code>)</strong>: LangGraph의 <code>StateGraph</code>를 통해 워크플로우의 모든 상태(사용자 입력, 현재 문서, 대화 기록, 다음 실행할 에이전트 목록 등)가 중앙에서 관리되어 데이터 흐름의 일관성을 보장합니다.</p>
+</li>
+<li>
+<p><strong>에러 처리 개선</strong>:</p>
+<ul>
+<li><strong>re 모듈 import 문제</strong>: 모든 에이전트에서 regex 사용 시 발생하는 import 오류 완전 해결</li>
+<li><strong>포괄적 예외 처리</strong>: 각 단계별 상세한 에러 로깅 및 사용자 친화적 오류 메시지</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="-엔드포인트-및-서비스-기능">📄 엔드포인트 및 서비스 기능 </h2>
+<table>
+<thead>
+<tr>
+<th>라우터</th>
+<th>엔드포인트</th>
+<th>HTTP 메소드</th>
+<th>주요 기능</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Auth</strong></td>
+<td><code>/api/v1/auth/login</code></td>
+<td>POST</td>
+<td>사용자 로그인 및 JWT 토큰 발급</td>
+</tr>
+<tr>
+<td></td>
+<td><code>/api/v1/auth/signup</code></td>
+<td>POST</td>
+<td>회원가입</td>
+</tr>
+<tr>
+<td><strong>Users</strong></td>
+<td><code>/api/v1/users/me</code></td>
+<td>GET</td>
+<td>현재 사용자 정보 조회</td>
+</tr>
+<tr>
+<td><strong>Files</strong></td>
+<td><code>/api/v1/files/upload-url</code></td>
+<td>GET</td>
+<td>AWS S3 Presigned URL 생성 (파일 업로드용)</td>
+</tr>
+<tr>
+<td></td>
+<td><code>/api/v1/files/</code></td>
+<td>GET</td>
+<td>업로드된 파일 목록 조회</td>
+</tr>
+<tr>
+<td></td>
+<td><code>/api/v1/files/{file_id}</code></td>
+<td>GET</td>
+<td>특정 파일 정보 및 내용 조회</td>
+</tr>
+<tr>
+<td><strong>Chat</strong></td>
+<td><code>/api/v1/chat/</code></td>
+<td>POST</td>
+<td>AI 에이전트 워크플로우 시작 및 채팅 응답 (스트리밍)</td>
+</tr>
+<tr>
+<td><strong>Calendar</strong></td>
+<td><code>/api/v1/calendar/events</code></td>
+<td>GET, POST</td>
+<td>캘린더 이벤트 조회 및 생성</td>
+</tr>
+</tbody>
+</table>
+
+      </div>
+      
+      
+    
+    
+    <script type="module">
+// TODO: If ZenUML gets integrated into mermaid in the future,
+//      we can remove the following lines.
+
+
+var MERMAID_CONFIG = ({"startOnLoad":false});
+if (typeof MERMAID_CONFIG !== 'undefined') {
+  MERMAID_CONFIG.startOnLoad = false
+  MERMAID_CONFIG.cloneCssStyles = false
+  MERMAID_CONFIG.theme = "default"
+}
+
+mermaid.initialize(MERMAID_CONFIG || {})
+if (typeof(window['Reveal']) !== 'undefined') {
+  function mermaidRevealHelper(event) {
+    var currentSlide = event.currentSlide
+    var diagrams = currentSlide.querySelectorAll('.mermaid')
+    for (var i = 0; i < diagrams.length; i++) {
+      var diagram = diagrams[i]
+      if (!diagram.hasAttribute('data-processed')) {
+        mermaid.init(null, diagram, ()=> {
+          Reveal.slide(event.indexh, event.indexv)
+        })
+      }
+    }
+  }
+  Reveal.addEventListener('slidetransitionend', mermaidRevealHelper)
+  Reveal.addEventListener('ready', mermaidRevealHelper)
+  await mermaid.run({
+    nodes: document.querySelectorAll('.mermaid')
+  })
+} else {
+  await mermaid.run({
+    nodes: document.querySelectorAll('.mermaid')
+  })
+}
+</script>
+    
+    
+    
+  
+    </body></html>
