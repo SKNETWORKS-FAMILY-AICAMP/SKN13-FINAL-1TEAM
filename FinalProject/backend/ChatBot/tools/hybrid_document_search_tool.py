@@ -1,6 +1,7 @@
 # hybrid_document_search_tool.py
 
 import json
+import re
 from typing import Dict, Any, List
 from langchain_core.tools import tool
 from .local_document_search_tool import hybrid_searcher
