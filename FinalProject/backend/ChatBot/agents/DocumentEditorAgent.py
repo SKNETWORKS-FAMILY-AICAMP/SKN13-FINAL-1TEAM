@@ -67,9 +67,15 @@ class DocumentEditorAgent:
                 logger.info("--- DocumentEditorAgent: Draft creation request detected ---")
                 return self._handle_draft_creation(state, user_query)
 
+            # 3. 간단한 텍스트 교체 요청인지 확인하고 직접 처리
+            simple_replace_result = self._try_simple_text_replacement(user_query, document_content)
+            if simple_replace_result:
+                logger.info("--- DocumentEditorAgent: Simple text replacement completed ---")
+                return simple_replace_result
+
             messages = self._prepare_editing_context(state, document_content)
 
-            # 3. LLM 호출
+            # 4. LLM 호출 (복잡한 편집만)
             response = self.llm_with_tools.invoke(messages)
             
             edit_results = self._extract_edit_results(response, document_content)
@@ -381,6 +387,50 @@ class DocumentEditorAgent:
 
         # 기본 제목
         return f"{year}년 문서 초안"
+
+    def _try_simple_text_replacement(self, user_query: str, document_content: str) -> Dict[str, Any]:
+        """간단한 텍스트 교체 요청을 직접 처리"""
+        user_query_lower = user_query.lower()
+
+        # "A를 B로 바꿔" 패턴 매칭
+        patterns = [
+            r'(.+?)를\s*(.+?)로\s*바꿔',
+            r'(.+?)를\s*(.+?)로\s*교체',
+            r'(.+?)를\s*(.+?)로\s*변경',
+            r'(.+?)\s*to\s*(.+?)\s*교체',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, user_query)
+            if match:
+                old_text = match.group(1).strip()
+                new_text = match.group(2).strip()
+
+                logger.info(f"--- Simple replacement detected: '{old_text}' -> '{new_text}' ---")
+
+                # 문서에서 해당 텍스트 찾기 및 교체
+                if old_text in document_content:
+                    updated_content = document_content.replace(old_text, new_text)
+
+                    # 성공 응답 구성
+                    from langchain_core.messages import ToolMessage
+
+                    tool_message = ToolMessage(
+                        content=updated_content,
+                        tool_call_id="simple_text_replace"
+                    )
+
+                    return {
+                        "messages": [tool_message],
+                        "document_content": updated_content,
+                        "workflow_step": WorkflowStep.EDIT_COMPLETED,
+                        "simple_replacement": True
+                    }
+                else:
+                    # 텍스트를 찾을 수 없는 경우
+                    logger.warning(f"--- Text not found for replacement: '{old_text}' ---")
+
+        return None  # 간단한 교체로 처리할 수 없음
 
 
 # Legacy support - 기존 코드와의 호환성
