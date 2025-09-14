@@ -61,13 +61,18 @@ class DocumentEditorAgent:
                 user_query
             )
 
+            # 2. 초안 작성 요청인지 확인
+            if self._is_draft_creation_request(user_query):
+                logger.info("--- DocumentEditorAgent: Draft creation request detected ---")
+                return self._handle_draft_creation(state, user_query)
+
             messages = self._prepare_editing_context(state, document_content)
-            
-            # 2. LLM 호출
+
+            # 3. LLM 호출
             response = self.llm_with_tools.invoke(messages)
             
             edit_results = self._extract_edit_results(response, document_content)
-            # 3. 도구 호출 처리
+            # 4. 도구 호출 처리
             updated_content = edit_results.get("updated_content", document_content)
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 messages.append(response) # Add AI message with tool calls
@@ -271,6 +276,110 @@ class DocumentEditorAgent:
     def get_available_tools(self) -> List[str]:
         """사용 가능한 편집 도구 목록 반환"""
         return [tool.name for tool in self.tools]
+
+    def _is_draft_creation_request(self, user_query: str) -> bool:
+        """사용자 요청이 초안 작성 요청인지 확인"""
+        draft_patterns = [
+            r'(초안|draft).*?작성',
+            r'20\d{2}.*?(작성|만들어|생성)',
+            r'(문서|보고서).*?초안.*?작성',
+            r'미디어다양성.*?조사.*?용역.*?작성'
+        ]
+
+        user_query_lower = user_query.lower()
+        for pattern in draft_patterns:
+            if re.search(pattern, user_query_lower):
+                return True
+        return False
+
+    def _handle_draft_creation(self, state: AgentState, user_query: str) -> Dict[str, Any]:
+        """초안 작성 요청 처리"""
+        import re
+
+        try:
+            logger.info("--- DocumentEditorAgent: Starting draft creation workflow ---")
+
+            # 문서 제목 추출
+            document_title = self._extract_document_title(user_query)
+
+            messages = list(state.get("messages", []))
+
+            # 1단계: 참조 문서 분석
+            print(f"📊 [DocumentEditorAgent] 1단계: 참조 문서 분석 시작")
+
+            analysis_tool = None
+            create_tool = None
+
+            # 도구 찾기
+            for tool in self.tools:
+                if tool.name == "analyze_reference_documents":
+                    analysis_tool = tool
+                elif tool.name == "create_2025_document_from_references":
+                    create_tool = tool
+
+            if not analysis_tool or not create_tool:
+                return self._handle_error(state, "초안 작성에 필요한 도구를 찾을 수 없습니다.")
+
+            # 참조 문서 분석 실행
+            analysis_result = analysis_tool.invoke({
+                "search_keyword": "미디어다양성조사 용역",
+                "years": ["2021", "2022", "2023", "2024"]
+            })
+
+            print(f"📄 [DocumentEditorAgent] 참조 문서 분석 결과: {analysis_result.get('message', 'No message')}")
+
+            if not analysis_result.get('success', False):
+                return self._handle_error(state, f"참조 문서 분석 실패: {analysis_result.get('message', '알 수 없는 오류')}")
+
+            # 2단계: 2025년 문서 생성
+            print(f"📝 [DocumentEditorAgent] 2단계: 2025년 문서 생성 시작")
+
+            generated_document = create_tool.invoke({
+                "analysis_result": analysis_result,
+                "document_title": document_title
+            })
+
+            print(f"✅ [DocumentEditorAgent] 문서 생성 완료, 길이: {len(generated_document)} 문자")
+
+            # 3단계: 상태 업데이트 및 응답 생성
+            AgentStateHelper.set_workflow_step(state, WorkflowStep.EDIT_COMPLETED)
+
+            # 성공 메시지 생성
+            success_message = f"""✅ **{document_title}** 초안 작성이 완료되었습니다!
+
+📊 **분석 결과**: {analysis_result.get('total_documents', 0)}개의 참조 문서를 분석했습니다.
+📄 **생성된 문서**: {len(generated_document)} 문자의 구조화된 문서가 생성되었습니다.
+🔄 **참조 문서**: {', '.join([doc.get('filename', '') for doc in analysis_result.get('analyzed_documents', [])[:3]])}
+
+생성된 문서가 편집창에 표시됩니다. 필요에 따라 내용을 수정하고 보완해 주세요."""
+
+            from langchain_core.messages import AIMessage
+            messages.append(AIMessage(content=success_message))
+
+            return {
+                "messages": messages,
+                "document_content": generated_document,
+                "workflow_step": WorkflowStep.EDIT_COMPLETED,
+                "document_update": generated_document  # 편집창으로 전송할 내용
+            }
+
+        except Exception as e:
+            logger.error(f"Draft creation failed: {e}")
+            return self._handle_error(state, f"초안 작성 중 오류 발생: {str(e)}")
+
+    def _extract_document_title(self, user_query: str) -> str:
+        """사용자 쿼리에서 문서 제목 추출"""
+        # 2025년 관련 패턴 찾기
+        year_match = re.search(r'20\d{2}', user_query)
+        year = year_match.group(0) if year_match else "2025"
+
+        # 문서 유형 찾기
+        if "미디어다양성" in user_query:
+            if "조사" in user_query and "용역" in user_query:
+                return f"{year}년 미디어다양성조사 용역"
+
+        # 기본 제목
+        return f"{year}년 문서 초안"
 
 
 # Legacy support - 기존 코드와의 호환성
