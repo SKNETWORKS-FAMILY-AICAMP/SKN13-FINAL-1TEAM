@@ -4,6 +4,7 @@ from typing import Dict, Any, List
 from dotenv import load_dotenv
 import logging
 import traceback # Added this line
+import re # Added for regex pattern matching
 
 from langchain_core.messages import SystemMessage, ToolMessage, HumanMessage, BaseMessage
 from langchain_openai import ChatOpenAI
