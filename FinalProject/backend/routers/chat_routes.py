@@ -154,7 +154,12 @@ async def _handle_tool_end(event: dict, session_id: str, db: Session):
     if tool_name in DOCUMENT_UPDATE_TOOLS:
         content_to_send = raw_output.content if isinstance(raw_output, ToolMessage) else raw_output
         print(f"--- Sending document_update for replace_text_in_document. Content length: {len(content_to_send) if isinstance(content_to_send, str) else 'N/A'} ---")
-        yield f"data: {json.dumps({'document_update': content_to_send}, ensure_ascii=False)}\n\n"
+        try:
+            json_data = json.dumps({'document_update': content_to_send}, ensure_ascii=False, separators=(',', ':'))
+            yield f"data: {json_data}\n\n"
+        except Exception as json_error:
+            print(f"❌ [DEBUG] JSON 직렬화 오류 (document_update): {json_error}")
+            yield f"data: {{\"document_update_error\": \"문서 업데이트 데이터가 너무 큽니다\"}}\n\n"
     
     # 로컬 문서 검색 도구 또는 하이브리드 검색 도구인 경우, 프론트엔드에 문서 목록 전송
     if tool_name in ["local_document_search_tool", "hybrid_document_search_tool"]:
@@ -300,13 +305,13 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
         if kind == "on_chain_end" and name == "workflow_tracker":
             node_output = event.get("data", {}).get("output", {})
             print(f"🔍 [DEBUG] workflow_tracker 노드 완료: {node_output}")
-            
+
             # 워크플로가 완료되었고 에디터 자동 열기 데이터가 있는지 확인
             if node_output and node_output.get('workflow_complete', False) and node_output.get('send_to_editor', False):
                 selected_document = node_output.get('selected_document')
                 print(f"🔍 [DEBUG] workflow_tracker에서 워크플로 완료 + 에디터 데이터 감지!")
                 print(f"🔍 [DEBUG] selected_document 있음: {selected_document is not None}")
-                
+
                 if selected_document:
                     print(f"🔍 [DEBUG] 문서편집창 IPC 전송 준비: {selected_document.get('filename', 'Unknown')}")
                     # IPC 메시지 데이터 준비
@@ -319,10 +324,18 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                             "source": selected_document.get("source", "unknown")
                         }
                     }
-                    
-                    print(f"🔍 [DEBUG] IPC 데이터 전송: {json.dumps(ipc_data, ensure_ascii=False)[:200]}...")
+
+                    print(f"🔍 [DEBUG] IPC 데이터 전송: {ipc_data['document']['filename']}")
                     # IPC 메시지를 스트림으로 전송 (프론트엔드에서 처리)
-                    yield f"data: {json.dumps(ipc_data, ensure_ascii=False)}\n\n"
+                    try:
+                        json_data = json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))
+                        yield f"data: {json_data}\n\n"
+                    except Exception as json_error:
+                        print(f"❌ [DEBUG] JSON 직렬화 오류 (workflow_tracker): {json_error}")
+                        # 대용량 콘텐츠 처리: 청크 단위로 전송
+                        document_content = ipc_data['document']['content']
+                        ipc_data['document']['content'] = f"[대용량 문서: {len(document_content)} 문자]"
+                        yield f"data: {json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
                     print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
                 else:
                     print(f"🔍 [DEBUG] selected_document가 None입니다!")
@@ -373,10 +386,18 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                             "source": selected_document.get("source", "unknown")
                         }
                     }
-                    
-                    print(f"🔍 [DEBUG] IPC 데이터 전송: {json.dumps(ipc_data, ensure_ascii=False)[:200]}...")
+
+                    print(f"🔍 [DEBUG] IPC 데이터 전송: {ipc_data['document']['filename']}")
                     # IPC 메시지를 스트림으로 전송 (프론트엔드에서 처리)
-                    yield f"data: {json.dumps(ipc_data, ensure_ascii=False)}\n\n"
+                    try:
+                        json_data = json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))
+                        yield f"data: {json_data}\n\n"
+                    except Exception as json_error:
+                        print(f"❌ [DEBUG] JSON 직렬화 오류 (on_end): {json_error}")
+                        # 대용량 콘텐츠 처리: 청크 단위로 전송
+                        document_content = ipc_data['document']['content']
+                        ipc_data['document']['content'] = f"[대용량 문서: {len(document_content)} 문자]"
+                        yield f"data: {json.dumps(ipc_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
                     print(f"📄 [chat_routes] IPC 문서 전송: {selected_document.get('filename')}")
                 else:
                     print(f"🔍 [DEBUG] selected_document가 None입니다!")
@@ -388,7 +409,12 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                     parsed_response = json.loads(final_state["response"])
                     if "action" in parsed_response:
                         # If it contains an "action" key, stream the whole JSON
-                        yield f"data: {json.dumps(parsed_response, ensure_ascii=False)}\n\n"
+                        try:
+                            json_data = json.dumps(parsed_response, ensure_ascii=False, separators=(',', ':'))
+                            yield f"data: {json_data}\n\n"
+                        except Exception as json_error:
+                            print(f"❌ [DEBUG] JSON 직렬화 오류 (parsed_response): {json_error}")
+                            yield f"data: {{\"error\": \"대용량 응답 데이터 처리 오류\"}}\n\n"
                         # Do not process further as this is a special action
                         yield "data: [DONE]\n\n" # Stream end signal
                         return # Exit the generator
@@ -408,8 +434,13 @@ async def _stream_llm_response(session_id: str, prompt: str, document_content: O
                         "content": final_state.get("final_answer", "문서를 찾았습니다!"),
                         "document_selection": document_selection
                     }
-                    print(f"🐛 [DEBUG] button_message 생성됨: {button_message}")
-                    yield f"data: {json.dumps(button_message, ensure_ascii=False)}\n\n"
+                    print(f"🐛 [DEBUG] button_message 생성됨: {button_message['type']}")
+                    try:
+                        json_data = json.dumps(button_message, ensure_ascii=False, separators=(',', ':'))
+                        yield f"data: {json_data}\n\n"
+                    except Exception as json_error:
+                        print(f"❌ [DEBUG] JSON 직렬화 오류 (button_message): {json_error}")
+                        yield f"data: {{\"error\": \"문서 버튼 데이터 처리 오류\"}}\n\n"
                     print(f"📋 [chat_routes] 문서 선택 버튼 전송: {len(document_selection.get('documents', []))}개")
                 else:
                     print(f"🐛 [DEBUG] document_selection이 None입니다!")
