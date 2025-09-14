@@ -120,18 +120,29 @@ class DocumentSearchAgent:
                                         print(f"🔍 [DEBUG] 편집창 자동 열기 요청 감지: {should_auto_open}")
 
                                         if should_auto_open:
-                                            # 첫 번째 문서를 자동으로 편집창에 열기
-                                            first_doc = documents[0]
-                                            print(f"🔍 [DEBUG] 첫 번째 문서: {first_doc.get('filename', 'Unknown')}")
+                                            # 종합 보고서 요청인지 확인
+                                            should_synthesize = self._should_synthesize_documents(user_query)
+                                            print(f"🔍 [DEBUG] 종합 보고서 요청 감지: {should_synthesize}")
+                                            
+                                            if should_synthesize and len(documents) > 1:
+                                                # 여러 문서를 종합한 보고서 생성
+                                                print(f"🔍 [DEBUG] {len(documents)}개 문서를 종합한 보고서 생성 시도...")
+                                                synthesis_result = self._synthesize_documents_to_report(documents, user_query)
+                                                print(f"🔍 [DEBUG] 종합 보고서 생성 결과: {synthesis_result}")
+                                                search_results.update(synthesis_result)
+                                            else:
+                                                # 첫 번째 문서를 자동으로 편집창에 열기
+                                                first_doc = documents[0]
+                                                print(f"🔍 [DEBUG] 첫 번째 문서: {first_doc.get('filename', 'Unknown')}")
 
-                                            is_supported = self._is_editor_supported_file(first_doc)
-                                            print(f"🔍 [DEBUG] 편집창 지원 파일 여부: {is_supported}")
+                                                is_supported = self._is_editor_supported_file(first_doc)
+                                                print(f"🔍 [DEBUG] 편집창 지원 파일 여부: {is_supported}")
 
-                                            if is_supported:
-                                                print(f"🔍 [DEBUG] 자동으로 편집창에 문서 열기 시도...")
-                                                auto_result = self._auto_open_document_in_editor(first_doc, user_query)
-                                                print(f"🔍 [DEBUG] 자동 열기 결과: {auto_result}")
-                                                search_results.update(auto_result)
+                                                if is_supported:
+                                                    print(f"🔍 [DEBUG] 자동으로 편집창에 문서 열기 시도...")
+                                                    auto_result = self._auto_open_document_in_editor(first_doc, user_query)
+                                                    print(f"🔍 [DEBUG] 자동 열기 결과: {auto_result}")
+                                                    search_results.update(auto_result)
 
                                                 # 자동 열기 실패한 경우에만 버튼 표시 로직 진행
                                                 if not auto_result.get("auto_open_success", False):
@@ -860,6 +871,206 @@ class DocumentSearchAgent:
                 "auto_open_success": False,
                 "search_summary": f"문서 로드에 실패했습니다. 아래 버튼을 클릭해 주세요."
             }
+
+    def _should_synthesize_documents(self, user_query: str) -> bool:
+        """사용자 요청이 여러 문서 종합 요청인지 확인"""
+        synthesis_keywords = [
+            "종합", "종합한", "종합하여", "합쳐", "합친", "합쳐서",
+            "통합", "통합한", "통합하여", "정리", "정리한", "정리하여",
+            "요약", "요약한", "요약하여", "비교", "비교한", "비교하여",
+            "분석", "분석한", "분석하여", "검토", "검토한", "검토하여",
+            "보고서", "리포트", "문서", "자료"
+        ]
+        
+        # 복합 패턴 확인
+        user_query_lower = user_query.lower()
+        
+        # "A와 B를 종합한" 패턴
+        if any(keyword in user_query_lower for keyword in ["종합", "합쳐", "통합", "정리"]):
+            return True
+            
+        # "A, B 문서를 찾아서 보고서" 패턴
+        if "보고서" in user_query_lower and any(keyword in user_query_lower for keyword in ["찾아", "찾아서"]):
+            return True
+            
+        # 숫자 패턴 (1), 2) 등)
+        if re.search(r'\d+\)', user_query) and ("문서" in user_query_lower or "기준" in user_query_lower):
+            return True
+            
+        return False
+
+    def _synthesize_documents_to_report(self, documents: List[Dict[str, Any]], user_query: str) -> Dict[str, Any]:
+        """여러 문서를 종합하여 하나의 보고서로 생성"""
+        try:
+            print(f"📊 [DocumentSearchAgent] {len(documents)}개 문서 종합 보고서 생성 시작")
+            
+            # 각 문서의 내용 로드
+            document_contents = []
+            for i, doc in enumerate(documents, 1):
+                print(f"📄 [DocumentSearchAgent] 문서 {i} 로드: {doc.get('filename', 'Unknown')}")
+                content = self._load_document_content_for_synthesis(doc)
+                if content:
+                    document_contents.append({
+                        'filename': doc.get('filename', f'문서{i}'),
+                        'content': content,
+                        'source': doc.get('source', 'unknown')
+                    })
+            
+            if not document_contents:
+                return {
+                    "auto_open_success": False,
+                    "search_summary": "문서 내용을 로드할 수 없어 종합 보고서를 생성할 수 없습니다."
+                }
+            
+            # ChatGPT를 사용하여 종합 보고서 생성
+            synthesis_prompt = self._create_synthesis_prompt(document_contents, user_query)
+            
+            print(f"🤖 [DocumentSearchAgent] GPT를 사용하여 종합 보고서 생성 중...")
+            response = self.llm.invoke([{"role": "user", "content": synthesis_prompt}])
+            synthesized_content = response.content.strip()
+            
+            # 마크다운을 HTML로 변환
+            html_content = self._convert_markdown_to_html(synthesized_content)
+            
+            # 편집창에 전송할 문서 데이터 준비
+            synthesis_filename = f"종합보고서_{len(document_contents)}개문서.html"
+            document_for_editor = {
+                "filename": synthesis_filename,
+                "content": html_content,
+                "filePath": synthesis_filename,
+                "source": "synthesized"
+            }
+            
+            print(f"✅ [DocumentSearchAgent] 종합 보고서 생성 완료: {len(html_content)} 문자")
+            
+            return {
+                "send_to_editor": True,
+                "selected_document": document_for_editor,
+                "auto_open_success": True,
+                "search_summary": f"✅ **{len(document_contents)}개 문서를 종합한 보고서**를 편집창에서 열었습니다!"
+            }
+            
+        except Exception as e:
+            print(f"❌ [DocumentSearchAgent] 종합 보고서 생성 실패: {e}")
+            return {
+                "auto_open_success": False,
+                "search_summary": f"종합 보고서 생성 중 오류가 발생했습니다: {str(e)}"
+            }
+
+    def _load_document_content_for_synthesis(self, document: Dict[str, Any]) -> str:
+        """종합 보고서용 문서 내용 로드"""
+        try:
+            source = document.get('source', '')
+            if source == 's3':
+                s3_key = document.get('path', '')
+                if s3_key:
+                    # S3에서 문서 내용 로드 (기존 로직 재사용)
+                    return self._load_s3_document_content(s3_key)
+            elif source == 'local':
+                file_path = document.get('path', '')
+                if file_path:
+                    # 로컬에서 문서 내용 로드
+                    return self._load_local_document_content(file_path)
+            
+            return None
+        except Exception as e:
+            print(f"❌ [DocumentSearchAgent] 문서 내용 로드 실패: {e}")
+            return None
+
+    def _create_synthesis_prompt(self, document_contents: List[Dict[str, str]], user_query: str) -> str:
+        """종합 보고서 생성을 위한 프롬프트 작성"""
+        prompt = f"""다음 {len(document_contents)}개의 문서를 분석하여 종합 보고서를 작성해주세요.
+
+사용자 요청: "{user_query}"
+
+"""
+        
+        # 각 문서 내용 추가
+        for i, doc in enumerate(document_contents, 1):
+            prompt += f"""## 문서 {i}: {doc['filename']}
+
+{doc['content'][:3000]}{'...(내용 생략)' if len(doc['content']) > 3000 else ''}
+
+---
+
+"""
+        
+        prompt += f"""위 {len(document_contents)}개 문서를 종합하여 다음과 같은 보고서를 작성해주세요:
+
+요구사항:
+1. 각 문서의 핵심 내용을 정확히 파악하여 종합
+2. 문서들 간의 공통점과 차이점 분석
+3. 전체적인 구조와 체계적인 내용 정리
+4. 실무에서 활용할 수 있는 수준의 전문적인 보고서
+5. 마크다운 형식으로 작성
+
+구조:
+- 제목 (# 태그)
+- 개요/요약 (## 태그)
+- 각 문서별 주요 내용 (## 태그)
+- 종합 분석 및 비교 (## 태그)
+- 결론 및 시사점 (## 태그)
+
+지금 종합 보고서를 작성해주세요."""
+        
+        return prompt
+
+    def _convert_markdown_to_html(self, markdown_content: str) -> str:
+        """마크다운을 HTML로 변환"""
+        try:
+            import markdown
+            html = markdown.markdown(markdown_content, extensions=['tables'])
+            return html
+        except ImportError:
+            # markdown 라이브러리가 없는 경우 간단한 변환
+            html_content = markdown_content
+            
+            # 기본적인 마크다운 -> HTML 변환
+            html_content = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html_content, flags=re.MULTILINE)
+            html_content = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html_content, flags=re.MULTILINE)
+            html_content = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html_content, flags=re.MULTILINE)
+            
+            # 목록 변환
+            html_content = re.sub(r'^\- (.+)$', r'<li>\1</li>', html_content, flags=re.MULTILINE)
+            html_content = re.sub(r'(<li>.*</li>)', r'<ul>\1</ul>', html_content, flags=re.DOTALL)
+            html_content = re.sub(r'</ul>\s*<ul>', '', html_content)
+            
+            # 문단 변환
+            paragraphs = html_content.split('\n\n')
+            html_paragraphs = []
+            for para in paragraphs:
+                para = para.strip()
+                if para and not para.startswith('<'):
+                    para = f'<p>{para}</p>'
+                html_paragraphs.append(para)
+            
+            html_content = '\n'.join(html_paragraphs)
+            return html_content
+
+    def _load_local_document_content(self, file_path: str) -> str:
+        """로컬 파일 내용 로드"""
+        try:
+            from pathlib import Path
+            path = Path(file_path)
+            if not path.exists():
+                return None
+                
+            extension = path.suffix.lower()
+            if extension in ['.md', '.txt', '.html']:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            elif extension == '.docx':
+                try:
+                    from docx import Document as DocxDocument
+                    doc = DocxDocument(path)
+                    return '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+                except ImportError:
+                    return None
+            
+            return None
+        except Exception as e:
+            print(f"❌ [DocumentSearchAgent] 로컬 파일 로드 오류: {e}")
+            return None
 
 
 # Legacy support - 기존 코드와의 호환성
