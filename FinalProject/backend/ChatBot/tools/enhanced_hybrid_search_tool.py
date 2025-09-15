@@ -56,7 +56,7 @@ class EnhancedHybridSearcher:
             self.s3_client = None
     
     def calculate_similarity(self, query: str, text: str) -> float:
-        """문자열 유사도 계산 (0.0 ~ 1.0)"""
+        """문자열 유사도 계산 (0.0 ~ 1.0) - 파일명 매칭 개선"""
         if not query or not text:
             return 0.0
         
@@ -67,9 +67,29 @@ class EnhancedHybridSearcher:
         if query_lower == text_lower:
             return 1.0
         
-        # 2. 포함 관계 체크
-        if query_lower in text_lower:
+        # 2. 파일명 정규화 매칭 (언더바, 공백, 특수문자 무시)
+        def normalize_filename(filename):
+            # 확장자 제거
+            name = filename.lower()
+            if '.' in name:
+                name = name.rsplit('.', 1)[0]
+            # 언더바, 공백, 하이픈, 괄호 제거
+            name = re.sub(r'[_\s\-\(\)]', '', name)
+            return name
+        
+        query_normalized = normalize_filename(query)
+        text_normalized = normalize_filename(text)
+        
+        # 정규화된 이름으로 매칭
+        if query_normalized == text_normalized:
+            return 0.95
+        
+        if query_normalized in text_normalized or text_normalized in query_normalized:
             return 0.9
+        
+        # 3. 포함 관계 체크
+        if query_lower in text_lower:
+            return 0.85
         
         # 3. 단어 레벨 매칭
         query_words = set(query_lower.split())
