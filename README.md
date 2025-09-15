@@ -733,13 +733,13 @@ npm run dev
 
 ## 👥 팀 소개
 
-| 이름      | 역할          | 담당 업무                              | GitHub |
-|---------|-------------|-----------------------------------|--------|
-| **남궁건우** | **PM**      | 프로젝트 매니지먼트, 전체 아키텍처 설계          | [@namgung] |
-| **이명인**  | **Data**    | RAG 시스템 구축, 벡터 DB 관리, 데이터 전처리   | [@myungin] |
-| **우지훈**  | **Backend** | FastAPI 서버, 챗봇 로직, AI 에이전트 구현   | [@jihoon] |
-| **홍채우**  | **Frontend** | React UI/UX, 문서 에디터, 사용자 인터페이스 | [@chaewoo] |
-| **김승호**  | **Frontend** | 캘린더 시스템, 대시보드, 반응형 웹 디자인       | [@seungho] |
+| 이름 | 역할 | 담당 영역 | GitHub |
+|------|------|-----------|--------|
+| **남궁건우** | 🎯 PM | 프로젝트 총괄, 시스템 설계 | [@namgung-geon-woo](https://github.com/namgung-geon-woo) |
+| **이명인** | 📊 Data Engineer | 데이터 수집/전처리, 벡터 DB | [@lee-myeong-in](https://github.com/lee-myeong-in) |
+| **우지훈** | ⚡ Backend Developer | API 서버, AI Agent 시스템 | [@woo-ji-hoon](https://github.com/woo-ji-hoon) |
+| **홍채우** | 🎨 Frontend Developer | React UI/UX, 사용자 경험 | [@hong-chae-woo](https://github.com/hong-chae-woo) |
+| **김승호** | 🎨 Frontend Developer | TipTap 에디터, 컴포넌트 | [@kim-seung-ho](https://github.com/kim-seung-ho) |
 
 ---
 
