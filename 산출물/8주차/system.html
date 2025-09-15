@@ -52,7 +52,7 @@
         end
         
         subgraph "AI Agent Workflow (LangGraph)"
-            WORKFLOW["Workflow orchestration&lt;br/&gt;LangGraph 기반&lt;br/&gt;작업 오케스트레이션"]
+            WORKFLOW["Routing Agent&lt;br/&gt;LangGraph 기반&lt;br/&gt;중앙 허브, 다음 단계 결정&lt;br/&gt;"]
         end
     end
 
@@ -91,9 +91,6 @@
 
     AUTH_API &amp; CHAT_API &amp; DOC_API &amp; CAL_API &amp; USER_API --&gt; MYSQL
     DOC_API --&gt; S3_RAW
-    WORKFLOW --&gt; CHROMADB
-    WORKFLOW --&gt; MYSQL
-    WORKFLOW --&gt; S3_PROCESSED
 
     %% Styling
     classDef client fill:#e1f5fe,stroke:#333,stroke-width:2px
@@ -103,160 +100,24 @@
     classDef data fill:#fff3e0,stroke:#333,stroke-width:2px
     classDef db fill:#f1f8e9,stroke:#333,stroke-width:2px
 
+    %% CHAT/WORKFLOW 전용 스타일 정의
+    classDef chatSpecial fill:#ff8a80,stroke:#d84315,stroke-width:2px,color:#fff
+
     class DESKTOP client
     class NGINX gateway
     class DOC_API app
-    class CHAT_API app
+    class CHAT_API chatSpecial
     class AUTH_API app
     class CAL_API app
     class USER_API app
-    class WORKFLOW workflow
+    class WORKFLOW chatSpecial
     class DATA_SERVICE data
     class VECTOR_EMB data
     class S3_RAW db
     class S3_PROCESSED db
     class MYSQL db
     class CHROMADB db
-</div><h3 id="2-기술-스택-및-버전-현재-구현">2. 기술 스택 및 버전 (현재 구현) </h3>
-<table>
-<thead>
-<tr>
-<th>구분</th>
-<th>기술</th>
-<th>버전</th>
-<th>목적</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Frontend</strong></td>
-<td>React</td>
-<td>18.2.0</td>
-<td>UI/UX 구축</td>
-</tr>
-<tr>
-<td></td>
-<td>Electron</td>
-<td>31.0.2</td>
-<td>데스크톱 앱 패키징</td>
-</tr>
-<tr>
-<td></td>
-<td>Vite</td>
-<td>5.0+</td>
-<td>개발 서버 및 빌드 도구</td>
-</tr>
-<tr>
-<td><strong>Backend</strong></td>
-<td>FastAPI</td>
-<td>0.111.0+</td>
-<td>API 서버 구축</td>
-</tr>
-<tr>
-<td></td>
-<td>Python</td>
-<td>3.11+</td>
-<td>주력 개발 언어</td>
-</tr>
-<tr>
-<td></td>
-<td>Uvicorn</td>
-<td>-</td>
-<td>ASGI 서버</td>
-</tr>
-<tr>
-<td><strong>AI/LLM</strong></td>
-<td>LangChain</td>
-<td>0.2.5+</td>
-<td>AI 에이전트 및 도구 개발</td>
-</tr>
-<tr>
-<td></td>
-<td>LangGraph</td>
-<td>0.0.65+</td>
-<td>다단계 워크플로우 관리</td>
-</tr>
-<tr>
-<td></td>
-<td>OpenAI API</td>
-<td>GPT-4o</td>
-<td>핵심 LLM 모델</td>
-</tr>
-<tr>
-<td></td>
-<td>text-embedding-3-large</td>
-<td>-</td>
-<td>문서 벡터 임베딩</td>
-</tr>
-<tr>
-<td><strong>Database</strong></td>
-<td>MySQL</td>
-<td>8.0</td>
-<td>RDB (사용자, 채팅, 메타데이터)</td>
-</tr>
-<tr>
-<td></td>
-<td>ChromaDB</td>
-<td>0.5.0+</td>
-<td>Vector DB (문서 임베딩 저장)</td>
-</tr>
-<tr>
-<td></td>
-<td>SQLAlchemy</td>
-<td>2.0+</td>
-<td>Python ORM</td>
-</tr>
-<tr>
-<td><strong>Storage</strong></td>
-<td>AWS S3</td>
-<td>-</td>
-<td>파일 스토리지 (원본, 처리 데이터)</td>
-</tr>
-<tr>
-<td></td>
-<td>boto3</td>
-<td>1.34+</td>
-<td>AWS SDK for Python</td>
-</tr>
-<tr>
-<td><strong>Communication</strong></td>
-<td>Server-Sent Events (SSE)</td>
-<td>-</td>
-<td>실시간 스트리밍</td>
-</tr>
-<tr>
-<td></td>
-<td>IPC (Inter-Process Communication)</td>
-<td>-</td>
-<td>Electron 메인-렌더러 통신</td>
-</tr>
-<tr>
-<td><strong>Security</strong></td>
-<td>JWT</td>
-<td>-</td>
-<td>사용자 인증 토큰</td>
-</tr>
-<tr>
-<td></td>
-<td>bcrypt</td>
-<td>-</td>
-<td>패스워드 해싱</td>
-</tr>
-<tr>
-<td><strong>Development</strong></td>
-<td>Docker</td>
-<td>26.1.3+</td>
-<td>컨테이너화 및 배포</td>
-</tr>
-<tr>
-<td></td>
-<td>Nginx</td>
-<td>1.25.3+</td>
-<td>리버스 프록시 (운영 환경)</td>
-</tr>
-</tbody>
-</table>
-<hr>
+</div><hr>
 <h2 id="-ai-에이전트-워크플로우-상세">🤖 AI 에이전트 워크플로우 상세 </h2>
 <h3 id="1-multi-step-workflow-아키텍처-langgraph-기반">1. Multi-Step Workflow 아키텍처 (LangGraph 기반) </h3>
 <p>새로운 아키텍처는 <strong><code>MultiStepWorkflowGraph</code></strong> 를 중심으로 구성됩니다. 이 그래프는 단순한 의도 분류를 넘어, 여러 AI 에이전트를 순차적 또는 조건부로 실행하여 복잡한 작업을 해결합니다.</p>
@@ -265,8 +126,8 @@
         CHAT_ROUTER["Chat Routes&lt;br/&gt;/api/v1/chat/*"]
     end
 
-    subgraph "WORKFLOW ORCHESTRATION (LangGraph)"
-        ORCHESTRATOR["Workflow Orchestrator&lt;br/&gt;중앙 허브, 다음 단계 결정&lt;br/&gt;(RoutingAgent)"]
+    subgraph "Router"
+        ORCHESTRATOR["Routing Agent&lt;br/&gt;중앙 허브, 다음 단계 결정&lt;br/&gt;"]
         WORKFLOW_TRACKER["Workflow Tracker&lt;br/&gt;에이전트 실행 후 상태 추적&lt;br/&gt;(Continue/Complete)"]
     end
 
@@ -318,8 +179,11 @@
     classDef tool fill:#fff3e0,stroke:#333
     classDef data fill:#f1f8e9,stroke:#333
 
-    class CHAT_ROUTER api
-    class ORCHESTRATOR orchestrator
+    %% 코랄핑크 강조 스타일
+    classDef chatSpecial fill:#ff8a80,stroke:#d84315,stroke-width:2px,color:#fff
+
+    class CHAT_ROUTER chatSpecial
+    class ORCHESTRATOR chatSpecial
     class WORKFLOW_TRACKER orchestrator
     class DOC_SEARCH agent
     class DOC_EDIT agent
@@ -396,17 +260,17 @@
     API-&gt;&gt;+DB: 3. 사용자 메시지 저장
     DB--&gt;&gt;-API: 4. 저장 완료
     
-    API-&gt;&gt;+Orch: 5. 워크플로우 시작
-    Orch-&gt;&gt;Orch: 6. 의도 분석 (→ 'document_search')
-    
+    API-&gt;&gt;+Orch: 5. 워크플로우 시작 (LangGraph)
+    Orch-&gt;&gt;Orch: 6. 3-tier 의도 분석 (→ next_agents: ["document_search"])
+
     Orch-&gt;&gt;+Agent: 7. DocumentSearchAgent 실행
-    Agent-&gt;&gt;+V: 8. 관련 문서 벡터 검색
+    Agent-&gt;&gt;+V: 8. 관련 문서 벡터 검색 (ChromaDB)
     V--&gt;&gt;-Agent: 9. 검색 결과 반환
     Agent-&gt;&gt;Agent: 10. 결과 요약 및 답변 생성 (RAG)
-    Agent--&gt;&gt;-Tracker: 11. 작업 완료 보고
+    Agent--&gt;&gt;-Tracker: 11. 작업 완료 보고 (workflow_step: SEARCH_COMPLETED)
 
-    Tracker-&gt;&gt;+Orch: 12. 다음 단계 확인
-    Orch-&gt;&gt;Orch: 13. 추가 작업 없음 확인
+    Tracker-&gt;&gt;Tracker: 12. 상태 데이터 보존 &amp; 완료 판단
+    Tracker-&gt;&gt;+Orch: 13. workflow_complete=True
     Orch--&gt;&gt;-API: 14. 최종 답변 반환
 
     API-&gt;&gt;+DB: 15. AI 응답 저장
@@ -434,140 +298,143 @@
     DB--&gt;&gt;-API: 4. 저장 완료
 
     API-&gt;&gt;+Orch: 5. 워크플로우 시작 (LangGraph)
-    Orch-&gt;&gt;Orch: 6. 의도 분석 (→ WorkflowStep.EDIT_REQUESTED)
+    Orch-&gt;&gt;Orch: 6. 3-tier 의도 분석 (→ next_agents: ["document_edit"])
 
     Orch-&gt;&gt;+Agent: 7. DocumentEditorAgent 실행
 
-    alt 간단한 텍스트 교체
-        Agent-&gt;&gt;Agent: 8a. 패턴 매칭 ("A를 B로 바꿔")
-        Agent-&gt;&gt;Agent: 8b. 직접 텍스트 교체 (LLM 호출 없음)
-    else 복잡한 편집 또는 초안 작성
-        Agent-&gt;&gt;+S3: 8c. 참조 문서 검색 (초안 작성시)
-        S3--&gt;&gt;-Agent: 8d. 문서 데이터 반환
-        Agent-&gt;&gt;Agent: 8e. LLM + Tools 사용한 편집
+    alt 간단한 텍스트 교체 (최적화)
+        Agent-&gt;&gt;Agent: 8a. 패턴 매칭 ("A를 B로 바꿔" 감지)
+        Agent-&gt;&gt;Agent: 8b. replace_text_in_document (LLM 호출 없음)
+    else 복잡한 편집
+        Agent-&gt;&gt;Agent: 8c. LLM + Tools 호출 (edit_html_document)
+    else 초안 작성
+        Agent-&gt;&gt;+S3: 8d. 참조 문서 검색 (S3)
+        S3--&gt;&gt;-Agent: 8e. 문서 데이터 반환
+        Agent-&gt;&gt;Agent: 8f. DocumentDraftAgent 위임
     end
 
-    Agent--&gt;&gt;-Tracker: 9. 작업 완료 보고 + 편집된 문서
+    Agent--&gt;&gt;-Tracker: 9. 작업 완료 보고 (workflow_step: EDIT_COMPLETED)
 
-    Tracker-&gt;&gt;Tracker: 10. 대용량 문서 확인 (&gt;5KB)
+    Tracker-&gt;&gt;Tracker: 10. 상태 데이터 보존 &amp; 에디터 자동 열기 처리
 
-    alt 대용량 문서 (청크 전송)
-        Tracker--&gt;&gt;API: 11a. 메타데이터 전송 (open_document_in_editor_chunked)
+    alt 에디터 자동 열기 (send_to_editor=True)
+        Tracker--&gt;&gt;API: 11a. 문서편집창 IPC 신호 전송
         API--&gt;&gt;N: 11b. SSE 스트리밍
-        N--&gt;&gt;C: 11c. 메타데이터 수신
+        N--&gt;&gt;C: 11c. 문서편집창 자동 열기 (Electron IPC)
 
-        loop 청크 전송
-            Tracker--&gt;&gt;API: 12a. 문서 청크 전송 (4KB 단위)
-            API--&gt;&gt;N: 12b. SSE 스트리밍
-            N--&gt;&gt;C: 12c. 청크 수신 &amp; 재조립
+        alt 대용량 문서 (&gt;5KB)
+            loop 4KB 청크로 분할 전송
+                Tracker--&gt;&gt;API: 12a. 청크 데이터 (document_content_chunk)
+                API--&gt;&gt;N: 12b. SSE 청크 스트리밍
+                N--&gt;&gt;C: 12c. 청크 수신 및 재조립
+            end
+            Tracker--&gt;&gt;API: 13a. 전송 완료 (content_transfer_complete)
+        else 일반 문서
+            Tracker--&gt;&gt;API: 12d. 문서 내용 직접 전송
         end
-
-        C-&gt;&gt;C: 13. 문서 완전 재조립
-    else 소용량 문서
-        Tracker--&gt;&gt;API: 11d. 일반 전송 (open_document_in_editor)
-        API--&gt;&gt;N: 11e. SSE 스트리밍
-        N--&gt;&gt;C: 11f. 문서 직접 수신
+    else 일반 응답
+        Tracker--&gt;&gt;API: 11d. 텍스트 응답만 전송
     end
 
-    C-&gt;&gt;C: 14. IPC 통신으로 문서편집창 자동 열기
+    Tracker-&gt;&gt;+Orch: 14. workflow_complete=True
+    Orch--&gt;&gt;-API: 15. 최종 완료
 
-    API-&gt;&gt;+DB: 15. AI 응답 저장
-    DB--&gt;&gt;-API: 16. 저장 완료
+    API-&gt;&gt;+DB: 16. AI 응답 저장
+    DB--&gt;&gt;-API: 17. 저장 완료
 
-    API--&gt;&gt;-N: 17. [DONE] 신호
-    N--&gt;&gt;-C: 18. 스트림 종료
+    API--&gt;&gt;-N: 18. [DONE] 신호
+    N--&gt;&gt;-C: 19. 스트림 종료
 </div><h3 id="3-새로운-워크플로우-구조">3. 새로운 워크플로우 구조 </h3>
-<h4 id="3-1-워크플로우-오케스트레이터">3-1. 워크플로우 오케스트레이터 </h4>
+<h4 id="3-1-워크플로우-오케스트레이터-실제-langgraph-노드-구조">3-1. 워크플로우 오케스트레이터 (실제 LangGraph 노드 구조) </h4>
 <div class="mermaid">graph TD
-    A[사용자 요청 수신] --&gt; B[Workflow Orchestrator&lt;br/&gt;워크플로우 시작]
-    B --&gt; C[Intent Analyzer&lt;br/&gt;3-tier 의도 분석]
-    C --&gt; D{의도 분석 결과}
-    
-    D --&gt;|업무 외 요청| E[Business Rejection Agent&lt;br/&gt;친근한 거부 메시지]
-    D --&gt;|문서 검색| F[Document Search Agent&lt;br/&gt;검색 프로세스]
-    D --&gt;|문서 편집| G[Document Editor Agent&lt;br/&gt;편집 프로세스]
-    D --&gt;|다단계 작업| H[Multi-Step Workflow&lt;br/&gt;검색 → 편집]
-    
-    E --&gt; I[Workflow Tracker&lt;br/&gt;완료 확인]
+    A[사용자 요청 수신] --&gt; B[Workflow Orchestrator&lt;br/&gt;• 3-tier 의도 분석&lt;br/&gt;• next_agents 결정&lt;br/&gt;• workflow_step 관리]
+
+    B --&gt;|business_rejection| E[BusinessRejectionAgent&lt;br/&gt;업무 외 요청 거부]
+    B --&gt;|document_search| F[DocumentSearchAgent&lt;br/&gt;RAG 기반 문서 검색]
+    B --&gt;|document_edit| G[DocumentEditorAgent&lt;br/&gt;TipTap 편집]
+    B --&gt;|document_draft| H[DocumentDraftAgent&lt;br/&gt;새 문서 초안 생성]
+    B --&gt;|needs_document| R[Document Requester&lt;br/&gt;프론트엔드 문서 요청]
+
+    E --&gt; I[Workflow Tracker&lt;br/&gt;• 상태 데이터 보존&lt;br/&gt;• 에디터 자동 열기 처리&lt;br/&gt;• 완료 판단]
     F --&gt; I
     G --&gt; I
     H --&gt; I
-    
+    R --&gt; B
+
     I --&gt; J{워크플로우 완료?}
-    J --&gt;|아니오| B
-    J --&gt;|예| K[최종 응답 반환]
+    J --&gt;|continue&lt;br/&gt;next_agents 있음| B
+    J --&gt;|complete| K[최종 응답 반환]
 
     classDef orchestrationProcess fill:#fff9c4
     classDef agentProcess fill:#f3e5f5
-    classDef decisionProcess fill:#ffeaa7
+    classDef trackerProcess fill:#ffeaa7
+    classDef endProcess fill:#e8f5e8
 
-    class A,B,C,I,J,K orchestrationProcess
+    class A,B,R orchestrationProcess
     class E,F,G,H agentProcess
-    class D decisionProcess
-</div><h4 id="3-2-documentsearchagent">3-2. DocumentSearchAgent </h4>
+    class I trackerProcess
+    class J,K endProcess
+</div><h4 id="3-2-documentsearchagent-핵심-라우팅-구조">3-2. DocumentSearchAgent (핵심 라우팅 구조) </h4>
 <div class="mermaid">graph TD
-    A[검색 요청 수신] --&gt; B{문서 필요 여부}
-    B --&gt;|필요| C[Document Requester&lt;br/&gt;프론트엔드 문서 요청]
-    B --&gt;|불필요| D[Route Query Tool&lt;br/&gt;후속/신규 질문 판단]
-    
-    C --&gt; D
-    D --&gt; E[Enhanced Hybrid Search&lt;br/&gt;우선순위 검색 도구]
-    E --&gt; F[Query Expansion&lt;br/&gt;검색어 확장]
-    F --&gt; G[ChromaDB 벡터 검색]
-    G --&gt; H[검색 결과 획득]
-    H --&gt; I[Summarization Tool&lt;br/&gt;결과 요약 및 답변 생성]
-    I --&gt; J{다운로드 요청?}
-    J --&gt;|Yes| K[Presigned URL Tool&lt;br/&gt;S3 다운로드 링크]
-    J --&gt;|No| L[Handle Follow Up&lt;br/&gt;후속 질문 처리]
+    A["검색 요청 수신"] --&gt; B["쿼리 분석 &amp; LLM 호출"]
+    B --&gt; C{도구 라우팅}
+
+    C --&gt;|enhanced_hybrid_search_tool| D["하이브리드 검색&lt;br/&gt;ChromaDB + 메타데이터"]
+    C --&gt;|RAG_search_tool| E["벡터 DB 검색"]
+    C --&gt;|expand_query_tool| F["쿼리 확장"]
+    C --&gt;|summarize_tool| G["결과 요약"]
+
+    D --&gt; H["검색 결과 처리"]
+    E --&gt; H
+    F --&gt; H
+    G --&gt; H
+
+    H --&gt; I{에디터 자동 열기?}
+    I --&gt;|Yes| J["문서 데이터 준비&lt;br/&gt;send_to_editor=True"]
+    I --&gt;|No| K["일반 검색 응답"]
+
+    J --&gt; L["Workflow Tracker"]
     K --&gt; L
-    L --&gt; M[최종 답변 반환]
 
-    classDef searchProcess fill:#e3f2fd
-    classDef toolProcess fill:#fff9c4
-    classDef dataProcess fill:#fce4ec
+    classDef process fill:#e3f2fd
+    classDef routing fill:#fff9c4
+    classDef tools fill:#fff3e0
+    classDef completion fill:#e8f5e8
 
-    class A,H,M searchProcess
-    class B,C,D,E,F,I,J,K,L toolProcess
-    class G dataProcess
-</div><h4 id="3-3-documenteditoragent">3-3. DocumentEditorAgent </h4>
+    class A,B,H,L process
+    class C,I routing
+    class D,E,F,G tools
+    class J,K completion
+</div><h4 id="3-3-documenteditoragent-핵심-라우팅-구조">3-3. DocumentEditorAgent (핵심 라우팅 구조) </h4>
 <div class="mermaid">graph TD
-    A[편집 요청 수신] --&gt; B{초안 작성 요청?}
-    B --&gt;|Yes| C[Draft Creation Workflow&lt;br/&gt;참조 문서 분석 → 2025 문서 생성]
-    B --&gt;|No| D{간단한 텍스트 교체?}
+    A["편집 요청 수신"] --&gt; B{편집 유형 분석}
 
-    D --&gt;|Yes| E[Simple Text Replacement&lt;br/&gt;A를 B로 바꿔 패턴 매칭&lt;br/&gt;LLM 호출 없이 즉시 처리]
-    D --&gt;|No| F[복잡한 편집 요청&lt;br/&gt;LLM + Tools 사용]
+    B --&gt;|초안 작성| C["DocumentDraftAgent&lt;br/&gt;위임"]
+    B --&gt;|간단한 교체| D["패턴 매칭&lt;br/&gt;LLM 호출 없음"]
+    B --&gt;|복잡한 편집| E["LLM + Tools 호출"]
 
-    C --&gt; G[Reference Documents Analysis&lt;br/&gt;S3에서 문서 검색/분석]
-    G --&gt; H[2025 Document Generation&lt;br/&gt;분석 결과 기반 새 문서 생성]
+    E --&gt; F{편집 도구 라우팅}
+    F --&gt;|run_document_edit| G["구조적 편집"]
+    F --&gt;|replace_text_in_document| H["텍스트 치환"]
+    F --&gt;|edit_html_document| I["HTML 편집"]
 
-    F --&gt; I{편집 도구 선택}
-    I --&gt;|구조적 편집| J[run_document_edit&lt;br/&gt;메인 편집 도구]
-    I --&gt;|텍스트 교체| K[replace_text_in_document&lt;br/&gt;단순 텍스트 치환]
-    I --&gt;|템플릿 생성| L[Document Templates&lt;br/&gt;보고서/회의록/구조]
-    I --&gt;|스타일링| M[Advanced Tools&lt;br/&gt;리스트/테이블/인용문/스타일]
+    G --&gt; J["편집 결과 처리"]
+    H --&gt; J
+    I --&gt; J
 
-    E --&gt; N[편집 완료]
-    H --&gt; O[청크 전송&lt;br/&gt;대용량 문서 분할 전송]
-    J --&gt; N
-    K --&gt; N
-    L --&gt; N
-    M --&gt; N
+    C --&gt; K["Workflow Tracker"]
+    D --&gt; K
+    J --&gt; K
 
-    O --&gt; P[문서편집창 자동 열기&lt;br/&gt;IPC 통신]
-    N --&gt; Q[문서 업데이트&lt;br/&gt;SSE 스트리밍]
-    P --&gt; R[최종 완료]
-    Q --&gt; R
+    classDef process fill:#e8f5e8
+    classDef routing fill:#fff9c4
+    classDef optimization fill:#e1f5fe
+    classDef tools fill:#fff3e0
 
-    classDef editProcess fill:#e8f5e8
-    classDef toolProcess fill:#fff9c4
-    classDef optimizedProcess fill:#e1f5fe
-    classDef draftProcess fill:#fff3e0
-
-    class A,B,D,N,Q,R editProcess
-    class I,J,K,L,M toolProcess
-    class E optimizedProcess
-    class C,G,H,O,P draftProcess
+    class A,J,K process
+    class B,F routing
+    class D optimization
+    class C,E,G,H,I tools
 </div><hr>
 <h3 id="4-주요-변경사항-및-특징-2025년-현재-구현">4. 주요 변경사항 및 특징 (2025년 현재 구현) </h3>
 <ul>
