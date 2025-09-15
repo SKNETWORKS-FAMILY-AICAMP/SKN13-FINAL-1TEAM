@@ -18,33 +18,50 @@
 
 // frontend-ui/src/components/FeatureWindow/panels/Docs/OverflowMenu.jsx
 import React, { useState } from "react";
+import { IoMdMore } from "react-icons/io";
 
 function MenuItem({ label, onClick, danger }) {
-  return (
-    <button
-      type="button"
-      className={`w-full text-left px-3 py-2 text-sm ${danger ? "text-red-600" : "text-gray-800"} hover:bg-gray-100`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
+    return (
+        <button
+            type="button"
+            className={`w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-gray-100`}
+            onClick={onClick}
+        >
+            {label}
+        </button>
+    );
 }
 
 export default function OverflowMenu({ onEdit, onRename, onDelete }) {
-  const [open, setOpen] = useState(false);
-  const click = (fn) => () => { setOpen(false); try { fn && fn(); } catch (e) { console.error(e); } };
+    const [open, setOpen] = useState(false);
+    const click = (fn) => () => {
+        setOpen(false);
+        try {
+            fn && fn();
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
-  return (
-    <div className="relative">
-      <button type="button" className="rounded-lg border px-2 py-1 text-sm" onClick={() => setOpen(v => !v)}>⋯</button>
-      {open && (
-        <div className="absolute right-0 mt-2 w-36 rounded-xl border bg-white shadow z-10">
-          <MenuItem label="수정하기" onClick={click(onEdit)} />
-          <MenuItem label="삭제" danger onClick={click(onDelete)} />
+    return (
+        <div className="relative">
+            <button
+                type="button"
+                className="text-neutral-400 rounded-full hover:bg-neutral-50"
+                onClick={() => setOpen((v) => !v)}
+            >
+                <IoMdMore size={24} />
+            </button>
+            {open && (
+                <div className="absolute right-0 mt-2 w-36 rounded-xl border bg-white shadow z-10">
+                    <MenuItem label="수정하기" onClick={click(onEdit)} />
+                    <MenuItem
+                        label="삭제하기"
+                        danger
+                        onClick={click(onDelete)}
+                    />
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 }
-

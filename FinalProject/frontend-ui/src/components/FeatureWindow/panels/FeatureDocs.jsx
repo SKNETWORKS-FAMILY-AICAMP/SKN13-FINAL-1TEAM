@@ -15,7 +15,13 @@
     - S3 모드의 업로드 버튼은 UploadModal을 통해 동작.
 */
 
-import React, { useCallback, useRef, useEffect, useMemo, useState } from "react";
+import React, {
+    useCallback,
+    useRef,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
 import Toolbar from "./Docs/Toolbar.jsx";
 import Section from "./Docs/Section.jsx";
 import DocumentGrid from "./Docs/DocumentGrid.jsx";
@@ -29,23 +35,23 @@ import useToast from "../../shared/toast/useToast.js";
   확장자 → MIME 추정 (fsBridge가 mime을 주지 않는 경우 대비)
 */
 function guessMime(filename = "") {
-  const ext = filename.split(".").pop()?.toLowerCase() || "";
-  const map = {
-    pdf: "application/pdf",
-    doc: "application/msword",
-    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    hwp: "application/x-hwp",
-    hwpx: "application/hanwha-hwpx",
-    txt: "text/plain",
-    md:  "text/markdown",
-    xls: "application/vnd.ms-excel",
-    xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ppt: "application/vnd.ms-powerpoint",
-    pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    csv: "text/csv",
-    json:"application/json",
-  };
-  return map[ext] || "application/octet-stream";
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    const map = {
+        pdf: "application/pdf",
+        doc: "application/msword",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        hwp: "application/x-hwp",
+        hwpx: "application/hanwha-hwpx",
+        txt: "text/plain",
+        md: "text/markdown",
+        xls: "application/vnd.ms-excel",
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ppt: "application/vnd.ms-powerpoint",
+        pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        csv: "text/csv",
+        json: "application/json",
+    };
+    return map[ext] || "application/octet-stream";
 }
 
 /* 
@@ -55,294 +61,332 @@ function guessMime(filename = "") {
    - 앱을 통하지 않은 외부 변경(복사/다운로드/수정)도 updated_at으로 즉시 반영.
 */
 async function listLocalDocsDirect(subdir = "") {
-  if (!window.fsBridge?.listDocs) return [];
-  const items = await window.fsBridge.listDocs(subdir);
+    if (!window.fsBridge?.listDocs) return [];
+    const items = await window.fsBridge.listDocs(subdir);
 
-  const normalized = (items || []).map((f) => ({
-    id: `local:${f.path}`,
-    title: f.name,
-    updated_at: f.updated_at,           // 파일 mtime → 최신 수정 시각
-    mime: f.mime || guessMime(f.name),
-    source: "local",
-    path: f.path,
-  }));
+    const normalized = (items || []).map((f) => ({
+        id: `local:${f.path}`,
+        title: f.name,
+        updated_at: f.updated_at, // 파일 mtime → 최신 수정 시각
+        mime: f.mime || guessMime(f.name),
+        source: "local",
+        path: f.path,
+    }));
 
-  // 최신 수정순(내림차순).
-  normalized.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
-  return normalized;
+    // 최신 수정순(내림차순).
+    normalized.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+    return normalized;
 }
 
 /* 
   로컬 문서 삭제 (낙관적 업데이트 사용)
 */
 async function deleteLocalDocDirect(path) {
-  if (!window.fsBridge?.deleteDoc) return { ok: false };
-  try {
-    await window.fsBridge.deleteDoc(path);
-    return { ok: true };
-  } catch {
-    return { ok: false };
-  }
+    if (!window.fsBridge?.deleteDoc) return { ok: false };
+    try {
+        await window.fsBridge.deleteDoc(path);
+        return { ok: true };
+    } catch {
+        return { ok: false };
+    }
 }
 
 /* 
   날짜 라벨 (오늘/어제/한국식 YYYY-MM-DD)
 */
 function dayLabel(ts) {
-  const dt = new Date(ts || 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const base = new Date(dt);
-  base.setHours(0, 0, 0, 0);
+    const dt = new Date(ts || 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const base = new Date(dt);
+    base.setHours(0, 0, 0, 0);
 
-  const diffDays = Math.round((today - base) / 86400000);
-  if (diffDays === 0) return "오늘";
-  if (diffDays === 1) return "어제";
+    const diffDays = Math.round((today - base) / 86400000);
+    if (diffDays === 0) return "오늘";
+    if (diffDays === 1) return "어제";
 
-  const y = base.getFullYear();
-  const m = String(base.getMonth() + 1).padStart(2, "0");
-  const d = String(base.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+    const y = base.getFullYear();
+    const m = String(base.getMonth() + 1).padStart(2, "0");
+    const d = String(base.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
 }
 
 /* 
   리스트 → 날짜 라벨별 그룹화
 */
 function groupByDay(list, getTs) {
-  const map = new Map();
-  for (const d of list) {
-    const ts = getTs(d);
-    const label = dayLabel(ts);
-    if (!map.has(label)) map.set(label, []);
-    map.get(label).push(d);
-  }
-  return Array.from(map.entries());
+    const map = new Map();
+    for (const d of list) {
+        const ts = getTs(d);
+        const label = dayLabel(ts);
+        if (!map.has(label)) map.set(label, []);
+        map.get(label).push(d);
+    }
+    return Array.from(map.entries());
 }
 
 /* 
   메인 컴포넌트
 */
 export default function FeatureDocs() {
-  const toast = useToast();
-  // 모드: 'local' | 's3'
-  const [mode, setMode] = useState("local");
+    const toast = useToast();
+    // 모드: 'local' | 's3'
+    const [mode, setMode] = useState("local");
 
-  // 보기 전환: 'grid' | 'list'
-  const [view, setView] = useState("grid");
+    // 보기 전환: 'grid' | 'list'
+    const [view, setView] = useState("grid");
 
-  // 검색어
-  const [query, setQuery] = useState("");
+    // 검색어
+    const [query, setQuery] = useState("");
 
-  // 로컬 문서 목록
-  const [docs, setDocs] = useState([]);
+    // 로컬 문서 목록
+    const [docs, setDocs] = useState([]);
 
-  // 열람한 문서 목록
-  const [viewed, setViewed] = useState([]);
+    // 열람한 문서 목록
+    const [viewed, setViewed] = useState([]);
 
-  // 로딩 & 토스트
-  const [loading, setLoading] = useState(true);
-  // const [toast, setToast] = useState(null);
+    // 로딩 & 토스트
+    const [loading, setLoading] = useState(true);
+    // const [toast, setToast] = useState(null);
 
-  // S3 업로드 모달
-  const [showUpload, setShowUpload] = useState(false);
-  const [s3CurrentPath, setS3CurrentPath] = useState("");
+    // S3 업로드 모달
+    const [showUpload, setShowUpload] = useState(false);
+    const [s3CurrentPath, setS3CurrentPath] = useState("");
 
-  const deletingRef = useRef(false);
+    const deletingRef = useRef(false);
 
-  /* 
+    /* 
     로컬 문서 로드
   */
-  const loadLocalOnly = useCallback(async () => {
-    setLoading(true);
-    try {
-      // 전체 문서
-      const local = await listLocalDocsDirect();
-      setDocs(local);
+    const loadLocalOnly = useCallback(async () => {
+        setLoading(true);
+        try {
+            // 전체 문서
+            const local = await listLocalDocsDirect();
+            setDocs(local);
 
-      // 열람한 문서: IPC로 가져오기
-      const recent = await window.fsBridge?.listViewed?.();
-      const normalizedViewed = (recent || []).map((r) => ({
-        id: `viewed:${r.path}`,
-        title: r.name,
-        path: r.path,
-        opened_at: r.lastOpenedKST,
-        _openedMs: r.msKST || 0,
-        mime: guessMime(r.name),
-        source: "local",
-      })).sort((a, b) => b._openedMs - a._openedMs);
-      setViewed(normalizedViewed);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+            // 열람한 문서: IPC로 가져오기
+            const recent = await window.fsBridge?.listViewed?.();
+            const normalizedViewed = (recent || [])
+                .map((r) => ({
+                    id: `viewed:${r.path}`,
+                    title: r.name,
+                    path: r.path,
+                    opened_at: r.lastOpenedKST,
+                    _openedMs: r.msKST || 0,
+                    mime: guessMime(r.name),
+                    source: "local",
+                }))
+                .sort((a, b) => b._openedMs - a._openedMs);
+            setViewed(normalizedViewed);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-  useEffect(() => {
-    if (mode === "local") loadLocalOnly();
-  }, [mode, loadLocalOnly]);
+    useEffect(() => {
+        if (mode === "local") loadLocalOnly();
+    }, [mode, loadLocalOnly]);
 
-  useEffect(() => {
-    const onFocus = () => { if (mode === "local") loadLocalOnly(); };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [mode, loadLocalOnly]);
+    useEffect(() => {
+        const onFocus = () => {
+            if (mode === "local") loadLocalOnly();
+        };
+        window.addEventListener("focus", onFocus);
+        return () => window.removeEventListener("focus", onFocus);
+    }, [mode, loadLocalOnly]);
 
-  /* 검색 필터 */
-  const filtered = useMemo(() => {
-    if (mode !== "local") return [];
-    const q = query.trim().toLowerCase();
-    return q
-      ? docs.filter((d) => (d.title || "").toLowerCase().includes(q))
-      : docs;
-  }, [mode, docs, query]);
+    /* 검색 필터 */
+    const filtered = useMemo(() => {
+        if (mode !== "local") return [];
+        const q = query.trim().toLowerCase();
+        return q
+            ? docs.filter((d) => (d.title || "").toLowerCase().includes(q))
+            : docs;
+    }, [mode, docs, query]);
 
-  /* 명령 핸들러 */
-  const handleOpen = useCallback((doc) => {
-    window.fsBridge?.openDoc?.(doc.path);
-  }, []);
+    /* 명령 핸들러 */
+    const handleOpen = useCallback((doc) => {
+        window.fsBridge?.openDoc?.(doc.path);
+    }, []);
 
-  const handleEdit = useCallback(async (doc) => {
-    try {
-      const res = await window.api?.invoke?.("fs:openSmart", { name: doc.title });
-      if (!res) {
-        await window.fsBridge?.openDoc?.(doc.path);
-      } else if (res?.mode === "notImplemented") {
-        alert(res?.reason || ".doc 내부 편집은 준비 중입니다.");
-      }
-      await loadLocalOnly();
-    } catch (e) {
-      console.error("openSmart failed:", e);
-      alert("열기에 실패했습니다.");
-    }
-  }, [loadLocalOnly]);
+    const handleEdit = useCallback(
+        async (doc) => {
+            try {
+                const res = await window.api?.invoke?.("fs:openSmart", {
+                    name: doc.title,
+                });
+                if (!res) {
+                    await window.fsBridge?.openDoc?.(doc.path);
+                } else if (res?.mode === "notImplemented") {
+                    alert(res?.reason || ".doc 내부 편집은 준비 중입니다.");
+                }
+                await loadLocalOnly();
+            } catch (e) {
+                console.error("openSmart failed:", e);
+                alert("열기에 실패했습니다.");
+            }
+        },
+        [loadLocalOnly]
+    );
 
-  const handleDelete = useCallback(async (doc) => {
-    if (deletingRef.current) return;
-    deletingRef.current = true;
+    const handleDelete = useCallback(
+        async (doc) => {
+            if (deletingRef.current) return;
+            deletingRef.current = true;
 
-    const prev = docs;
-    setDocs((p) => p.filter((d) => d.id !== doc.id));
-    try {
-      const ok = await deleteLocalDocDirect(doc.path);
-      if (!ok.ok) throw new Error("local delete failed");
-      // setToast({ type: "success", msg: "로컬 문서가 삭제되었습니다." });
-      toast.success("문서가 삭제되었습니다.");
-    } catch {
-      setDocs(prev);
-      // setToast({ type: "error", msg: "삭제에 실패했습니다." });
-      toast.error("문서 삭제에 실패했습니다. 다시 시도해주세요.");
-    } finally {
-      deletingRef.current = false;
-    }
-  }, [docs]);
+            const prev = docs;
+            setDocs((p) => p.filter((d) => d.id !== doc.id));
+            try {
+                const ok = await deleteLocalDocDirect(doc.path);
+                if (!ok.ok) throw new Error("local delete failed");
+                // setToast({ type: "success", msg: "로컬 문서가 삭제되었습니다." });
+                toast.success("문서가 삭제되었습니다.");
+            } catch {
+                setDocs(prev);
+                // setToast({ type: "error", msg: "삭제에 실패했습니다." });
+                toast.error("문서 삭제에 실패했습니다. 다시 시도해주세요.");
+            } finally {
+                deletingRef.current = false;
+            }
+        },
+        [docs]
+    );
 
-  /* 렌더 */
-  return (
-    <div className="flex h-full">
-      <div className="flex-1 bg-gray-50 flex flex-col">
+    /* 렌더 */
+    return (
+        <section>
+            <div className="mx-auto w-full max-w-[1200px] px-6">
+                <div className="grid grid-cols-12 gap-6">
+                    <div className="col-span-12">
+                        <div className="flex items-center justify-between">
+                            <h1 className="text-[22px] font-extrabold">
+                                문서 목록
+                            </h1>
+                        </div>
 
-        {/* 모드 토글 */}
-        <div className="flex items-center gap-2 px-4 pt-4">
-          <button
-            className={`px-3 py-1.5 rounded-lg border ${mode === "local" ? "bg-gray-900 text-white" : "bg-white hover:bg-gray-50"}`}
-            onClick={() => setMode("local")}
-          >
-            로컬 문서
-          </button>
-          <button
-            className={`px-3 py-1.5 rounded-lg border ${mode === "s3" ? "bg-gray-900 text-white" : "bg-white hover:bg-gray-50"}`}
-            onClick={() => setMode("s3")}
-          >
-            공유 폴더(S3)
-          </button>
-          {mode === "s3" && (
-            <button
-              className="ml-auto px-3 py-1.5 rounded-lg bg-black text-white"
-              onClick={() => setShowUpload(true)}
-            >
-              업로드
-            </button>
-          )}
-        </div>
+                        <div className="flex items-center gap-2 mt-10">
+                            <button
+                                className={`px-3 py-1.5 rounded-lg border ${
+                                    mode === "local"
+                                        ? "bg-gray-900 text-white"
+                                        : "bg-white hover:bg-gray-50"
+                                }`}
+                                onClick={() => setMode("local")}
+                            >
+                                로컬 문서
+                            </button>
+                            <button
+                                className={`px-3 py-1.5 rounded-lg border ${
+                                    mode === "s3"
+                                        ? "bg-gray-900 text-white"
+                                        : "bg-white hover:bg-gray-50"
+                                }`}
+                                onClick={() => setMode("s3")}
+                            >
+                                공유 폴더(S3)
+                            </button>
+                            {mode === "s3" && (
+                                <button
+                                    className="ml-auto px-3 py-1.5 rounded-lg bg-black text-white"
+                                    onClick={() => setShowUpload(true)}
+                                >
+                                    업로드
+                                </button>
+                            )}
+                            {mode === "local" && (
+                                <Toolbar
+                                    query={query}
+                                    onQueryChange={setQuery}
+                                    view={view}
+                                    onViewChange={setView}
+                                />
+                            )}
+                        </div>
+                        <div className="mt-4 pb-6 overflow-auto">
+                            {mode === "s3" ? (
+                                <S3Explorer onPrefixChange={setS3CurrentPath} />
+                            ) : loading ? (
+                                <div className="p-10 text-sm text-gray-500">
+                                    불러오는 중…
+                                </div>
+                            ) : (
+                                <>
+                                    {/* 전체 문서 */}
+                                    <Section title="전체 문서">
+                                        {filtered.length > 0 ? (
+                                            view === "grid" ? (
+                                                <DocumentGrid
+                                                    docs={filtered}
+                                                    onOpen={handleOpen}
+                                                    onEdit={handleEdit}
+                                                    onDelete={handleDelete}
+                                                />
+                                            ) : (
+                                                <DocumentRowList
+                                                    docs={filtered}
+                                                    onOpen={handleOpen}
+                                                    onEdit={handleEdit}
+                                                    onDelete={handleDelete}
+                                                />
+                                            )
+                                        ) : (
+                                            <div className="text-sm text-gray-400">
+                                                표시할 문서가 없습니다.
+                                            </div>
+                                        )}
+                                    </Section>
 
-        {mode === "local" && (
-          <Toolbar
-            title="문서 목록"
-            query={query}
-            onQueryChange={setQuery}
-            view={view}
-            onViewChange={setView}
-          />
-        )}
+                                    {/* 열람한 문서 */}
+                                    <Section title="열람한 문서">
+                                        {groupByDay(
+                                            viewed,
+                                            (d) => d._openedMs
+                                        ).map(([label, items]) => (
+                                            <div key={label} className="mb-6">
+                                                <div className="text-xs font-semibold text-gray-500 mb-2">
+                                                    {label}
+                                                </div>
+                                                {view === "grid" ? (
+                                                    <DocumentGrid
+                                                        docs={items}
+                                                        onOpen={handleOpen}
+                                                        onEdit={handleEdit}
+                                                        onDelete={handleDelete}
+                                                    />
+                                                ) : (
+                                                    <DocumentRowList
+                                                        docs={items}
+                                                        onOpen={handleOpen}
+                                                        onEdit={handleEdit}
+                                                        onDelete={handleDelete}
+                                                    />
+                                                )}
+                                            </div>
+                                        ))}
+                                        {viewed.length === 0 && (
+                                            <div className="text-sm text-gray-400">
+                                                열람한 문서가 없습니다.
+                                            </div>
+                                        )}
+                                    </Section>
+                                </>
+                            )}
+                        </div>
 
-        <div className="px-4 pb-6 overflow-auto">
-          {mode === "s3" ? (
-            <S3Explorer onPrefixChange={setS3CurrentPath} />
-          ) : loading ? (
-            <div className="p-10 text-sm text-gray-500">불러오는 중…</div>
-          ) : (
-            <>
-              {/* ✅ 전체 문서: 날짜 그룹화 제거 */}
-              <Section title="전체 문서">
-                {filtered.length > 0 ? (
-                  view === "grid" ? (
-                    <DocumentGrid
-                      docs={filtered}
-                      onOpen={handleOpen}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                    />
-                  ) : (
-                    <DocumentRowList
-                      docs={filtered}
-                      onOpen={handleOpen}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                    />
-                  )
-                ) : (
-                  <div className="text-sm text-gray-400">표시할 문서가 없습니다.</div>
-                )}
-              </Section>
-
-              {/* ✅ 열람한 문서: listViewed() 기반, KST 최신순 */}
-              <Section title="열람한 문서">
-                {groupByDay(viewed, (d) => d._openedMs).map(([label, items]) => (
-                  <div key={label} className="mb-6">
-                    <div className="text-xs font-semibold text-gray-500 mb-2">{label}</div>
-                    {view === "grid" ? (
-                      <DocumentGrid
-                        docs={items}
-                        onOpen={handleOpen}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                      />
-                    ) : (
-                      <DocumentRowList
-                        docs={items}
-                        onOpen={handleOpen}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                      />
-                    )}
-                  </div>
-                ))}
-                {viewed.length === 0 && (
-                  <div className="text-sm text-gray-400">열람한 문서가 없습니다.</div>
-                )}
-              </Section>
-            </>
-          )}
-        </div>
-
-        <UploadModal
-          open={showUpload}
-          onClose={() => setShowUpload(false)}
-          pathHint={s3CurrentPath}
-          onUploaded={() => window.dispatchEvent(new CustomEvent("s3:refresh"))}
-        />
-
-        {/* <Toast toast={toast} onClose={() => setToast(null)} /> */}
-      </div>
-    </div>
-  );
+                        <UploadModal
+                            open={showUpload}
+                            onClose={() => setShowUpload(false)}
+                            pathHint={s3CurrentPath}
+                            onUploaded={() =>
+                                window.dispatchEvent(
+                                    new CustomEvent("s3:refresh")
+                                )
+                            }
+                        />
+                    </div>
+                </div>
+            </div>
+        </section>
+    );
 }
